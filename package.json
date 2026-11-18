@@ -19,7 +19,9 @@
     "register": "tsx scripts/register-commands.ts",
     "cf-typegen": "wrangler types",
     "screenshots": "tsx test/screenshots/take.ts",
-    "screenshots:check": "tsx test/screenshots/take.ts --check"
+    "screenshots:check": "tsx test/screenshots/take.ts --check",
+    "screenshots:table": "tsx test/screenshots/table.ts",
+    "description:check": "tsx test/screenshots/description.ts"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.8.4",

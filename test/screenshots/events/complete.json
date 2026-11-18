@@ -1,0 +1,17 @@
+{
+  "action": "synchronize",
+  "number": 101,
+  "pull_request": {
+    "number": 101,
+    "draft": false,
+    "body": "Darkens the page background.\n\n## Design review\n\n- **minor**: the link colour in the dark scheme is hard to tell from the text. Fixed: links are underlined.\n\n## Screenshots\n\n| Screenshot | Before | After |\n| --- | --- | --- |\n| `home--phone--light.png` | ![before](https://raw.githubusercontent.com/by77er/hikebot/1111111111111111111111111111111111111111/docs/screenshots/home--phone--light.png) | ![after](https://raw.githubusercontent.com/by77er/hikebot/2222222222222222222222222222222222222222/docs/screenshots/home--phone--light.png) |\n| `home--phone--dark.png` | ![before](https://raw.githubusercontent.com/by77er/hikebot/1111111111111111111111111111111111111111/docs/screenshots/home--phone--dark.png) | ![after](https://raw.githubusercontent.com/by77er/hikebot/2222222222222222222222222222222222222222/docs/screenshots/home--phone--dark.png) |\n",
+    "base": {
+      "ref": "main",
+      "sha": "1111111111111111111111111111111111111111"
+    },
+    "head": {
+      "ref": "task/example",
+      "sha": "2222222222222222222222222222222222222222"
+    }
+  }
+}
