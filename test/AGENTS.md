@@ -181,9 +181,11 @@ Run `npm test` for the whole suite before opening a pull request.
 ## Run the end-to-end suite
 
 1. Run the suite. It starts the Worker from `wrangler.jsonc` in local workerd
-   once per test file, with a fake Discord API, so it needs no `.dev.vars`,
-   no credentials and no network beyond localhost. `npm test` runs it after
-   the unit tests.
+   once per test file, with a fake Discord API and its own key pair, bot
+   token, application id and `DISCORD_API_BASE`. These replace whatever
+   `.dev.vars`, `.env` files and `DISCORD_*` variables hold, so the suite
+   runs the same with or without a `.dev.vars`, and needs no credentials and
+   no network beyond localhost. `npm test` runs it after the unit tests.
 
    ```sh
    npm run test:e2e
@@ -209,6 +211,58 @@ Run `npm test` for the whole suite before opening a pull request.
    If it prints a process id, stop it with `pkill -x workerd`. A run that was
    killed with `SIGKILL` leaves its `workerd` behind; otherwise find the test
    file whose `afterAll` did not run.
+
+## Find an intermittent test failure
+
+1. If the failure was in CI, read the failed job's log and download the
+   run's artifacts:
+
+   ```sh
+   gh run view <run-id> --log-failed
+   gh run download <run-id> --dir ~/flake-ci
+   ```
+
+2. Run `npm test` 15 times in a row, then 15 times with every CPU kept busy,
+   keeping each run's full output in a directory outside the checkout. Each
+   failed run prints its number:
+
+   ```sh
+   mkdir -p ~/flake-$(git rev-parse --short HEAD)/idle ~/flake-$(git rev-parse --short HEAD)/load
+   for i in $(seq 1 15); do npm test > ~/flake-$(git rev-parse --short HEAD)/idle/run-$i.log 2>&1 || echo "run $i failed"; done
+   for c in $(seq "$(nproc)"); do yes > /dev/null & done
+   for i in $(seq 1 15); do npm test > ~/flake-$(git rev-parse --short HEAD)/load/run-$i.log 2>&1 || echo "run $i failed"; done
+   pkill -x yes
+   pgrep -x workerd || echo "no workerd left"
+   ```
+
+3. Count the failed tests over all runs, then read one failed run's
+   failures in full:
+
+   ```sh
+   sed 's/\x1b\[[0-9;]*m//g' ~/flake-$(git rev-parse --short HEAD)/*/run-*.log | grep "^ FAIL " | sort | uniq -c
+   sed 's/\x1b\[[0-9;]*m//g' ~/flake-$(git rev-parse --short HEAD)/idle/run-<n>.log | grep -A20 "Failed Tests"
+   ```
+
+   For an end-to-end test, the `debug logs` timeline printed above the
+   summary holds what the Worker logged before the failure.
+
+4. If the message does not say why, make a scratch worktree, add temporary
+   `console.log` calls along the failing path there, and run steps 2 and 3
+   from it. What the Worker logs appears in the `debug logs` timeline; to see
+   what the fake Discord API received, put `discord.requests` in the failure
+   message:
+
+   ```sh
+   git worktree add ~/hikebot-flake HEAD
+   cd ~/hikebot-flake && npm ci
+   ```
+
+5. Fix the cause in your checkout, delete the scratch worktree, commit the
+   fix, and run step 2 again from your checkout; no run may fail:
+
+   ```sh
+   git worktree remove --force ~/hikebot-flake
+   ```
 
 ## Write an end-to-end scenario
 
