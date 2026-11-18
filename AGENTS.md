@@ -333,10 +333,10 @@ on every change you push to a draft, and again before marking it ready.
    gh pr create --draft --base main --title "<title>" --body "<description>"
    ```
 
-2. Finish the description:
+2. Write the finished description to a file and set it:
 
    ```sh
-   gh pr edit <n> --body "<description>"
+   gh api -X PATCH repos/by77er/hikebot/pulls/<n> -F body=@<file>
    ```
 
 3. Mark the pull request ready. This starts a run of the three checks on its
