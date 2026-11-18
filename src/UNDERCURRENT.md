@@ -98,13 +98,16 @@ Only `src/discord/api.ts` calls `fetch` against Discord or names a
 token-free errors stay in one place. Call a `DiscordApi` method from
 `discordApi(env)` instead. When the endpoint has no method yet, add one to
 `DiscordApi` first, following "Add a REST method to the client" in
-`src/discord/AGENTS.md`. Message links (`discord.com/channels/…`) and links to
-Discord's docs (`discord.com/developers/…`) are not requests and pass.
+`src/discord/AGENTS.md`. Message links (`discord.com/channels/…`), links to
+Discord's docs (`discord.com/developers/…`) and Discord's image CDN
+(`cdn.discordapp.com`, which pages show avatars from and the
+Content-Security-Policy names) are not requests and pass.
 
 ```sh
 case "$FILE" in ./discord/api.ts) exit 0 ;; esac
 ! awk '
-  /discord(app)?\.com|DISCORD_API_BASE/ && !/discord(app)?\.com\/(channels|developers)\// { hit = 1 }
+  { line = $0; gsub(/https:\/\/cdn\.discordapp\.com([^A-Za-z0-9.-]|$)/, "", line) }
+  line ~ /discord(app)?\.com|DISCORD_API_BASE/ && line !~ /discord(app)?\.com\/(channels|developers)\// { hit = 1 }
   /(^|[^A-Za-z0-9_$])fetch[[:space:]]*\(/ && !/^[[:space:]]*(async[[:space:]]+)?fetch[[:space:]]*\([^)]*\)[[:space:]]*(:[^=]*)?\{/ && tolower($0) ~ /discord|\/webhooks\/|\/channels\/|\/guilds\/|\/applications\/|\/interactions\// { hit = 1 }
   hit { print FILENAME ":" FNR ": requests Discord outside DiscordApi; call a DiscordApi method instead, adding it to src/discord/api.ts first if it is missing (see src/discord/AGENTS.md): " $0; bad = 1; hit = 0 }
   END { exit !bad }
@@ -447,11 +450,14 @@ fi
 ```
 
 ## Every user-visible flow has an end-to-end scenario
-only: *.ts
+only: *.{ts,tsx}
 
 A change that adds or changes something a member sees or does, a slash
-command, a button, a select, a modal, or a message the bot posts or edits,
-adds or updates a scenario in `test/e2e/` in the same pull request. The
+command, a button, a select, a modal, a message the bot posts or edits, or a
+web page, adds or updates a scenario in `test/e2e/` in the same pull
+request. For a web page, the scenario requests it from the real bundle with
+a `PageClient` from `test/e2e/harness/web.ts`, as "Test a page" in
+`src/web/AGENTS.md` says; the rest of this rule is about Discord flows. The
 scenario starts the real bundle with `useE2E()` (no `probe` option), drives
 the flow as a member through signed interactions (`Member.run`, `click`,
 `select`, `submitModal`), and asserts on what the fake Discord API stores or
