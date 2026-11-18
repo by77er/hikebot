@@ -463,6 +463,62 @@ describe("startDatePoll", () => {
   });
 });
 
+describe("withdrawDatePoll", () => {
+  it("deletes the open date poll and returns the round to location_decided", async () => {
+    await withStore((store, storage) => {
+      const round = decidedRound(store);
+      const poll = store.startDatePoll(round.id, "u-admin", dates(3));
+      store.setVotes(poll.id, "u1", [poll.options[0]?.id ?? 0]);
+      expect(store.withdrawDatePoll(poll.id)).toMatchObject({
+        id: round.id,
+        status: "location_decided",
+        datePoll: null,
+      });
+      expect(store.getPoll(poll.id)).toBeNull();
+      expect(count(storage, "polls")).toBe(1);
+      expect(count(storage, "poll_options")).toBe(2);
+      expect(count(storage, "poll_votes")).toBe(1);
+      expect(store.startDatePoll(round.id, "u-admin", dates(2)).status).toBe(
+        "open",
+      );
+    });
+  });
+
+  it("refuses a closed poll, an open location poll and an unknown poll", async () => {
+    await withStore((store) => {
+      const round = decidedRound(store);
+      expectCode(
+        () => store.withdrawDatePoll(round.locationPoll?.id ?? 0),
+        "poll_closed",
+      );
+      const poll = store.startDatePoll(round.id, "u-admin", dates(2));
+      store.closePoll(poll.id, "u-admin");
+      expectCode(() => store.withdrawDatePoll(poll.id), "poll_closed");
+      expectCode(() => store.withdrawDatePoll(999), "poll_not_found");
+      const next = store.startRound("u-admin", locations("A"));
+      expectCode(
+        () => store.withdrawDatePoll(next.locationPoll?.id ?? 0),
+        "invalid_state",
+      );
+    });
+  });
+
+  it("rolls back every row when a delete fails part-way", async () => {
+    await withStore((store, storage) => {
+      const round = decidedRound(store);
+      const poll = store.startDatePoll(round.id, "u-admin", dates(2));
+      storage.sql.exec(
+        `CREATE TRIGGER fail_delete BEFORE DELETE ON polls
+         BEGIN SELECT RAISE(ABORT, 'forced'); END`,
+      );
+      expect(() => store.withdrawDatePoll(poll.id)).toThrow(/forced/);
+      storage.sql.exec("DROP TRIGGER fail_delete");
+      expect(store.getPoll(poll.id)?.options).toHaveLength(2);
+      expect(store.getActiveRound()?.status).toBe("date_voting");
+    });
+  });
+});
+
 describe("round lifecycle", () => {
   it("runs from location vote to complete", async () => {
     await withStore((store) => {
