@@ -298,7 +298,8 @@ function hikesLeft(n: number): string {
 /**
  * The ephemeral "suggest again" message: `notice` (or what it is for), the
  * select of past locations that are neither on the poll nor resting, the
- * New location button, and one line naming the resting locations.
+ * New location button, and one line naming the resting locations, the
+ * most recent hike first.
  */
 export function renderSuggestAgain(
   pollId: number,
@@ -306,7 +307,9 @@ export function renderSuggestAgain(
   notice?: string,
 ): APIMessageTopLevelComponent[] {
   const offer = suggestable(past);
-  const resting = past.filter((p) => p.cooldownHikesLeft > 0);
+  const resting = past
+    .filter((p) => p.cooldownHikesLeft > 0)
+    .sort((a, b) => b.cooldownHikesLeft - a.cooldownHikesLeft);
   const body: APIComponentInContainer[] = [
     textDisplay(
       notice ??

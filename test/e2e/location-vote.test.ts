@@ -17,9 +17,11 @@ import {
   waitForMessage,
 } from "./harness/helpers";
 import { subcommand, type Actor } from "./harness/interactions";
+import { RoundPlayer } from "./harness/rounds";
 import { useE2E } from "./harness/worker";
 
 const e2e = useE2E();
+const play = new RoundPlayer(e2e);
 
 const TITLE = "Where should we hike?";
 const CLOSED = "This vote has closed.";
@@ -536,5 +538,131 @@ describe("the location vote", () => {
     expect(messageText(shown(poll))).toContain("**Ridge** · 8 votes");
     expect(patchesOf(poll).length).toBeGreaterThanOrEqual(1);
     expect(patchesOf(poll).length).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("suggesting a past location again", () => {
+  it("offers earlier rounds' locations, rests the last two hikes, and offers them again after two more", async () => {
+    const g = play.guild(20);
+    const [ana, ben, cy] = g.members as [Member, Member, Member];
+    const panel = await play.setUpPanel(g);
+
+    // Round 1: Alpine Lake, Bear Creek and a proposal; Alpine Lake is the hike.
+    const first = await play.startLocationVote(
+      g,
+      panel,
+      "Alpine Lake\nBear Creek",
+    );
+    expect(
+      await propose(
+        ana,
+        first,
+        "Cedar Falls",
+        "https://example.com/cedar, 9 km",
+      ),
+    ).toContain("Added **Cedar Falls** to the location vote.");
+    await play.finishRound(
+      g,
+      panel,
+      first,
+      "Alpine Lake",
+      "2030-06-08\n2030-06-15",
+      "Sat, 8 Jun 2030",
+    );
+
+    // The admin cannot put Alpine Lake on the next vote.
+    const form = await g.owner.click(panel, ID.start);
+    await g.owner.submitModal(
+      form,
+      { [ID.initial]: "Dune Ridge\nalpine  LAKE" },
+      panel,
+    );
+    expectEphemeral(
+      g.owner,
+      "Nothing was started. Remove this location and try again:\n- **Alpine Lake** was the hike on Sat, 8 Jun 2030. It can be suggested again after 2 more hikes.",
+    );
+
+    // Round 2: Propose a location offers Bear Creek and Cedar Falls.
+    const second = await play.startLocationVote(g, panel, "");
+    await cy.click(second, idStarting(shown(second), "hb:location:propose:"));
+    const stale = cy.lastReply();
+    await ben.click(second, idStarting(shown(second), "hb:location:propose:"));
+    const offer = ben.lastReply();
+    expect(offer.ephemeral).toBe(true);
+    expect(offer.flags & MessageFlags.IsComponentsV2).toBeTruthy();
+    expect(Object.keys(optionValues(offer))).toEqual([
+      "Cedar Falls",
+      "Bear Creek",
+    ]);
+    expect(messageText(offer)).toContain(
+      "Resting: **Alpine Lake** (2 more hikes)",
+    );
+    const again = idStarting(offer, "hb:location:again:");
+    expect(again).toMatch(/^hb:location:again:\d+$/);
+    await ben.select(offer, again, [optionValues(offer)["Cedar Falls"] ?? ""]);
+    expect(messageText(shown(offer))).toContain(
+      "Added **Cedar Falls** to the location vote.",
+    );
+    expect(Object.keys(optionValues(shown(offer)))).toEqual(["Bear Creek"]);
+    await eventually(() => {
+      expect(messageText(shown(second))).toContain("**Cedar Falls** · 0 votes");
+    });
+    expect(messageText(shown(second))).toContain(
+      "https://example.com/cedar, 9 km",
+    );
+    expect(messageText(shown(second))).toContain(
+      `Proposed by <@${ben.actor.userId}>`,
+    );
+
+    // A select opened before Ben's pick: Cedar Falls is on the list now.
+    await cy.select(stale, again, [optionValues(stale)["Cedar Falls"] ?? ""]);
+    expect(messageText(shown(stale))).toContain(
+      "**Cedar Falls** is already on the list. Vote for it instead.",
+    );
+
+    // Typing the resting location in the modal is refused.
+    const typed = await cy.click(
+      shown(stale),
+      idStarting(shown(stale), "hb:location:new:"),
+    );
+    await cy.submitModal(typed, { [ID.name]: "Alpine Lake" });
+    expectEphemeral(
+      cy,
+      "**Alpine Lake** was the hike on Sat, 8 Jun 2030. It can be suggested again after 2 more hikes.",
+    );
+    await play.finishRound(
+      g,
+      panel,
+      second,
+      "Cedar Falls",
+      "2030-07-06\n2030-07-07",
+      "Sat, 6 Jul 2030",
+    );
+
+    // Round 3: Alpine Lake rests one more hike.
+    const third = await play.startLocationVote(g, panel, "Bear Creek");
+    // Nothing to suggest again: the button opens the modal directly.
+    const direct = await ana.click(
+      third,
+      idStarting(shown(third), "hb:location:propose:"),
+    );
+    expect(direct.type).toBe(InteractionResponseType.Modal);
+    await play.finishRound(
+      g,
+      panel,
+      third,
+      "Bear Creek",
+      "2030-08-03\n2030-08-04",
+      "Sat, 3 Aug 2030",
+    );
+
+    // Round 4: two hikes later, Alpine Lake is offered again.
+    const fourth = await play.startLocationVote(g, panel, "");
+    await ana.click(fourth, idStarting(shown(fourth), "hb:location:propose:"));
+    const later = ana.lastReply();
+    expect(Object.keys(optionValues(later))).toEqual(["Alpine Lake"]);
+    expect(messageText(later)).toContain(
+      "Resting: **Bear Creek** (2 more hikes), **Cedar Falls** (1 more hike)",
+    );
   });
 });

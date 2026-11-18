@@ -252,6 +252,28 @@ export class RoundPlayer {
     await this.closeVote(g.owner, panel, "date vote");
   }
 
+  /**
+   * Finishes the round of the open location `poll`: the guild's last member
+   * votes for `location`, the vote closes, the date vote starts with
+   * `dates` (one per line) and closes with `date` (its label) the winner.
+   */
+  async finishRound(
+    g: TestGuild,
+    panel: FakeMessage,
+    poll: FakeMessage,
+    location: string,
+    dates: string,
+    date: string,
+  ): Promise<void> {
+    const voter = g.members[g.members.length - 1];
+    if (!voter) throw new Error("the guild has no members");
+    await this.vote(voter, poll, [location]);
+    await this.closeVote(g.owner, panel, "location vote");
+    const when = await this.startDateVote(g, panel, dates);
+    await this.vote(voter, when, [date]);
+    await this.closeVote(g.owner, panel, "date vote");
+  }
+
   /** Cancels the active round from the panel, confirming. */
   async cancelRound(owner: Member, panel: FakeMessage): Promise<void> {
     await owner.click(panel, idStarting(this.shown(panel), "hb:round:cancel:"));
