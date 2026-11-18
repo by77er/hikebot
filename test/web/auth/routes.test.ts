@@ -58,10 +58,14 @@ describe("GET /servers", () => {
     expect(response.status).toBe(200);
     expect(pageHeaders(response)).toEqual(EXPECTED_PAGE_HEADERS);
     const html = await response.text();
-    expect(html).toContain('<a href="/g/200000000000000001">Alpine Club</a>');
-    expect(html).toContain('<a href="/g/200000000000000002">Ridge Walkers</a>');
     expect(html).toContain(
-      '<a href="/login?next=/servers">Refresh servers</a>',
+      '<a class="card__link" href="/g/200000000000000001">Alpine Club</a>',
+    );
+    expect(html).toContain(
+      '<a class="card__link" href="/g/200000000000000002">Ridge Walkers</a>',
+    );
+    expect(html).toContain(
+      '<a class="button button--secondary" href="/login?next=/servers"><span>Refresh servers</span></a>',
     );
     const page = await outline(html);
     expect(page.title).toBe("Your servers · hikebot");

@@ -359,6 +359,13 @@ Block, element, modifier, in lower case with hyphens:
   width;
 - the **footer**: the project link and the style guide.
 
+Content placed straight into `main` gets `--space-4` between blocks; pages
+normally lay themselves out with `.stack`. A page that only says what
+happened and offers one way on (the 404 and 405 pages, the sign-in
+outcomes, a refused form) is a `MessagePage` (`src/web/pages/message.tsx`):
+an optional eyebrow such as "Error 404", the title, a lead sentence and one
+primary button.
+
 ## Components
 
 Each component is a typed Preact component in `src/web/components/`, with

@@ -137,6 +137,11 @@
   outline: none;
 }
 
+/* Plain content placed straight into the page still gets space between. */
+.shell__main > .shell__inner > * + * {
+  margin-block-start: var(--space-4);
+}
+
 .shell__footer {
   border-block-start: var(--border-width) solid var(--color-border);
   color: var(--color-text-muted);

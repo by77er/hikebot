@@ -60,7 +60,7 @@ describe("signing in", () => {
     expect(servers.status).toBe(200);
     expect(servers.body).toContain("<title>Your servers · hikebot</title>");
     expect(servers.body).toContain(
-      `<a href="/g/${ana.withBot.id}">${ana.withBot.name}</a>`,
+      `<a class="card__link" href="/g/${ana.withBot.id}">${ana.withBot.name}</a>`,
     );
     expect(servers.body).not.toContain(ana.withoutBot.name);
     expect(servers.body).toContain("Signed in as Hiker 1.");
@@ -68,7 +68,7 @@ describe("signing in", () => {
       '<button class="button button--quiet" type="submit"><span>Sign out</span></button>',
     );
     expect(servers.body).toContain(
-      '<a href="/login?next=/servers">Refresh servers</a>',
+      '<a class="button button--secondary" href="/login?next=/servers"><span>Refresh servers</span></a>',
     );
 
     const home = await client.get("/");
@@ -116,7 +116,9 @@ describe("signing in", () => {
     expect(cancelled.body).toContain(
       "<title>Sign-in was cancelled · hikebot</title>",
     );
-    expect(cancelled.body).toContain('<a href="/login">Try again</a>');
+    expect(cancelled.body).toContain(
+      '<a class="button button--primary" href="/login"><span>Try again</span></a>',
+    );
     expect(client.cookies.size).toBe(0);
     expect((await client.get("/servers")).status).toBe(303);
   });
@@ -191,7 +193,10 @@ describe("signing in", () => {
     expect(servers.location?.pathname).toBe("/login");
     const home = await client.get("/");
     expect(home.status).toBe(200);
-    expect(home.body).toContain('<a href="/login">Sign in with Discord</a>');
+    expect(home.body).toContain(
+      '<a class="button button--primary" href="/login">',
+    );
+    expect(home.body).toContain("<span>Sign in with Discord</span>");
   });
 });
 

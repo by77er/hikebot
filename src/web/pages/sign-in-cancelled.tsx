@@ -1,14 +1,12 @@
 /** The page for a sign-in the user cancelled at Discord. */
-import { Layout } from "../layout";
+import { MessagePage } from "./message";
 
 export function SignInCancelledPage() {
   return (
-    <Layout title="Sign-in was cancelled · hikebot">
-      <h1>Sign-in was cancelled</h1>
-      <p>You did not sign in. Discord told hikebot nothing about you.</p>
-      <p>
-        <a href="/login">Try again</a>
-      </p>
-    </Layout>
+    <MessagePage
+      title="Sign-in was cancelled"
+      lead="You did not sign in. Discord told hikebot nothing about you."
+      action={{ href: "/login", label: "Try again" }}
+    />
   );
 }
