@@ -65,7 +65,10 @@ perl -0777 -ne '
   };
   $text =~ s/<!doctype html>/               /gi;
   $at->($-[0], "dangerouslySetInnerHTML or innerHTML") while $text =~ /dangerouslySetInnerHTML|\binnerHTML\b|\bouterHTML\b/g;
-  $at->($-[0], "a string of HTML markup") while $text =~ /["\x27`]\s*<\/?[a-zA-Z!][^"\x27`]*>/g;
+  while ($text =~ /(?:^|[=(,+{:?\[!&|]|\breturn|=>)[ \t]*\K(?:"((?:[^"\\\n]|\\.)*)"|\x27((?:[^\x27\\\n]|\\.)*)\x27|`((?:[^`\\]|\\.)*)`)/gm) {
+    my ($pos, $body) = ($-[0], $1 // $2 // $3);
+    $at->($pos, "a string of HTML markup") if $body =~ /<\/?[a-zA-Z!][^<>]*>/;
+  }
   if (!$ENV{SKIP_TYPE}) {
     $at->($-[0], "a text/html response built by hand") while $text =~ /text\/html/g;
   }
@@ -127,7 +130,7 @@ perl -0777 -ne '
   $at->($-[0], "an inline <script>") while $text =~ /<script\b(?![^>]*\bsrc=)/g;
   $at->($-[0], "a <style> element") while $text =~ /<style\b/g;
   $at->($-[0], "a style attribute") while $text =~ /\sstyle=/g;
-  $at->($-[0], "an event attribute") while $text =~ /\son[a-z]+=/gi;
+  $at->($-[0], "an event attribute") while $text =~ /\son(?:[A-Z][A-Za-z]*|(?:click|dblclick|change|submit|reset|input|load|error|focus|blur|key(?:down|up|press)|mouse[a-z]+|pointer[a-z]+|touch[a-z]+))=/g;
   for my $f (sort { $a->[0] <=> $b->[0] } @found) {
     my $line = 1 + (substr($text, 0, $f->[0]) =~ tr/\n//);
     print "$ARGV:$line: $f->[1]; put styles in a stylesheet under public/assets/ and do the work on the server (\"Add a static asset\" in src/web/AGENTS.md)\n";
@@ -182,7 +185,7 @@ perl -0777 -ne '
     next if $attr =~ /^src/i && $url =~ m{^https://cdn\.discordapp\.com/};
     $at->($pos, "loads a file from another host");
   }
-  $at->($-[0], "loads a file from another host") while $text =~ /<link\b[^>]*?\K\bhref=\{?\s*["\x27`](https?:)?\/\//g;
+  $at->($-[0], "loads a file from another host") while $text =~ /<(?:link|image|use)\b[^>]*?\K\b(?:href|xlinkHref|xlink:href)=\{?\s*["\x27`](https?:)?\/\//g;
   for my $f (sort { $a->[0] <=> $b->[0] } @found) {
     my $line = 1 + (substr($text, 0, $f->[0]) =~ tr/\n//);
     print "$ARGV:$line: $f->[1]; copy it into public/assets/ and link it by its path (\"Add a static asset\" in src/web/AGENTS.md)\n";
