@@ -175,9 +175,10 @@
 
 /* Vertical rhythm: children spaced evenly, by default 16px apart. */
 .stack {
+  --stack-gap: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--stack-gap, var(--space-4));
+  gap: var(--stack-gap);
 }
 
 .stack--tight {
@@ -197,7 +198,11 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--cluster-gap, var(--space-3));
+  gap: var(--space-3);
+}
+
+.cluster--tight {
+  gap: var(--space-2);
 }
 
 /* Cards side by side on wide screens, one column on a phone. */
@@ -206,7 +211,7 @@
   gap: var(--space-4);
   grid-template-columns: repeat(
     auto-fill,
-    minmax(min(100%, var(--grid-min, var(--width-card-min))), 1fr)
+    minmax(min(100%, var(--width-card-min)), 1fr)
   );
 }
 

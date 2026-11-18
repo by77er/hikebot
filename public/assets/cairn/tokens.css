@@ -97,11 +97,13 @@
     --width-task: 45rem;
     --width-overview: 67.5rem;
     --gutter: var(--space-4);
-    --width-card-min: 16rem;
+    --width-card-min: 13.5rem;
 
     /* Widths of the style guide's grids. */
-    --width-index: 12rem;
-    --width-swatch: 15rem;
+    --width-index: 10rem;
+    --width-swatch: 10.5rem;
+    --width-pair: 10.5rem;
+    --width-pair-sample: 4.75rem;
     --width-shape: 10rem;
     --width-state: 9.5rem;
     --width-scale-label: 7rem;
