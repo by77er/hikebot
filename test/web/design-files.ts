@@ -6,8 +6,17 @@
  * under `src/web/`. Paths are from the repository root, such as
  * `public/assets/cairn/tokens.css`.
  */
-/// <reference types="vite/client" />
 import { env } from "cloudflare:workers";
+
+declare global {
+  interface ImportMeta {
+    /** Vite's build-time file listing; only the shape these tests use. */
+    glob<T = unknown>(
+      pattern: string,
+      options?: { query?: string; import?: string; eager?: boolean },
+    ): Record<string, T>;
+  }
+}
 
 function fromRoot(path: string): string {
   return path.replace(/^(\.\.\/)+/, "");

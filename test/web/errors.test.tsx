@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MethodNotAllowedPage, NotFoundPage } from "../../src/web/pages/errors";
+import { ForbiddenPage } from "../../src/web/pages/forbidden";
 import { htmlResponse } from "../../src/web/response";
 import { outline } from "./helpers";
 
@@ -34,5 +35,20 @@ describe("the error pages", () => {
       "This page does not accept that kind of request.",
     );
     expect(html).toContain('<a class="button button--primary" href="/">');
+  });
+
+  it("say a refused form in words, with the same way back home", async () => {
+    const { html, page } = await render(<ForbiddenPage />);
+    expect(page.title).toBe("Request refused · hikebot");
+    expect(html).toContain("<h1>Request refused</h1>");
+    expect(page.text).toContain(
+      "hikebot did not accept this form. It may have been open too long, or sent from another site. Go back, reload the page and try again.",
+    );
+    expect(
+      [
+        ...html.matchAll(/<a class="button button--primary" href="([^"]*)">/g),
+      ].map(([, href]) => href),
+    ).toEqual(["/"]);
+    expect(page.text).toContain("Go to the home page");
   });
 });

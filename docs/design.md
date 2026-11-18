@@ -72,8 +72,13 @@ The Worker (`src/index.ts`) handles the rest:
     `maps/regions.json` at the default size and zoom (see "Map pictures"),
     `image/png`, cacheable for an hour; the HTML 404 page while there is no
     map data there.
+  - `GET /styleguide` (or `HEAD`): the style guide, every token and
+    component of the design system (`docs/design-system.md`).
   - `GET /assets/*`: the file from `public/` through the `ASSETS` binding,
     for a request that reaches the Worker.
+  - `GET /assets/v/<version>/*`: the same files under the deployed
+    version, cacheable for a year (see "Versioned assets" under "Web
+    pages").
   - `GET /calendar/<guild id>/<signature>.ics` (or `HEAD`): the guild's
     calendar feed, described under "Calendar feed". The Worker checks the
     signature before it reaches any Durable Object; a bad address gets the
@@ -144,7 +149,9 @@ so a name or title from Discord or a form cannot inject markup.
   from `public/assets/` and `Cache-Control: public, max-age=31536000,
 immutable`. Each deploy changes the URLs, so browsers cache the files for
   a year and still never keep an old one; the stylesheet's relative imports
-  and `url()`s stay under the same version.
+  and `url()`s stay under the same version. A path naming another version
+  (a page rendered by the other version during a gradual deploy) gets the
+  same files with the five-minute caching instead.
 - **Screenshots and design review.** Every page has committed screenshots
   in `docs/screenshots/`, named `<page>--<viewport>--<scheme>.png`, at a
   phone (390x844) and a desktop (1280x800) viewport in the light and dark

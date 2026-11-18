@@ -14,7 +14,7 @@
     "redact_query_string": true,
   },
   // Files under public/ are served at the same path before the Worker runs
-  // (public/assets/app.css is /assets/app.css); public/_headers sets their
+  // (public/assets/cairn/cairn.css is /assets/cairn/cairn.css); public/_headers sets their
   // caching and public/.assetsignore keeps the rule files out.
   "assets": {
     "directory": "./public",

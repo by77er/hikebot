@@ -5,7 +5,15 @@
  */
 import { Button } from "../components/button";
 import type { IconComponent } from "../components/icon";
+import { ArrowLeftIcon } from "../components/icons";
 import { Layout } from "../layout";
+
+/** The way back from a page that went wrong. */
+export const HOME_ACTION = {
+  href: "/",
+  label: "Go to the home page",
+  icon: ArrowLeftIcon,
+};
 
 export interface MessagePageProps {
   title: string;

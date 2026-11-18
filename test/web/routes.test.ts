@@ -277,6 +277,13 @@ describe("versioned assets", () => {
     await response.arrayBuffer();
   });
 
+  it("serves another version's path with the five-minute caching only", async () => {
+    const response = await get("/assets/v/0123-another/cairn/cairn.css");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("public, max-age=300");
+    expect(await response.text()).toContain("@layer reset, tokens");
+  });
+
   it.each([
     "/assets/v/dev/cairn/missing.css",
     "/assets/v/dev/",

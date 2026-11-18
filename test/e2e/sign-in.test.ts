@@ -233,6 +233,11 @@ describe("signing out", () => {
     });
     expect(forged.status).toBe(403);
     expect(forged.body).toContain("<title>Request refused · hikebot</title>");
+    expect(forged.body).toContain("<h1>Request refused</h1>");
+    expect(forged.body).toContain(
+      '<a class="button button--primary" href="/">',
+    );
+    expect(forged.body).toContain("<span>Go to the home page</span>");
     expect(client.cookies.has(SESSION)).toBe(true);
     const missing = await client.request("/logout", {
       form: {},

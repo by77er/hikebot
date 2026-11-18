@@ -6,7 +6,7 @@
 import { Button } from "../components/button";
 import { Card } from "../components/card";
 import { ArrowRightIcon } from "../components/icons";
-import { Layout, PROJECT_URL } from "../layout";
+import { Layout } from "../layout";
 
 const STEPS = [
   {
@@ -65,9 +65,6 @@ export function HomePage() {
             ))}
           </ol>
         </section>
-        <p>
-          <a href={PROJECT_URL}>The hikebot project</a> is open source.
-        </p>
       </div>
     </Layout>
   );

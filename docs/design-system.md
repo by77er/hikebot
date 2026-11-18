@@ -323,7 +323,9 @@ Worker version's id (`CF_VERSION_METADATA`). The stylesheet's relative
 every `/assets/v/<version>/...` path with the file from `public/assets/`
 and `Cache-Control: public, max-age=31536000, immutable`. A deploy changes
 every URL, so a browser never keeps an old file, and between deploys it
-never asks again. The plain `/assets/...` paths keep the five-minute
+never asks again. A path naming another version, as a page rendered by the
+other version asks for during a gradual deploy, gets the current files with
+the five-minute caching only. The plain `/assets/...` paths keep the five-minute
 caching of `public/_headers`.
 
 ### Class names
