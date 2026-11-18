@@ -97,7 +97,7 @@ describe("screenshotsSection", () => {
     expect(section.split("\n")).toEqual([
       "## Screenshots",
       "",
-      "Before is aaaaaaa (the merge base with main), after is bbbbbbb.",
+      "Before is aaaaaaa (the merge base with origin/main), after is bbbbbbb.",
       "",
       "| Screenshot | Before | After |",
       "| --- | --- | --- |",

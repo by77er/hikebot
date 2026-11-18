@@ -107,7 +107,7 @@ async function main(): Promise<void> {
       "git",
       ["status", "--porcelain", "--untracked-files=all", "--", OUT_DIR],
       { cwd: ROOT, encoding: "utf8" },
-    ).trim();
+    ).trimEnd();
     if (stale) {
       console.error(
         `These screenshots differ from what is committed:\n${stale}\nRun \`npm run screenshots\` and commit ${OUT_DIR}/ ("Take the screenshots" in src/web/AGENTS.md).`,

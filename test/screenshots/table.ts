@@ -5,6 +5,7 @@
  * image before and after, each a `raw.githubusercontent.com` URL pinned to
  * the merge-base commit and to the head commit, "new" or "removed" where one
  * side has none, or the single line `No visual change.` when none differs.
+ * `--base <ref>` compares with the merge base with another ref instead.
  * It refuses to run while `HEAD` is not pushed or `docs/screenshots/` has
  * uncommitted changes, because the images would not match the pull request.
  */
@@ -63,6 +64,7 @@ export function screenshotsSection(
   changes: ScreenshotChange[],
   base: string,
   head: string,
+  baseRef = "origin/main",
 ): string {
   const lines = ["## Screenshots", ""];
   if (changes.length === 0) {
@@ -70,7 +72,7 @@ export function screenshotsSection(
     return `${lines.join("\n")}\n`;
   }
   lines.push(
-    `Before is ${base.slice(0, 7)} (the merge base with main), after is ${head.slice(0, 7)}.`,
+    `Before is ${base.slice(0, 7)} (the merge base with ${baseRef}), after is ${head.slice(0, 7)}.`,
     "",
     "| Screenshot | Before | After |",
     "| --- | --- | --- |",
@@ -114,12 +116,19 @@ export function tableForCheckout(cwd: string, baseRef = "origin/main"): string {
       `HEAD (${head.slice(0, 7)}) is on no remote branch, so its images would not load; push it first (git push), then run this again.`,
     );
   }
-  return screenshotsSection(changedScreenshots(git, base, head), base, head);
+  return screenshotsSection(
+    changedScreenshots(git, base, head),
+    base,
+    head,
+    baseRef,
+  );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
-    process.stdout.write(tableForCheckout(process.cwd()));
+    const at = process.argv.indexOf("--base");
+    const base = at === -1 ? undefined : process.argv[at + 1];
+    process.stdout.write(tableForCheckout(process.cwd(), base));
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
