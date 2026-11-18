@@ -13,7 +13,7 @@ behaviour, layout and conventions. When your change alters behaviour, update
 
 ```
 src/index.ts              Worker entry: routing, signature check, PING, dispatch to the DO
-src/discord/              Discord helpers: verify.ts (Ed25519), responses.ts; later api.ts, components.ts, commands.ts
+src/discord/              Discord helpers: verify.ts, responses.ts, api.ts, components.ts; later commands.ts. See src/discord/AGENTS.md
 src/guild/guild-hike.ts   GuildHike Durable Object: handleInteraction, runFollowUp. Keep it thin
 src/guild/router.ts       handler registry (commands by name, components/modals by custom_id prefix)
 src/guild/schema.ts       SQLite migrations, applied once each and tracked in _migrations

@@ -20,6 +20,10 @@
       "new_sqlite_classes": ["GuildHike"],
     },
   ],
+  // Tests and local runs override this to point at a fake Discord API.
+  "vars": {
+    "DISCORD_API_BASE": "https://discord.com/api/v10",
+  },
   // Values are set with `wrangler secret put` and locally in .dev.vars.
   "secrets": {
     "required": [

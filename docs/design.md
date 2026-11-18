@@ -12,7 +12,9 @@ built yet.
 
 One Cloudflare Worker, `hikebot`. Secrets: `DISCORD_PUBLIC_KEY`,
 `DISCORD_APPLICATION_ID`, `DISCORD_BOT_TOKEN`, declared under
-`secrets.required` in `wrangler.jsonc` (which also types them in `Env`). One
+`secrets.required` in `wrangler.jsonc` (which also types them in `Env`). The
+var `DISCORD_API_BASE` (default `https://discord.com/api/v10`) is where REST
+calls go; tests point it at a fake Discord API. One
 `GuildHike` Durable Object per Discord guild (binding `GUILD_HIKE`,
 `idFromName(guild_id)`) holds all of that guild's state in its SQLite storage
 and makes every state change, so votes and poll closes never race.
@@ -85,6 +87,39 @@ once and returns false if there is no job, for example because the object was
 evicted in between, so follow-ups must tolerate being lost: anything that must
 survive belongs in storage, written before the response is returned.
 
+## Talking to Discord
+
+Handlers and follow-ups call Discord's REST API only through `DiscordApi`
+(`src/discord/api.ts`, built with `discordApi(env)`): a thin typed wrapper
+over `fetch` with no Discord SDK.
+
+- Bot routes (messages, forum threads, guilds, global commands) send
+  `Authorization: Bot <DISCORD_BOT_TOKEN>`. Interaction webhook routes
+  (edit original response, follow-up) are authorised by the interaction
+  token in the path and send no `Authorization` header.
+- Every message body gets `allowed_mentions: { parse: [] }` unless the
+  caller set `allowed_mentions`.
+- A non-2xx response throws `DiscordApiError` with the HTTP status,
+  Discord's error `code` and `message` (from its JSON error body, or the
+  response text when there is none), the method and the route. Routes in
+  errors show `:token` in place of interaction tokens, so errors can be
+  logged and shown to admins.
+- A 429 is retried after its `retry_after` (or `Retry-After`), at most 3
+  times and 5 seconds of waiting in total; past that the 429 is thrown as a
+  `DiscordApiError`.
+
+Payloads are built with the pure functions in `src/discord/components.ts`:
+component builders, interaction responses (`reply`, `ephemeralReply`,
+`update`, `deferredReply`, `deferredUpdate`, `modal`) and `messageBody` for
+REST calls and webhook edits. Message responses and bodies carry
+`IS_COMPONENTS_V2` (plus `64` when ephemeral) and no `content` or `embeds`.
+A deferred reply carries only the ephemeral flag, because Discord accepts no
+other flag there; the edit that replaces it is a `messageBody`, which sets
+`IS_COMPONENTS_V2`. `customId` builds `hb:<feature>:<action>[:<arg>]` ids
+(throwing past Discord's 100 characters) and `parseCustomId` reads them back.
+`textInputValue` and `selectValues` read a modal submit by `custom_id`,
+inside Label or action row wrappers.
+
 ## Storage
 
 `src/guild/schema.ts` holds an ordered list of migrations (`name`, `sql`). The
@@ -99,8 +134,8 @@ ones are appended. The list ships empty; features add their tables.
 src/index.ts                  Worker entry: routing, signature check, PING, dispatch to the DO
 src/discord/verify.ts         Ed25519 verification
 src/discord/responses.ts      shared interaction responses (ephemeral notice)
-src/discord/api.ts            Discord REST client (later task)
-src/discord/components.ts     Components V2 builders (later task)
+src/discord/api.ts            Discord REST client
+src/discord/components.ts     Components V2 builders, interaction responses, modal values, custom_ids
 src/discord/commands.ts       slash command definitions (later task)
 src/guild/guild-hike.ts       GuildHike DO: handleInteraction, runFollowUp, alarm (later). Keep it thin
 src/guild/router.ts           handler registry
