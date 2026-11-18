@@ -381,9 +381,10 @@ no `new Date()` without an argument, no `Math.random()`, no
 as a `now: () => number` and randomness as a `RandomSource` (from
 `src/polls/tally.ts`), through a parameter or an options field the caller
 fills, so tests can fix both. The defaults are defined once:
-`this.now = options.now ?? Date.now` in `PollStore`'s constructor and
-`defaultRandom` in `src/polls/tally.ts`; pass those on rather than writing a
-second default. Under `src/polls/` the poll rules in
+`this.now = options.now ?? Date.now` in `PollStore`'s constructor,
+`systemNow` in `src/clock.ts` for code that has no `PollStore` (the web
+routes), and `defaultRandom` in `src/polls/tally.ts`; pass those on rather
+than writing another default. Under `src/polls/` the poll rules in
 `src/polls/UNDERCURRENT.md` say the same for poll code. Converting a given
 time, as in `new Date(round.started_at)`, is not reading the clock.
 
@@ -429,13 +430,17 @@ Under
 randomness directly" in `src/polls/UNDERCURRENT.md` matches, with the same
 two exempt default lines, so the two never disagree about a line there;
 elsewhere it also catches `crypto.randomUUID` and `new Date` with no
-argument list, and exempts nothing. Comment lines are skipped.
+argument list, and exempts only the one line
+`export const systemNow = (): number => Date.now();` in `src/clock.ts`.
+Comment lines are skipped.
 
 ```sh
 case "$FILE" in ./polls/*) polls=1 ;; *) polls=0 ;; esac
-if ! awk -v polls="$polls" '
+case "$FILE" in ./clock.ts) clock=1 ;; *) clock=0 ;; esac
+if ! awk -v polls="$polls" -v clock="$clock" '
   /^[[:space:]]*(\/\/|\/?\*)/ { prev = $0; next }
   /Date\.now|new Date\(\)|Math\.random|crypto\.getRandomValues/ || (!polls && /crypto\.randomUUID|new Date[[:space:]]*(\([[:space:]]*\)|$|[^[:space:](A-Za-z0-9_$])/) {
+    if (clock && $0 ~ /^export const systemNow = \(\): number => Date\.now\(\);$/) { prev = $0; next }
     if (polls && $0 ~ /^[[:space:]]*this\.now = options\.now \?\? Date\.now;$/) { prev = $0; next }
     if (polls && $0 ~ /^export const defaultRandom: RandomSource = \(array\) => crypto\.getRandomValues\(array\);$/) { prev = $0; next }
     if (polls && $0 ~ /^[[:space:]]*crypto\.getRandomValues\(array\);$/ && prev ~ /^export const defaultRandom: RandomSource = \(array\) =>$/) { prev = $0; next }
@@ -444,7 +449,7 @@ if ! awk -v polls="$polls" '
   { prev = $0 }
   END { exit bad }
 ' "$FILE"; then
-  echo "Only PollStore's constructor default (this.now = options.now ?? Date.now) and defaultRandom in src/polls/tally.ts may read the clock or randomness; everything else takes them from its caller."
+  echo "Only PollStore's constructor default (this.now = options.now ?? Date.now), systemNow in src/clock.ts and defaultRandom in src/polls/tally.ts may read the clock or randomness; everything else takes them from its caller."
   exit 1
 fi
 ```
