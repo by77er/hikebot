@@ -1,5 +1,9 @@
-# Copy to .dev.vars and fill in from the Discord developer portal.
+# Copy to .dev.vars and fill in where the secrets table in README.md says.
 # Never commit .dev.vars.
 DISCORD_PUBLIC_KEY=0000000000000000000000000000000000000000000000000000000000000000
 DISCORD_APPLICATION_ID=000000000000000000
 DISCORD_BOT_TOKEN=dummy-bot-token
+DISCORD_CLIENT_SECRET=dummy-client-secret
+SIGNING_SECRET=dummy-signing-secret-at-least-32-characters
+# The local dev server, so links the Worker builds point at it.
+PUBLIC_URL=http://localhost:8787

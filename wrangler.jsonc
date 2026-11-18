@@ -22,9 +22,11 @@
       "new_sqlite_classes": ["GuildHike"],
     },
   ],
-  // Tests and local runs override this to point at a fake Discord API.
   "vars": {
+    // Tests and local runs override this to point at a fake Discord API.
     "DISCORD_API_BASE": "https://discord.com/api/v10",
+    // The Worker's own origin, for absolute links; tests set an example one.
+    "PUBLIC_URL": "https://hiking.bitcru.sh",
   },
   // The deploy workflow sets them from GitHub Actions secrets; locally they come
   // from .dev.vars.
@@ -33,6 +35,8 @@
       "DISCORD_PUBLIC_KEY",
       "DISCORD_APPLICATION_ID",
       "DISCORD_BOT_TOKEN",
+      "DISCORD_CLIENT_SECRET",
+      "SIGNING_SECRET",
     ],
   },
 }

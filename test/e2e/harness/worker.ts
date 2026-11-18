@@ -2,7 +2,8 @@
  * Starts the Worker under test in local workerd with Wrangler's
  * `createTestHarness`, next to a fake Discord API, once per test file. Each
  * start gets fresh in-memory Durable Object storage, a newly generated
- * signing key pair, a dummy bot token and application id, and
+ * signing key pair, a dummy bot token, application id, OAuth client secret
+ * and SIGNING_SECRET, PUBLIC_URL set to an example origin, and
  * DISCORD_API_BASE pointing at the fake. These go in as the harness's
  * `vars` and `secrets`, which override whatever `.dev.vars`, `.env` files or
  * the environment hold, so the suite runs the same in any checkout.
@@ -34,6 +35,9 @@ type WorkerInput = Extract<
 
 export const BOT_TOKEN = "e2e-bot-token";
 export const APPLICATION_ID = "100000000000000001";
+export const CLIENT_SECRET = "e2e-client-secret";
+export const SIGNING_SECRET = "e2e-signing-secret-of-at-least-32-characters";
+export const PUBLIC_URL = "https://hikebot.example";
 
 export interface E2E {
   /** Where the Worker listens; send interactions to `${url}interactions`. */
@@ -93,8 +97,10 @@ export function useE2E(options: E2EOptions = {}): E2E {
       DISCORD_PUBLIC_KEY: signer.publicKeyHex,
       DISCORD_APPLICATION_ID: APPLICATION_ID,
       DISCORD_BOT_TOKEN: BOT_TOKEN,
+      DISCORD_CLIENT_SECRET: CLIENT_SECRET,
+      SIGNING_SECRET,
     };
-    const vars = { DISCORD_API_BASE: discord.apiBase };
+    const vars = { DISCORD_API_BASE: discord.apiBase, PUBLIC_URL };
     const root = options.root?.() ?? ROOT;
     let configPath = join(root, CONFIG_PATH);
     if (options.probe) {

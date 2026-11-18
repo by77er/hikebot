@@ -15,10 +15,16 @@ One Cloudflare Worker, `hiking`, served at `https://hiking.bitcru.sh` (a
 Custom Domain on the `bitcru.sh` zone; workers.dev is off), so Discord's
 Interactions Endpoint URL is `https://hiking.bitcru.sh/interactions`.
 Secrets: `DISCORD_PUBLIC_KEY`,
-`DISCORD_APPLICATION_ID`, `DISCORD_BOT_TOKEN`, declared under
-`secrets.required` in `wrangler.jsonc` (which also types them in `Env`). The
-var `DISCORD_API_BASE` (default `https://discord.com/api/v10`) is where REST
-calls go; tests point it at a fake Discord API. One
+`DISCORD_APPLICATION_ID`, `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_SECRET` (the
+OAuth2 client secret, for web sign-in) and `SIGNING_SECRET` (see "Signing"),
+declared under `secrets.required` in `wrangler.jsonc` (which also types them
+in `Env`). The var `DISCORD_API_BASE` (default `https://discord.com/api/v10`)
+is where REST calls go; tests point it at a fake Discord API. The var
+`PUBLIC_URL` (`https://hiking.bitcru.sh`, no trailing slash) is the Worker's
+own origin; every absolute link to the Worker (OAuth redirect URI, calendar
+address) is built from it with `absoluteUrl(env, path)` in
+`src/public-url.ts`, never by joining strings. Tests set it to
+`https://hikebot.example`, and `.dev.vars.example` to the local dev server. One
 `GuildHike` Durable Object per Discord guild (binding `GUILD_HIKE`,
 `idFromName(guild_id)`) holds all of that guild's state in its SQLite storage
 and makes every state change, so votes and poll closes never race.
@@ -28,7 +34,7 @@ Domain's DNS record; there is no other infrastructure.
 Production is deployed by the `Deploy` workflow
 (`.github/workflows/deploy.yml`): after the `Undercurrent` workflow succeeds
 on a push to `main`, it deploys exactly that commit if it is still the tip of
-`main`, setting the three secrets from GitHub Actions secrets with
+`main`, setting the five Worker secrets from GitHub Actions secrets with
 `wrangler deploy --secrets-file`, then runs `npm run register --if-present`
 and checks that `GET /` answers with the health line.
 
@@ -165,6 +171,41 @@ record. Migrations are never renamed, reordered or edited once shipped; new
 ones are appended. `0001_polls` creates the poll tables described under
 "Polls". `0002_guild_settings` creates `guild_settings`, described under
 "Guild settings".
+
+## Signing
+
+`src/signing.ts` signs values the Worker hands out and must later trust: a
+web session cookie, the OAuth `state` round-trip, CSRF tokens on web forms,
+and calendar feed addresses. It uses HMAC-SHA256 through WebCrypto, keyed
+with `SIGNING_SECRET`, and has no dependency.
+
+- `sign(secret, purpose, message)` returns a base64url signature over the
+  purpose, a NUL and the message; `verify` checks one in constant time
+  (`crypto.subtle.verify`) and returns false, never throws, for a signature
+  that is not canonical base64url of 32 bytes.
+- `seal(secret, purpose, payload, expiresAt)` returns
+  `<base64url JSON {exp, data}>.<signature>`; `open(secret, purpose, token,
+now)` returns the payload, or null when the token is malformed, changed,
+  signed for another purpose or with another secret, or `now >= exp`. The
+  payload is readable by anyone holding the token, so it holds ids, never
+  secrets. The clock is an argument, as everywhere else.
+- `Purpose` is a closed union, and the purpose is part of what is signed, so
+  a value signed for one use never verifies for another:
+
+  | Purpose       | What is signed                                               |
+  | ------------- | ------------------------------------------------------------ |
+  | `session`     | The sealed session cookie: the signed-in Discord user        |
+  | `oauth-state` | The sealed OAuth `state`, checked on the callback            |
+  | `csrf`        | A form's CSRF token, bound to the session                    |
+  | `calendar`    | A calendar feed address, so it can be shared without sign-in |
+
+- A `SIGNING_SECRET` shorter than 32 characters is refused with an error
+  that names the variable and never shows its value.
+
+Rotating `SIGNING_SECRET` invalidates everything signed with the old value at
+once: everyone is signed out, sign-ins in progress fail, and every calendar
+address changes, so subscribers must fetch the new one. There is no
+overlap period with two keys.
 
 ## Conventions
 
