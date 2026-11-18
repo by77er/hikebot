@@ -25,7 +25,7 @@ export const OTHER_SECRETS = {
   DISCORD_PUBLIC_KEY: "ff".repeat(32),
   DISCORD_APPLICATION_ID: "1",
   DISCORD_BOT_TOKEN: "x",
-  DISCORD_API_BASE: "http://127.0.0.1:9",
+  DISCORD_API_BASE: "https://other-discord.invalid/api/v10",
 };
 
 type DiscordEnv = Record<keyof typeof OTHER_SECRETS, string>;
