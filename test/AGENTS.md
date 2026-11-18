@@ -446,6 +446,36 @@ Run `npm test` for the whole suite before opening a pull request.
    pgrep -x workerd || echo "no workerd left"
    ```
 
+## Act while the bot's post is in flight
+
+1. Hold the channel's new messages before the action that posts one:
+
+   ```ts
+   const release = e2e.discord.holdChannelPosts(g.channels.text);
+   const form = await g.owner.click(panel, "hb:location:start");
+   await g.owner.submitModal(form, { "hb:location:initial": "Ridge" }, panel);
+   ```
+
+2. Act from another panel while the post waits, for example cancel the
+   round, and wait for that action's own panel. To make the held post fail,
+   set `e2e.discord.failChannel(...)` before releasing it:
+
+   ```ts
+   await g.owner.run("hike", [subcommand("admin")]);
+   const other = g.owner.lastReply();
+   // click Cancel round and confirm on `other`, then wait for its note
+   release();
+   ```
+
+3. Wait for the first panel's note with `eventually`, then assert on the
+   poll message, as "marks the poll message cancelled when the round was
+   cancelled while it was being posted" in `test/e2e/location-vote.test.ts`
+   does, and run it:
+
+   ```sh
+   npx vitest run --project e2e test/e2e/location-vote.test.ts -t "while it was being posted"
+   ```
+
 ## Play a hike round in an end-to-end scenario
 
 1. Create a `RoundPlayer` for the file next to `useE2E()`, and a guild per

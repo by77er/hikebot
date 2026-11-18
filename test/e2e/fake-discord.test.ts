@@ -605,6 +605,28 @@ describe("authorization, failures and rate limits", () => {
     },
   );
 
+  it("holds posts in a channel until released, then applies its failure", async () => {
+    const path = `/channels/${TEXT_CHANNEL}/messages`;
+    const release = discord.holdChannelPosts(TEXT_CHANNEL);
+    let answered = false;
+    const reply = call("POST", path, v2(text("hi"))).then((r) => {
+      answered = true;
+      return r;
+    });
+    await vi.waitFor(() => {
+      expect(discord.heldRequests).toBe(1);
+    });
+    expect(answered).toBe(false);
+    discord.failChannel(TEXT_CHANNEL, "missing-permissions");
+    release();
+    expect(await reply).toMatchObject({ status: 403, body: { code: 50013 } });
+    expect(discord.heldRequests).toBe(0);
+    discord.clearChannelFailure(TEXT_CHANNEL);
+    expect(await call("POST", path, v2(text("hi")))).toMatchObject({
+      status: 200,
+    });
+  });
+
   it("answers one 429 with retry_after, then serves the request", async () => {
     const path = `/channels/${TEXT_CHANNEL}/messages`;
     discord.rateLimitOnce("POST", path, 1.5);

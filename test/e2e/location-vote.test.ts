@@ -490,6 +490,64 @@ describe("the location vote", () => {
     await vote(ana, again, ["Lake"]);
   });
 
+  it("marks the poll message cancelled when the round was cancelled while it was being posted", async () => {
+    const g = guild(13);
+    const panel = await setUpPanel(g);
+    const release = e2e.discord.holdChannelPosts(g.channels.text);
+    const form = await g.owner.click(panel, ID.start);
+    await g.owner.submitModal(form, { [ID.initial]: "Ridge\nLake" }, panel);
+
+    await g.owner.run("hike", [subcommand("admin")]);
+    const other = g.owner.lastReply();
+    await g.owner.click(other, idStarting(shown(other), "hb:round:cancel:"));
+    await g.owner.click(
+      other,
+      idStarting(shown(other), "hb:round:cancel-confirm:"),
+    );
+    await eventually(() => {
+      expect(messageText(shown(other))).toContain("The round is cancelled.");
+    });
+    release();
+
+    await eventually(() => {
+      expect(messageText(shown(panel))).toContain(
+        `The location vote was posted in <#${g.channels.text}>, but the round had been cancelled meanwhile, so the message now shows it as cancelled.`,
+      );
+    });
+    const [poll] = e2e.discord.channelMessages(g.channels.text);
+    if (!poll) throw new Error("the poll message was not posted");
+    expect(messageText(shown(poll))).toContain(`${TITLE} (cancelled)`);
+    expect(messageText(shown(poll))).toContain("This vote was cancelled.");
+    expectNoButtons(shown(poll));
+    expect(messageText(shown(panel))).toContain("No hike is being planned.");
+  });
+
+  it("keeps a vote closed while its message was being posted when the post then fails", async () => {
+    const g = guild(14);
+    const panel = await setUpPanel(g);
+    const release = e2e.discord.holdChannelPosts(g.channels.text);
+    const form = await g.owner.click(panel, ID.start);
+    await g.owner.submitModal(form, { [ID.initial]: "Ridge\nLake" }, panel);
+
+    await g.owner.run("hike", [subcommand("admin")]);
+    const other = g.owner.lastReply();
+    await closeVote(g.owner, other);
+    e2e.discord.failChannel(g.channels.text, "missing-permissions");
+    release();
+
+    await eventually(() => {
+      expect(messageText(shown(panel))).toContain(
+        `Could not post the location vote in <#${g.channels.text}>: Discord answered: Missing Permissions (HTTP 403, code 50013). The vote had already been closed and **`,
+      );
+    });
+    expect(messageText(shown(panel))).toContain("won, so the round was kept.");
+    expect(messageText(shown(panel))).not.toContain("No round was started");
+    expect(
+      findComponent(shown(panel).components, "hb:date:start"),
+    ).toBeDefined();
+    expect(e2e.discord.channelMessages(g.channels.news)).toHaveLength(1);
+  });
+
   it("refuses non-admins, including replayed admin custom_ids", async () => {
     const g = guild(11);
     const [ana] = g.members as [Member];

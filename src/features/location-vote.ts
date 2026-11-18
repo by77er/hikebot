@@ -70,6 +70,7 @@ import {
   deferPanel,
   errorText,
   finishPanel,
+  queuePollEdit,
   renderPollMessage,
   scheduleRefresh,
   shorten,
@@ -196,10 +197,76 @@ const openStartModal: ComponentHandler = adminOnly(
 );
 
 /**
+ * After the poll message could not be posted: takes the round back with
+ * `withdrawLocationRound` and returns the end of the panel note. If another
+ * admin cancelled the round or closed the vote while the post was in
+ * flight, nothing is taken back and the note says so.
+ */
+function withdrawStarted(
+  store: PollStore,
+  started: PollView,
+  userId: string,
+): string {
+  try {
+    store.withdrawLocationRound(started.id, userId);
+    return "No round was started; check the bot's permissions in that channel and try again.";
+  } catch (error) {
+    if (!isPollError(error)) throw error;
+  }
+  if (store.getRound(started.roundId)?.status === "cancelled") {
+    return "The round had already been cancelled, so there was nothing to take back.";
+  }
+  const poll = store.getPoll(started.id);
+  const winner = poll?.options.find((o) => o.id === poll.winnerOptionId);
+  const won = winner === undefined ? "" : ` and **${winner.label}** won`;
+  return `The vote had already been closed${won}, so the round was kept.`;
+}
+
+/**
+ * After the poll message was posted and recorded: if another admin
+ * cancelled the round or closed the vote while the post was in flight,
+ * edits the message to its cancelled or closed state, without buttons.
+ * Returns the panel note.
+ */
+async function retireIfOver(
+  context: HandlerContext,
+  store: PollStore,
+  pollId: number,
+  channelId: string,
+  messageId: string,
+): Promise<string> {
+  const poll = store.getPoll(pollId);
+  if (!poll || poll.status === "open") {
+    return `The location vote is open in <#${channelId}>.`;
+  }
+  const [why, shows] =
+    poll.winnerOptionId === null
+      ? ["the round had been cancelled", "cancelled"]
+      : ["the vote had been closed", "closed"];
+  const posted = `The location vote was posted in <#${channelId}>, but ${why} meanwhile`;
+  try {
+    await queuePollEdit(context.storage, () =>
+      discordApi(context.env).editMessage(
+        channelId,
+        messageId,
+        messageBody(
+          renderPollMessage(poll, LOCATION_POLL, store.getRound(poll.roundId)),
+        ),
+      ),
+    );
+    return `${posted}, so the message now shows it as ${shows}.`;
+  } catch (error) {
+    return `${posted}, and the message could not be marked as ${shows}: ${errorText(error)}.`;
+  }
+}
+
+/**
  * The start modal: starts the round with the initial locations, then in
  * the follow-up posts the poll message in the voting channel and records
- * it. If Discord refuses the post, the round is cancelled again and the
- * panel says which channel and why.
+ * it. If Discord refuses the post, the round is taken back and the panel
+ * says which channel and why. If another admin cancelled the round or
+ * closed the vote while the post was in flight, nothing is taken back, and
+ * a message posted meanwhile is edited to show the vote is over.
  */
 const startLocationVote: ModalHandler = adminOnly(
   (interaction: APIModalSubmitInteraction, context, settings) => {
@@ -240,19 +307,27 @@ const startLocationVote: ModalHandler = adminOnly(
     return {
       response: deferPanel(interaction),
       followUp: async () => {
-        let notice: string;
+        let messageId: string;
         try {
           const message = await discordApi(context.env).createMessage(
             channelId,
             messageBody(renderPollMessage(started, LOCATION_POLL)),
           );
-          store.setPollMessage(started.id, channelId, message.id);
-          notice = `The location vote is open in <#${channelId}>.`;
+          messageId = message.id;
         } catch (error) {
-          store.cancelRound(started.roundId, userId);
-          notice = `Could not post the location vote in <#${channelId}>: ${errorText(error)}. No round was started; check the bot's permissions in that channel and try again.`;
+          await finishPanel(
+            context,
+            interaction,
+            `Could not post the location vote in <#${channelId}>: ${errorText(error)}. ${withdrawStarted(store, started, userId)}`,
+          );
+          return;
         }
-        await finishPanel(context, interaction, notice);
+        store.setPollMessage(started.id, channelId, messageId);
+        await finishPanel(
+          context,
+          interaction,
+          await retireIfOver(context, store, started.id, channelId, messageId),
+        );
       },
     };
   },

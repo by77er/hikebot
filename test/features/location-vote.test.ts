@@ -312,6 +312,192 @@ describe("starting the location vote", () => {
   });
 });
 
+/**
+ * Stubs Discord with the poll's post held until `release`, answered by
+ * `post`; edits of channel messages succeed.
+ */
+function heldPost(guildId: string, post: () => Response) {
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const spy = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation((input, init) => {
+      const request = new Request(input, init);
+      if (request.url.endsWith(`/guilds/${guildId}`)) {
+        return Promise.resolve(Response.json({ id: guildId, owner_id: OWNER }));
+      }
+      if (request.url.includes("/webhooks/") || request.method === "PATCH") {
+        return Promise.resolve(Response.json({ id: "1", channel_id: TEXT }));
+      }
+      return held.then(post);
+    });
+  return { spy, release };
+}
+
+const POSTED = () =>
+  Response.json({ id: "900000000000000002", channel_id: TEXT });
+const REFUSED = () =>
+  Response.json({ message: "Missing Access", code: 50001 }, { status: 403 });
+
+type FetchSpy = ReturnType<typeof heldPost>["spy"];
+
+function requests(spy: FetchSpy): { request: Request; body: string }[] {
+  return spy.mock.calls.map(([input, init]) => {
+    const raw = init?.body;
+    return {
+      request: new Request(input, init),
+      body: typeof raw === "string" ? raw : "",
+    };
+  });
+}
+
+/** The text of the panel the follow-up drew last. */
+function panelNote(spy: FetchSpy): string {
+  const panel = requests(spy)
+    .filter((r) => r.request.url.includes("/webhooks/"))
+    .at(-1);
+  const body = JSON.parse(panel?.body ?? "{}") as { components?: unknown[] };
+  return text(body.components ?? []);
+}
+
+/**
+ * Starts the vote with Ridge and Lake while the post is held, lets `race`
+ * change the round through the store, then releases the post and waits for
+ * the follow-up. Returns the round as it ends up.
+ */
+async function startRacing(
+  guild: string,
+  spyRelease: { release: () => void },
+  race: (store: PollStore, pollId: number, roundId: number) => void,
+) {
+  const ctx = createExecutionContext();
+  await send(startSubmit(guild, "Ridge\nLake"), ctx);
+  const roundId = await runInDurableObject(stub(guild), (_i, state) => {
+    const store = new PollStore(state.storage);
+    const round = store.getActiveRound();
+    race(store, round?.locationPoll?.id ?? 0, round?.id ?? 0);
+    return round?.id ?? 0;
+  });
+  spyRelease.release();
+  await waitOnExecutionContext(ctx);
+  return runInDurableObject(stub(guild), (_i, state) =>
+    new PollStore(state.storage).getRound(roundId),
+  );
+}
+
+/** Another admin closes the vote with Ridge winning. */
+function closeWithRidge(store: PollStore, pollId: number) {
+  const ridge = store.getPoll(pollId)?.options[0]?.id ?? 0;
+  store.setVotes(pollId, MEMBER, [ridge]);
+  store.closePoll(pollId, MEMBER);
+}
+
+describe("starting the location vote while another admin acts", () => {
+  it("takes the round back when the post fails and nothing raced", async () => {
+    const guild = "location-race-none";
+    await configure(guild);
+    const held = heldPost(guild, REFUSED);
+    const round = await startRacing(guild, held, () => undefined);
+    expect(round).toMatchObject({ status: "cancelled", endedBy: OWNER });
+    expect(panelNote(held.spy)).toContain(
+      `Could not post the location vote in <#${TEXT}>: Discord answered: Missing Access (HTTP 403, code 50001). No round was started; check the bot's permissions in that channel and try again.`,
+    );
+  });
+
+  it("says the round was already cancelled when the post fails after a cancel", async () => {
+    const guild = "location-race-cancel-fail";
+    await configure(guild);
+    const held = heldPost(guild, REFUSED);
+    const round = await startRacing(guild, held, (store, _pollId, roundId) => {
+      store.cancelRound(roundId, MEMBER);
+    });
+    expect(round).toMatchObject({ status: "cancelled", endedBy: MEMBER });
+    const note = panelNote(held.spy);
+    expect(note).toContain(
+      `Could not post the location vote in <#${TEXT}>: Discord answered: Missing Access (HTTP 403, code 50001). The round had already been cancelled, so there was nothing to take back.`,
+    );
+    expect(note).not.toContain("No round was started");
+  });
+
+  it("keeps the decided round when the post fails after a close", async () => {
+    const guild = "location-race-close-fail";
+    await configure(guild);
+    const held = heldPost(guild, REFUSED);
+    const round = await startRacing(guild, held, closeWithRidge);
+    expect(round?.status).toBe("location_decided");
+    expect(round?.locationOptionId).toBe(round?.locationPoll?.options[0]?.id);
+    expect(round?.locationPoll?.options[0]?.label).toBe("Ridge");
+    expect(panelNote(held.spy)).toContain(
+      `Could not post the location vote in <#${TEXT}>: Discord answered: Missing Access (HTTP 403, code 50001). The vote had already been closed and **Ridge** won, so the round was kept.`,
+    );
+  });
+
+  it.each([
+    {
+      what: "cancel",
+      race: (store: PollStore, _pollId: number, roundId: number) => {
+        store.cancelRound(roundId, MEMBER);
+      },
+      heading: "## Where should we hike? (cancelled)",
+      note: `The location vote was posted in <#${TEXT}>, but the round had been cancelled meanwhile, so the message now shows it as cancelled.`,
+    },
+    {
+      what: "close",
+      race: closeWithRidge,
+      heading: "## Where should we hike? (closed)",
+      note: `The location vote was posted in <#${TEXT}>, but the vote had been closed meanwhile, so the message now shows it as closed.`,
+    },
+  ])(
+    "edits the posted message to its final state after a $what",
+    async ({ race, heading, note }) => {
+      const guild = `location-race-${heading.includes("cancelled") ? "cancel" : "close"}-posted`;
+      await configure(guild);
+      const held = heldPost(guild, POSTED);
+      const round = await startRacing(guild, held, race);
+      expect(round?.locationPoll).toMatchObject({
+        status: "closed",
+        channelId: TEXT,
+        messageId: "900000000000000002",
+      });
+      const edits = requests(held.spy).filter(
+        (r) =>
+          r.request.method === "PATCH" &&
+          r.request.url.endsWith(
+            `/channels/${TEXT}/messages/900000000000000002`,
+          ),
+      );
+      expect(edits).toHaveLength(1);
+      const edited = JSON.parse(edits[0]?.body ?? "{}") as {
+        components: Node[];
+      };
+      expect(text(edited.components)).toContain(heading);
+      expect(
+        flatten(edited.components).filter((c) => c.custom_id !== undefined),
+      ).toEqual([]);
+      expect(panelNote(held.spy)).toContain(note);
+    },
+  );
+
+  it("leaves the posted message alone when nothing raced", async () => {
+    const guild = "location-race-none-posted";
+    await configure(guild);
+    const held = heldPost(guild, POSTED);
+    const round = await startRacing(guild, held, () => undefined);
+    expect(round?.status).toBe("location_voting");
+    expect(
+      requests(held.spy).filter(
+        (r) =>
+          r.request.method === "PATCH" && r.request.url.includes("/channels/"),
+      ),
+    ).toEqual([]);
+    expect(panelNote(held.spy)).toContain(
+      `The location vote is open in <#${TEXT}>.`,
+    );
+  });
+});
+
 describe("proposing a location", () => {
   async function openPoll(guild: string, labels: string[]) {
     return runInDurableObject(stub(guild), (_i, state) => {

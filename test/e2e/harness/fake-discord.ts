@@ -128,6 +128,7 @@ export class FakeDiscord {
   private readonly answered = new Map<string, Promise<void>>();
   private held = 0;
   private readonly failures = new Map<string, ChannelFailure>();
+  private readonly heldPosts = new Map<string, Promise<void>>();
   private readonly rateLimits: RateLimit[] = [];
   private readonly waiters: Waiter[] = [];
   private unexpected: RecordedRequest[] = [];
@@ -201,6 +202,26 @@ export class FakeDiscord {
 
   clearChannelFailure(channelId: string): void {
     this.failures.delete(channelId);
+  }
+
+  /**
+   * Holds every new message posted in the channel until the returned
+   * function is called, so a scenario can act while the bot's post is in
+   * flight. A failure set meanwhile with `failChannel` applies to the held
+   * posts.
+   */
+  holdChannelPosts(channelId: string): () => void {
+    let release: () => void = () => undefined;
+    this.heldPosts.set(
+      channelId,
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    return () => {
+      this.heldPosts.delete(channelId);
+      release();
+    };
   }
 
   /**
@@ -338,7 +359,10 @@ export class FakeDiscord {
     );
   }
 
-  /** How many webhook requests wait for their interaction's response. */
+  /**
+   * How many requests are held: webhook requests waiting for their
+   * interaction's response, and posts held by `holdChannelPosts`.
+   */
   get heldRequests(): number {
     return this.held;
   }
@@ -421,6 +445,17 @@ export class FakeDiscord {
     if (answered) {
       this.held += 1;
       await answered;
+      this.held -= 1;
+    }
+    const postedIn =
+      method === "POST"
+        ? /^\/channels\/([^/]+)\/messages$/.exec(path)?.[1]
+        : undefined;
+    const heldPost =
+      postedIn === undefined ? undefined : this.heldPosts.get(postedIn);
+    if (heldPost) {
+      this.held += 1;
+      await heldPost;
       this.held -= 1;
     }
     const recorded: RecordedRequest = {
