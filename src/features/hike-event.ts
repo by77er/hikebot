@@ -4,9 +4,10 @@
  * members can click Interested and get Discord's reminder, links it from
  * the thread's first message and hands the announcement its link. If
  * Discord refuses, the panel shows why and offers **Create hike event**
- * (`hb:event:create:<round id>`) until the last completed round has its
- * event; a retry never posts the announcement again and never creates a
- * second event. A hike whose start has passed gets no event.
+ * (`hb:event:create:<round id>`, `retryHikeEvent` in `round-actions.ts`)
+ * until the last completed round has its event; a retry never posts the
+ * announcement again and never creates a second event. A hike whose start
+ * has passed gets no event.
  */
 import {
   GuildScheduledEventEntityType,
@@ -20,22 +21,23 @@ import { adminOnly } from "../guild/permissions";
 import type { ComponentHandler, HandlerContext, Router } from "../guild/router";
 import { HIKE_DURATION_HOURS } from "../polls/dates";
 import { PollStore, type RoundView } from "../polls/store";
-import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
+import { POLL_CONTROL_IDS } from "./admin-panel";
 import {
   claimHikeEvent,
   clearHikeEventAttempt,
-  hikeEventStatus,
   recordHikeEventFailure,
   roundStart,
 } from "./hike-event-state";
 import { renderThreadMessage } from "./hike-thread";
 import {
-  deferPanel,
+  actorOf,
+  answerPanel,
   errorText,
-  finishPanel,
+  roundContext,
   shorten,
   type CloseStep,
 } from "./poll-ui";
+import { retryHikeEvent } from "./round-actions";
 
 /** Discord's limits on a scheduled event's name, description and location. */
 export const MAX_EVENT_NAME = 100;
@@ -134,7 +136,8 @@ function failureReason(error: unknown): string {
 }
 
 /** What creating the event came to. */
-type Created = { ok: true; eventId: string } | { ok: false; reason: string };
+export type Created =
+  { ok: true; eventId: string } | { ok: false; reason: string };
 
 /**
  * Edits the thread's first message so it links the event. A failure is
@@ -152,7 +155,14 @@ async function linkEventInThread(
     await discordApi(context.env).editMessage(
       round.threadId,
       round.threadId,
-      messageBody(renderThreadMessage(round, guildId, timeZone)),
+      messageBody(
+        renderThreadMessage(
+          round,
+          guildId,
+          timeZone,
+          context.env.DISCORD_APPLICATION_ID,
+        ),
+      ),
     );
   } catch (error) {
     console.error(
@@ -167,7 +177,7 @@ async function linkEventInThread(
  * thread; on failure records why, for the panel. The caller has claimed the
  * creation with `claimHikeEvent`.
  */
-async function createHikeEvent(
+export async function createHikeEvent(
   roundId: number,
   guildId: string,
   timeZone: string,
@@ -237,69 +247,22 @@ export const createHikeEventStep: CloseStep = {
 };
 
 /**
- * Create hike event: retries the event of the last round while it is
- * complete without one and its start is ahead. The claim is taken before
- * the answer, so a second click while the first is running is told so and
- * creates nothing.
+ * Create hike event: creates the event of the last round again with
+ * `retryHikeEvent`, which claims it before the answer.
  */
-const retryHikeEvent: ComponentHandler = adminOnly(
-  (interaction: APIMessageComponentInteraction, context, settings) => {
-    const arg = parseCustomId(interaction.data.custom_id)?.arg;
-    const guildId = interaction.guild_id ?? "";
-    const store = new PollStore(context.storage);
-    const round = store.getLastRound();
-    if (
-      round === null ||
-      String(round.id) !== arg ||
-      round.status !== "complete"
-    ) {
-      return adminPanelUpdate(
-        context,
-        "That hike is no longer the last one, so its event is not created from here.",
-      );
-    }
-    const now = store.now();
-    const status = hikeEventStatus(
-      context.storage,
-      round,
-      now,
-      settings.timezone,
-    );
-    if (status.state === "created") {
-      return adminPanelUpdate(
-        context,
-        `The hike event already exists: ${eventUrl(guildId, status.eventId)}`,
-      );
-    }
-    if (status.state === "past") {
-      return adminPanelUpdate(context, START_PASSED_MESSAGE);
-    }
-    if (!claimHikeEvent(context.storage, round, now, settings.timezone)) {
-      return adminPanelUpdate(context, "The hike event is being created.");
-    }
-    return {
-      response: deferPanel(interaction),
-      followUp: async () => {
-        const created = await createHikeEvent(
-          round.id,
-          guildId,
-          settings.timezone,
-          context,
-        );
-        await finishPanel(
-          context,
-          interaction,
-          created.ok
-            ? `The hike event is created: ${eventUrl(guildId, created.eventId)}`
-            : created.reason,
-        );
-      },
-    };
-  },
+const createAgain: ComponentHandler = adminOnly(
+  (interaction: APIMessageComponentInteraction, context) =>
+    answerPanel(
+      interaction,
+      context,
+      retryHikeEvent(roundContext(interaction, context), actorOf(interaction), {
+        roundId: Number(parseCustomId(interaction.data.custom_id)?.arg),
+      }),
+    ),
 );
 
 /** Registers the Create hike event button. */
 export function registerHikeEvent(router: Router): Router {
-  router.component("hb:event:create", retryHikeEvent);
+  router.component("hb:event:create", createAgain);
   return router;
 }
