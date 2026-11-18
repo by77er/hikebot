@@ -335,10 +335,12 @@ describe("closing a poll", () => {
     discord(guild);
     await inObject(guild, async (storage) => {
       const put = storage.kv.put.bind(storage.kv);
-      vi.spyOn(storage.kv, "put").mockImplementation((key, value) => {
-        if (key.startsWith("pending-close:")) throw new Error("disk full");
-        put(key, value);
-      });
+      const failing = vi
+        .spyOn(storage.kv, "put")
+        .mockImplementation((key, value) => {
+          if (key.startsWith("pending-close:")) throw new Error("disk full");
+          put(key, value);
+        });
       await expect(
         closePoll(
           click(POLL_IDS.closeConfirm(view.id), guild),
@@ -346,7 +348,7 @@ describe("closing a poll", () => {
           { date: DATE_POLL },
         ),
       ).rejects.toThrow("disk full");
-      vi.mocked(storage.kv.put).mockRestore();
+      failing.mockRestore();
       const store = new PollStore(storage);
       expect(store.getPoll(view.id)?.status).toBe("open");
       expect(store.getActiveRound()?.status).toBe("date_voting");
