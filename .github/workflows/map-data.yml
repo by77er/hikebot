@@ -1,0 +1,427 @@
+name: Map data
+
+# Builds hikebot's map data: OpenStreetMap vector tiles from a Protomaps
+# basemap build, extracted with `pmtiles` for the archives in
+# maps/regions.json and stored in the R2 bucket the Worker binds as MAPS.
+#
+# - check (pull requests that change the map files, once ready for review):
+#   proves the CI token can use the bucket, dry-runs every extract against
+#   the budget, and refreshes the sample archive in maps/sample/.
+# - build (push to main, monthly, by hand): extracts and uploads every
+#   archive under a new key, writes the manifest last, and removes the
+#   archives older than the previous build.
+#
+# Results are ::notice:: annotations and the job summary; see "Read the
+# sizes a map-data run reported" in maps/AGENTS.md.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
+    paths:
+      - "maps/**"
+      - ".github/workflows/map-data.yml"
+  push:
+    branches: [main]
+    paths:
+      - "maps/regions.json"
+      - ".github/workflows/map-data.yml"
+  schedule:
+    - cron: "23 7 2 * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'build' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PMTILES_VERSION: "1.31.2"
+  # SHA-256 of go-pmtiles_1.31.2_Linux_x86_64.tar.gz from the GitHub release;
+  # the release publishes no checksums file.
+  PMTILES_SHA256: 3ed7dbf4ec2e6dfe5e25b6f70d1ffc932729f93c86db353bf514dd71010a312f
+  BUCKET: hikebot-maps
+  BUILDS_URL: https://build-metadata.protomaps.dev/builds.json
+  BUILD_HOST: https://build.protomaps.com
+  REGIONS: maps/regions.json
+  SAMPLE_DIR: maps/sample
+
+jobs:
+  map-data:
+    name: ${{ github.event.pull_request.draft && 'map data (draft, not run)' || (github.event_name == 'pull_request' && 'map data check' || 'map data build') }}
+    if: >-
+      (github.event_name == 'pull_request' &&
+       !github.event.pull_request.draft &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name != 'pull_request' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    env:
+      MODE: ${{ github.event_name == 'pull_request' && 'check' || 'build' }}
+    outputs:
+      sample: ${{ steps.sample.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install pmtiles
+        run: |
+          archive="go-pmtiles_${PMTILES_VERSION}_Linux_x86_64.tar.gz"
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" "https://github.com/protomaps/go-pmtiles/releases/download/v${PMTILES_VERSION}/$archive"
+          echo "$PMTILES_SHA256  $RUNNER_TEMP/$archive" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/bin" pmtiles
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/pmtiles" version
+
+      - name: Check the CI token can use the bucket
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::The GitHub Actions secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must both be set."
+            exit 1
+          fi
+          api=https://api.cloudflare.com/client/v4
+          cf() {
+            curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" "$@"
+          }
+          cf_errors() {
+            jq -r '[.errors[]? | "\(.message) (code \(.code))"] | join("; ")' <<<"$1"
+          }
+
+          # R2's S3 credentials for an API token: the access key id is the
+          # token's id, the secret is the SHA-256 of the token's value.
+          verify=$(cf "$api/user/tokens/verify")
+          token_id=$(jq -r '.result.id // empty' <<<"$verify")
+          if [ -z "$token_id" ]; then
+            verify=$(cf "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify")
+            token_id=$(jq -r '.result.id // empty' <<<"$verify")
+          fi
+          if [ -z "$token_id" ]; then
+            echo "::error::Cloudflare did not verify CLOUDFLARE_API_TOKEN: $(cf_errors "$verify")"
+            exit 1
+          fi
+          echo "::add-mask::$token_id"
+          secret_key=$(printf '%s' "$CLOUDFLARE_API_TOKEN" | sha256sum | cut -d' ' -f1)
+          echo "::add-mask::$secret_key"
+          {
+            echo "AWS_ACCESS_KEY_ID=$token_id"
+            echo "AWS_SECRET_ACCESS_KEY=$secret_key"
+            echo "AWS_DEFAULT_REGION=auto"
+            echo "AWS_ENDPOINT_URL=https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com"
+            echo "AWS_REQUEST_CHECKSUM_CALCULATION=when_required"
+            echo "AWS_RESPONSE_CHECKSUM_VALIDATION=when_required"
+          } >> "$GITHUB_ENV"
+
+          bucket=$(cf "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets/$BUCKET")
+          if [ "$(jq -r .success <<<"$bucket")" != "true" ]; then
+            if ! jq -e '.errors[]? | select(.code == 10006)' <<<"$bucket" > /dev/null; then
+              echo "::error::Cloudflare refused to read the R2 bucket $BUCKET: $(cf_errors "$bucket"). If R2 is not enabled, enable it under R2 Object Storage in the Cloudflare dashboard; if the token lacks the permission, add \"Workers R2 Storage: Edit\" to the token in CLOUDFLARE_API_TOKEN."
+              exit 1
+            fi
+            created=$(cf -X POST "$api/accounts/$CLOUDFLARE_ACCOUNT_ID/r2/buckets" --data "$(jq -n --arg name "$BUCKET" '{name: $name}')")
+            if [ "$(jq -r .success <<<"$created")" != "true" ]; then
+              echo "::error::Cloudflare refused to create the R2 bucket $BUCKET: $(cf_errors "$created"). If R2 is not enabled, enable it under R2 Object Storage in the Cloudflare dashboard; if the token lacks the permission, add \"Workers R2 Storage: Edit\" to the token in CLOUDFLARE_API_TOKEN."
+              exit 1
+            fi
+            echo "::notice title=R2 bucket::Created the R2 bucket $BUCKET."
+          else
+            echo "::notice title=R2 bucket::The R2 bucket $BUCKET exists."
+          fi
+
+      - name: Check list, write, read and delete over S3
+        run: |
+          set -euo pipefail
+          s3_try() {
+            local what=$1
+            shift
+            if ! out=$("$@" 2>&1); then
+              echo "::error::R2 refused to $what in $BUCKET with the CI token's S3 credentials: $(tr '\n' ' ' <<<"$out")"
+              exit 1
+            fi
+          }
+          key="checks/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.txt"
+          probe="$RUNNER_TEMP/probe.txt"
+          echo "map-data check $GITHUB_RUN_ID" > "$probe"
+          s3_try "list objects" aws s3api list-objects-v2 --bucket "$BUCKET" --max-keys 1
+          s3_try "write $key" aws s3api put-object --bucket "$BUCKET" --key "$key" --body "$probe"
+          s3_try "read $key" aws s3api get-object --bucket "$BUCKET" --key "$key" "$probe.back"
+          if ! cmp -s "$probe" "$probe.back"; then
+            echo "::error::Reading $key back from $BUCKET returned other bytes than were written."
+            exit 1
+          fi
+          s3_try "delete $key" aws s3api delete-object --bucket "$BUCKET" --key "$key"
+          echo "::notice title=R2 access::The CI token listed, wrote, read back and deleted $key in the bucket $BUCKET."
+
+      - name: Choose the newest Protomaps build
+        id: build
+        run: |
+          set -euo pipefail
+          curl -fsS --retry 3 "$BUILDS_URL" -o "$RUNNER_TEMP/builds.json"
+          chosen=""
+          while read -r key; do
+            if curl -fsS --retry 2 -o /dev/null -r 0-15 "$BUILD_HOST/$key"; then
+              chosen=$key
+              break
+            fi
+            echo "::warning::Build $key is listed but cannot be read; trying an older one."
+          done < <(jq -r 'sort_by(.key) | reverse | .[:5][] | .key' "$RUNNER_TEMP/builds.json")
+          if [ -z "$chosen" ]; then
+            echo "::error::None of the five newest builds in $BUILDS_URL could be read."
+            exit 1
+          fi
+          version=$(jq -r --arg key "$chosen" '.[] | select(.key == $key) | .version' "$RUNNER_TEMP/builds.json")
+          {
+            echo "key=$chosen"
+            echo "name=${chosen%.pmtiles}"
+            echo "version=$version"
+            echo "url=$BUILD_HOST/$chosen"
+          } >> "$GITHUB_OUTPUT"
+          echo "::notice title=Build::Protomaps build $chosen, basemap version $version ($BUILD_HOST/$chosen)."
+
+      - name: Dry-run every extract against the budget
+        env:
+          BUILD_URL: ${{ steps.build.outputs.url }}
+        run: |
+          set -euo pipefail
+          # `pmtiles extract --dry-run` ends with "... for an archive size of
+          # <n> <unit>" in SI units; this is the tile data, without the few
+          # directory bytes the real archive adds.
+          dry_run() {
+            local out human
+            out=$(pmtiles extract "$BUILD_URL" "$RUNNER_TEMP/dry-run.pmtiles" --dry-run --bbox="$1" --minzoom="$2" --maxzoom="$3" 2>&1) || {
+              echo "$out" >&2
+              return 1
+            }
+            human=$(sed -n 's/.*for an archive size of \(.*\)$/\1/p' <<<"$out" | tail -n 1)
+            awk -v s="$human" 'BEGIN {
+              split(s, p, " "); u["B"] = 1; u["kB"] = 1e3; u["MB"] = 1e6; u["GB"] = 1e9; u["TB"] = 1e12
+              if (!(p[2] in u)) exit 1
+              printf "%.0f\n", p[1] * u[p[2]]
+            }'
+          }
+          gb() { awk -v b="$1" 'BEGIN { printf "%.2f GB", b / 1e9 }'; }
+          field() { jq -r --arg name "$1" ".archives[] | select(.name == \$name) | $2" "$REGIONS"; }
+          budget=$(jq -r .budgetBytes "$REGIONS")
+
+          world_bbox=$(field world '.bbox | join(",")')
+          world_min=$(field world .minzoom)
+          world_max=$(field world .maxzoom)
+          world=$(dry_run "$world_bbox" "$world_min" "$world_max")
+          echo "::notice title=Dry run: world::world z$world_min-$world_max at $world_bbox: $world bytes ($(gb "$world"))."
+
+          region_bbox=$(field region '.bbox | join(",")')
+          region_min=$(field region .minzoom)
+          region_max=$(field region .maxzoom)
+          summary="| archive | zooms | bytes | total with world | within budget |\n|---|---|---|---|---|\n| world | $world_min-$world_max | $world | | |\n"
+          declare -A region_at
+          for z in $((region_max - 1)) "$region_max" $((region_max + 1)); do
+            if [ "$z" -lt "$region_min" ] || [ "$z" -gt 15 ]; then continue; fi
+            size=$(dry_run "$region_bbox" "$region_min" "$z")
+            region_at[$z]=$size
+            total=$((world + size))
+            fits=yes
+            if [ "$total" -gt "$budget" ]; then fits=no; fi
+            label="region z$region_min-$z"
+            if [ "$z" -eq "$region_max" ]; then label="$label (configured)"; fi
+            echo "::notice title=Dry run: region z$z::$label at $region_bbox: $size bytes ($(gb "$size")); total with world $total bytes ($(gb "$total")), within the budget of $(gb "$budget"): $fits."
+            summary+="| $label | $region_min-$z | $size | $total | $fits |\n"
+          done
+          total=$((world + region_at[$region_max]))
+          {
+            echo "### Map data dry run ($MODE)"
+            echo
+            printf '%b' "$summary"
+            echo
+            echo "Budget: $budget bytes. Configured total: $total bytes ($(gb "$total"))."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$total" -gt "$budget" ]; then
+            echo "::error title=Over budget::world z$world_max plus region z$region_max is $total bytes ($(gb "$total")), over the budget of $budget bytes. Lower the region's maxzoom in $REGIONS."
+            exit 1
+          fi
+          echo "::notice title=Total::world z$world_max plus region z$region_max: $total bytes ($(gb "$total")), within the budget of $budget bytes."
+          next=$((region_max + 1))
+          if [ "$MODE" = check ] && [ "$region_max" -lt 14 ] && [ -n "${region_at[$next]:-}" ] && [ $((world + region_at[$next])) -le "$budget" ]; then
+            echo "::error title=Zoom too low::region z$next also fits the budget ($((world + region_at[$next])) bytes). Raise the region's maxzoom in $REGIONS to the highest zoom up to 14 that fits."
+            exit 1
+          fi
+
+      - name: Refresh the sample archive when missing or stale
+        id: sample
+        if: env.MODE == 'check'
+        env:
+          BUILD_URL: ${{ steps.build.outputs.url }}
+          BUILD_NAME: ${{ steps.build.outputs.name }}
+          BUILD_VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          note="$SAMPLE_DIR/sample.json"
+          wanted=$(jq -c '{bbox: .sample.bbox, minzoom: .sample.minzoom, maxzoom: .sample.maxzoom, point: {lon: .samplePoint.lon, lat: .samplePoint.lat}}' "$REGIONS")
+          have=$(jq -c '{bbox, minzoom, maxzoom, point}' "$note" 2>/dev/null || echo none)
+          have_major=$(jq -r '.basemapVersion // "" | split(".")[0]' "$note" 2>/dev/null || echo none)
+          if [ -f "$SAMPLE_DIR/sample.pmtiles" ] && [ "$have" = "$wanted" ] && [ "$have_major" = "${BUILD_VERSION%%.*}" ]; then
+            echo "::notice title=Sample::The sample archive matches $REGIONS and basemap major version ${BUILD_VERSION%%.*}; kept."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          out="$RUNNER_TEMP/sample"
+          mkdir -p "$out"
+          pmtiles extract "$BUILD_URL" "$out/sample.pmtiles" \
+            --bbox="$(jq -r '.sample.bbox | join(",")' "$REGIONS")" \
+            --minzoom="$(jq -r .sample.minzoom "$REGIONS")" \
+            --maxzoom="$(jq -r .sample.maxzoom "$REGIONS")"
+          pmtiles verify "$out/sample.pmtiles"
+          bytes=$(stat -c %s "$out/sample.pmtiles")
+          max=$(jq -r .sample.maxBytes "$REGIONS")
+          if [ "$bytes" -gt "$max" ]; then
+            echo "::error title=Sample too large::The sample archive is $bytes bytes, over $max. Raise the sample's minzoom or shrink its bbox in $REGIONS."
+            exit 1
+          fi
+          schema=$(pmtiles show "$out/sample.pmtiles" --metadata | jq -r '.version // "unknown"')
+          jq -n --slurpfile regions "$REGIONS" \
+            --arg build "$BUILD_NAME" --arg basemapVersion "$BUILD_VERSION" \
+            --arg schemaVersion "$schema" --arg pmtiles "$PMTILES_VERSION" \
+            --argjson bytes "$bytes" '
+            $regions[0] as $r | {
+              build: $build,
+              basemapVersion: $basemapVersion,
+              schemaVersion: $schemaVersion,
+              source: "Protomaps basemap build \($build), extracted with go-pmtiles \($pmtiles)",
+              license: $r.license,
+              attribution: $r.attribution,
+              name: $r.sample.name,
+              bbox: $r.sample.bbox,
+              minzoom: $r.sample.minzoom,
+              maxzoom: $r.sample.maxzoom,
+              bytes: $bytes,
+              point: {lon: $r.samplePoint.lon, lat: $r.samplePoint.lat}
+            }' > "$out/sample.json"
+          echo "::notice title=Sample::Extracted the sample archive from build $BUILD_NAME (schema $schema): $bytes bytes; the next job commits it to the pull request's branch."
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Keep the sample for the commit job
+        if: steps.sample.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: map-sample
+          path: |
+            ${{ runner.temp }}/sample/sample.pmtiles
+            ${{ runner.temp }}/sample/sample.json
+          retention-days: 1
+
+      - name: Remove archives older than the current manifest's build
+        if: env.MODE == 'build'
+        run: |
+          set -euo pipefail
+          current=""
+          if aws s3 cp "s3://$BUCKET/manifest.json" "$RUNNER_TEMP/current-manifest.json" > /dev/null 2>&1; then
+            current=$(jq -r '.archives[0].key // "" | sub("[^/]*$"; "")' "$RUNNER_TEMP/current-manifest.json")
+          fi
+          echo "Current manifest's build prefix: ${current:-none}"
+          removed=0
+          while read -r prefix; do
+            if [ -z "$prefix" ] || [ "$prefix" = "$current" ]; then continue; fi
+            aws s3 rm "s3://$BUCKET/$prefix" --recursive --only-show-errors
+            echo "::notice title=Removed::Removed $prefix, older than the previous build."
+            removed=$((removed + 1))
+          done < <(aws s3api list-objects-v2 --bucket "$BUCKET" --prefix builds/ --delimiter / --query 'CommonPrefixes[].Prefix' --output text | tr '\t' '\n' | grep -v '^None$' || true)
+          echo "Removed $removed old build(s)."
+
+      - name: Extract every archive
+        if: env.MODE == 'build'
+        env:
+          BUILD_URL: ${{ steps.build.outputs.url }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/archives"
+          total=0
+          while read -r name bbox minzoom maxzoom; do
+            file="$RUNNER_TEMP/archives/$name.pmtiles"
+            pmtiles extract "$BUILD_URL" "$file" --bbox="$bbox" --minzoom="$minzoom" --maxzoom="$maxzoom" --download-threads=8
+            pmtiles verify "$file"
+            total=$((total + $(stat -c %s "$file")))
+          done < <(jq -r '.archives[] | "\(.name) \(.bbox | join(",")) \(.minzoom) \(.maxzoom)"' "$REGIONS")
+          budget=$(jq -r .budgetBytes "$REGIONS")
+          if [ "$total" -gt "$budget" ]; then
+            echo "::error title=Over budget::The extracted archives total $total bytes, over the budget of $budget bytes. Nothing was uploaded; lower the region's maxzoom in $REGIONS."
+            exit 1
+          fi
+
+      - name: Upload the archives, then the manifest
+        if: env.MODE == 'build'
+        env:
+          BUILD_NAME: ${{ steps.build.outputs.name }}
+          BUILD_VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          prefix="builds/$BUILD_NAME-$(date -u +%Y%m%dT%H%M%SZ)/"
+          archives="[]"
+          total=0
+          while read -r name; do
+            file="$RUNNER_TEMP/archives/$name.pmtiles"
+            key="$prefix$name.pmtiles"
+            bytes=$(stat -c %s "$file")
+            aws s3 cp "$file" "s3://$BUCKET/$key" --content-type application/vnd.pmtiles --only-show-errors
+            archives=$(jq -c --arg name "$name" --arg key "$key" --argjson bytes "$bytes" --slurpfile regions "$REGIONS" \
+              '. + [$regions[0].archives[] | select(.name == $name) | {name, key: $key, bbox, minzoom, maxzoom, bytes: $bytes}]' <<<"$archives")
+            total=$((total + bytes))
+            echo "::notice title=Uploaded $name::$key: $bytes bytes."
+          done < <(jq -r '.archives[].name' "$REGIONS")
+          jq -n --slurpfile regions "$REGIONS" --argjson archives "$archives" \
+            --arg build "$BUILD_NAME" --arg version "$BUILD_VERSION" --arg createdAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+            {
+              build: $build,
+              basemapVersion: $version,
+              createdAt: $createdAt,
+              attribution: $regions[0].attribution,
+              license: $regions[0].license,
+              archives: $archives
+            }' > "$RUNNER_TEMP/manifest.json"
+          aws s3 cp "$RUNNER_TEMP/manifest.json" "s3://$BUCKET/manifest.json" --content-type application/json --cache-control no-cache --only-show-errors
+          echo "::notice title=Manifest::manifest.json now names build $BUILD_NAME (basemap $BUILD_VERSION): $(jq -r '[.archives[] | "\(.name) z\(.minzoom)-\(.maxzoom) \(.key)"] | join(", ")' "$RUNNER_TEMP/manifest.json"); total $total bytes."
+          {
+            echo "### Map data build"
+            echo
+            echo "| archive | key | zooms | bytes |"
+            echo "|---|---|---|---|"
+            jq -r '.archives[] | "| \(.name) | \(.key) | \(.minzoom)-\(.maxzoom) | \(.bytes) |"' "$RUNNER_TEMP/manifest.json"
+            echo
+            echo "Total: $total bytes. Build: $BUILD_NAME (basemap $BUILD_VERSION)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  sample:
+    name: commit the sample archive
+    needs: map-data
+    if: needs.map-data.outputs.sample == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: map-sample
+          path: ${{ env.SAMPLE_DIR }}
+      - name: Commit and push the sample archive
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$SAMPLE_DIR/sample.pmtiles" "$SAMPLE_DIR/sample.json"
+          if git diff --cached --quiet; then
+            echo "::notice title=Sample::The sample archive on $HEAD_REF is already this one."
+            exit 0
+          fi
+          git commit -m "Map data: refresh the sample archive from $(jq -r .build "$SAMPLE_DIR/sample.json")"
+          git push origin "HEAD:refs/heads/$HEAD_REF"
+          echo "::notice title=Sample::Pushed the sample archive to $HEAD_REF as $(git rev-parse HEAD). Pull it and push a commit of your own so the required checks run."
