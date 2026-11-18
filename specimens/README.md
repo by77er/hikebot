@@ -1,0 +1,1 @@
+Typeface specimens for pull request #54 (Cairn design system, part 1), made with headless Chromium at 390px wide (device scale 2) from the Latin wght woff2 of each @fontsource-variable package. Not part of the application.
