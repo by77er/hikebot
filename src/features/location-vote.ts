@@ -58,7 +58,7 @@ import {
   type RestingLocation,
 } from "../polls/store";
 import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
-import { givenPlace, scheduleLocate } from "./locate";
+import { givenPlace, scheduleNewLookup } from "./locate";
 import {
   VOTE_CLOSED_MESSAGE,
   actorOf,
@@ -408,7 +408,7 @@ const pickPastLocation: ComponentHandler = async (interaction, context) => {
       ...(source.place === null ? {} : { place: source.place }),
     });
     await scheduleRefresh(context.storage, pollId, store.now());
-    await scheduleLocate(context.storage, store, store.now());
+    await scheduleNewLookup(context.storage, store, store.now());
     notice = added(option.label);
   } catch (error) {
     if (!isPollError(error)) throw error;
@@ -458,7 +458,7 @@ const saveProposal: ModalHandler = async (interaction, context) => {
       ...(place === undefined ? {} : { place }),
     });
     await scheduleRefresh(context.storage, pollId, store.now());
-    await scheduleLocate(context.storage, store, store.now());
+    await scheduleNewLookup(context.storage, store, store.now());
     const unread =
       map && givenPlace([map]) === undefined
         ? ` The map field holds no coordinates I can read (short links are not opened), so the location will be looked up by its name; an admin can set its pin if it wins.`

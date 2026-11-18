@@ -23,6 +23,13 @@ export const LOCATE_JOB = "geo:locate";
 /** The least time between two requests to the geocoder from one guild. */
 export const LOOKUP_SPACING_MS = 1_100;
 
+/**
+ * How long after a location is added its lookup waits, so a burst of
+ * proposals is looked up in one paced run of alarms after the poll
+ * message's own refresh.
+ */
+export const LOOKUP_DELAY_MS = 2_000;
+
 /** How long to wait before the second and the third attempt. */
 export const RETRY_DELAYS_MS = [30_000, 120_000] as const;
 
@@ -68,8 +75,9 @@ export async function reserveLookupSlot(
 
 /**
  * Schedules the lookup job for when the next pending place is due, no
- * sooner than the next free slot. Does nothing when no place is pending.
- * Called after a location is added; it only writes storage.
+ * sooner than the next free slot, nor than `LOOKUP_DELAY_MS` after a new
+ * location. Does nothing when no place is pending. Called after a location
+ * is added; it only writes storage.
  */
 export async function scheduleLocate(
   storage: DurableObjectStorage,
@@ -83,6 +91,15 @@ export async function scheduleLocate(
     LOCATE_JOB,
     Math.max(due, await nextSlot(storage, now)),
   );
+}
+
+/** `scheduleLocate` after a location was added: waits `LOOKUP_DELAY_MS`. */
+export function scheduleNewLookup(
+  storage: DurableObjectStorage,
+  store: PollStore,
+  now: number,
+): Promise<void> {
+  return scheduleLocate(storage, store, now + LOOKUP_DELAY_MS);
 }
 
 /** The delay before the attempt after `attempts` failed ones. */

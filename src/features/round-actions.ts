@@ -36,7 +36,7 @@ import { START_PASSED_MESSAGE, createHikeEvent } from "./hike-event";
 import { claimHikeEvent, hikeEventStatus } from "./hike-event-state";
 import { createHikeThread } from "./hike-thread";
 import { claimHikeThread, hikeThreadStatus } from "./hike-thread-state";
-import { givenPlace, scheduleLocate } from "./locate";
+import { givenPlace, scheduleNewLookup } from "./locate";
 import {
   LOCATION_POLL,
   parseInitialLocations,
@@ -189,7 +189,7 @@ export function startLocationVote(
     round,
     poll,
     work: async () => {
-      await scheduleLocate(context.storage, store, store.now());
+      await scheduleNewLookup(context.storage, store, store.now());
       const sent = await claimAndSend(context, poll.id, channelId);
       if (sent.ok) return [sent.note];
       if ("skipped" in sent) return [sent.skipped];

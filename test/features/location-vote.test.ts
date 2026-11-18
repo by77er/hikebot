@@ -20,8 +20,12 @@ import {
 } from "../../src/features/location-vote";
 import { VOTE_CLOSED_MESSAGE } from "../../src/features/poll-ui";
 import { GuildConfig } from "../../src/guild/config";
+import { LOCATE_JOB } from "../../src/features/locate";
+import { scheduledJobs } from "../../src/guild/schedule";
 import {
+  PENDING_PLACE,
   PollStore,
+  type OptionPlace,
   type PastLocation,
   type RestingLocation,
 } from "../../src/polls/store";
@@ -163,6 +167,7 @@ function proposeSubmit(
   pollId: number,
   name: string,
   details = "",
+  map = "",
 ): APIModalSubmitInteraction {
   const interaction = modalInteraction(LOCATION_IDS.propose(pollId), guildId);
   Object.assign(interaction, { member: { user: { id: MEMBER }, roles: [] } });
@@ -170,6 +175,7 @@ function proposeSubmit(
     components: [
       [LOCATION_IDS.name, name],
       [LOCATION_IDS.details, details],
+      [LOCATION_IDS.map, map],
     ].map(([customId, value]) => ({
       type: ComponentType.Label,
       component: { type: ComponentType.TextInput, custom_id: customId, value },
@@ -527,8 +533,89 @@ describe("proposing a location", () => {
           max_length: 300,
           required: false,
         }),
+        expect.objectContaining({
+          type: ComponentType.Label,
+          label: "Map link or coordinates",
+        }),
+        expect.objectContaining({
+          custom_id: LOCATION_IDS.map,
+          required: false,
+        }),
       ]),
     );
+  });
+
+  it.each([
+    [
+      "the map field",
+      "Ridge",
+      "",
+      "https://www.openstreetmap.org/#map=15/47.4875/-121.7234",
+    ],
+    ["the name", "Ridge 47.4875, -121.7234", "", ""],
+    ["the details", "Ridge", "Park at geo:47.4875,-121.7234", ""],
+  ])(
+    "stores coordinates written in %s as given, and looks nothing up",
+    async (_where, name, details, map) => {
+      const guild = `location-propose-given-${_where.replace(/\W/g, "")}`;
+      const pollId = await openPoll(guild, []);
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+      const reply = await send(
+        proposeSubmit(guild, pollId, name, details, map),
+      );
+      expect(text(reply.data.components)).toContain("Added **");
+      expect(text(reply.data.components)).not.toContain("map field");
+      await runInDurableObject(stub(guild), async (_i, state) => {
+        expect(
+          new PollStore(state.storage).getPoll(pollId)?.options[0]?.place,
+        ).toEqual({
+          status: "given",
+          point: { lat: 47.4875, lon: -121.7234 },
+          name: null,
+          attempts: 0,
+        });
+        expect((await scheduledJobs(state.storage)).has(LOCATE_JOB)).toBe(
+          false,
+        );
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it("stores a location without coordinates as pending and schedules its lookup, without asking the geocoder", async () => {
+    const guild = "location-propose-pending";
+    const pollId = await openPoll(guild, []);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await send(proposeSubmit(guild, pollId, "Mount Si"));
+    await runInDurableObject(stub(guild), async (_i, state) => {
+      expect(
+        new PollStore(state.storage).getPoll(pollId)?.options[0]?.place,
+      ).toEqual(PENDING_PLACE);
+      expect((await scheduledJobs(state.storage)).has(LOCATE_JOB)).toBe(true);
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("says when the map field holds no coordinates it can read, and adds the location anyway", async () => {
+    const guild = "location-propose-unread";
+    const pollId = await openPoll(guild, []);
+    const reply = await send(
+      proposeSubmit(
+        guild,
+        pollId,
+        "Mount Si",
+        "",
+        "https://maps.app.goo.gl/x1",
+      ),
+    );
+    expect(text(reply.data.components)).toContain(
+      "Added **Mount Si** to the location vote. Use **Vote** to vote for it. The map field holds no coordinates I can read (short links are not opened), so the location will be looked up by its name",
+    );
+    await runInDurableObject(stub(guild), (_i, state) => {
+      expect(
+        new PollStore(state.storage).getPoll(pollId)?.options[0]?.place?.status,
+      ).toBe("pending");
+    });
   });
 
   it("adds the option, confirms, and schedules a refresh", async () => {
@@ -695,6 +782,20 @@ describe("restingRefusal", () => {
   });
 });
 
+const LAKE_PLACE: OptionPlace = {
+  status: "found",
+  point: { lat: 47.1, lon: -121.5 },
+  name: "Lake, King County",
+  attempts: 1,
+};
+
+const RIDGE_PLACE: OptionPlace = {
+  status: "given",
+  point: { lat: 47.2, lon: -121.6 },
+  name: null,
+  attempts: 0,
+};
+
 describe("suggesting a past location again", () => {
   /**
    * A guild whose first round completed with Ridge as the hike (Lake lost,
@@ -706,11 +807,12 @@ describe("suggesting a past location again", () => {
       playRound(
         store,
         [
-          { label: "Ridge", proposedBy: OWNER },
+          { label: "Ridge", proposedBy: OWNER, place: RIDGE_PLACE },
           {
             label: "Lake",
             details: "https://example.com/lake",
             proposedBy: OWNER,
+            place: LAKE_PLACE,
           },
         ],
         "Ridge",
@@ -797,9 +899,12 @@ describe("suggesting a past location again", () => {
           label: "Lake",
           details: "https://example.com/lake",
           proposedBy: MEMBER,
+          // Copied from the earlier option, so nothing is looked up again.
+          place: LAKE_PLACE,
         }),
       ]);
       expect(await state.storage.getAlarm()).not.toBeNull();
+      expect((await scheduledJobs(state.storage)).has(LOCATE_JOB)).toBe(false);
     });
   });
 
