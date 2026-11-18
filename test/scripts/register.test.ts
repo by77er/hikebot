@@ -100,7 +100,7 @@ describe("register", () => {
   });
 
   it("fails when Discord cannot be reached, without printing the token", async () => {
-    const fetch = vi.fn<typeof fetch>(() =>
+    const unreachable = vi.fn<typeof fetch>(() =>
       Promise.reject(
         new TypeError("fetch failed", {
           cause: new Error(`connect ECONNREFUSED with Bot ${TOKEN}`),
@@ -109,7 +109,9 @@ describe("register", () => {
     );
     const { lines, output } = capture();
 
-    expect(await register(ENV, output, { fetch, sleep: noSleep })).not.toBe(0);
+    expect(
+      await register(ENV, output, { fetch: unreachable, sleep: noSleep }),
+    ).not.toBe(0);
 
     const printed = lines.join("\n");
     expect(printed).toContain("Registering the slash commands failed");
