@@ -534,6 +534,93 @@ describe("withdrawDatePoll", () => {
   });
 });
 
+describe("withdrawLocationRound", () => {
+  it("closes the open location poll without a winner and cancels the round", async () => {
+    await withStore(
+      (store) => {
+        const round = store.startRound("u-admin", locations("Ridge"));
+        const pollId = round.locationPoll?.id ?? 0;
+        expect(store.withdrawLocationRound(pollId, "u-admin")).toMatchObject({
+          id: round.id,
+          status: "cancelled",
+          endedBy: "u-admin",
+          endedAt: 1_800_000_001_000,
+          locationPoll: {
+            status: "closed",
+            winnerOptionId: null,
+            closedBy: "u-admin",
+            closedAt: 1_800_000_001_000,
+          },
+        });
+        expect(store.getActiveRound()).toBeNull();
+      },
+      { now: clock(1_800_000_000_000, 1000) },
+    );
+  });
+
+  it("leaves a round that was cancelled meanwhile as it is", async () => {
+    await withStore((store) => {
+      const round = store.startRound("u-admin", locations("Ridge"));
+      const pollId = round.locationPoll?.id ?? 0;
+      const cancelled = store.cancelRound(round.id, "u-other");
+      expectCode(
+        () => store.withdrawLocationRound(pollId, "u-admin"),
+        "poll_closed",
+      );
+      expect(store.getRound(round.id)).toEqual(cancelled);
+    });
+  });
+
+  it("leaves a round whose location was decided meanwhile as it is", async () => {
+    await withStore((store) => {
+      const round = decidedRound(store);
+      const before = store.getRound(round.id);
+      expectCode(
+        () => store.withdrawLocationRound(round.locationPoll?.id ?? 0, "u-1"),
+        "poll_closed",
+      );
+      expect(store.getRound(round.id)).toEqual(before);
+      expect(before).toMatchObject({
+        status: "location_decided",
+        locationOptionId: round.locationPoll?.options[0]?.id,
+      });
+    });
+  });
+
+  it("refuses an open date poll and an unknown poll", async () => {
+    await withStore((store) => {
+      const round = decidedRound(store);
+      const poll = store.startDatePoll(round.id, "u-admin", dates(2));
+      expectCode(
+        () => store.withdrawLocationRound(poll.id, "u-admin"),
+        "invalid_state",
+      );
+      expect(store.getRound(round.id)?.status).toBe("date_voting");
+      expectCode(
+        () => store.withdrawLocationRound(999, "u-admin"),
+        "poll_not_found",
+      );
+    });
+  });
+
+  it("rolls back the poll's close when cancelling the round fails", async () => {
+    await withStore((store, storage) => {
+      const round = store.startRound("u-admin", locations("Ridge"));
+      const pollId = round.locationPoll?.id ?? 0;
+      storage.sql.exec(
+        `CREATE TRIGGER fail_cancel BEFORE UPDATE ON rounds
+         BEGIN SELECT RAISE(ABORT, 'forced'); END`,
+      );
+      expect(() => store.withdrawLocationRound(pollId, "u-admin")).toThrow(
+        /forced/,
+      );
+      storage.sql.exec("DROP TRIGGER fail_cancel");
+      expect(store.getPoll(pollId)?.status).toBe("open");
+      expect(store.getActiveRound()?.status).toBe("location_voting");
+    });
+  });
+});
+
 describe("round lifecycle", () => {
   it("runs from location vote to complete", async () => {
     await withStore((store) => {
