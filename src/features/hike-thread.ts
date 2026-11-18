@@ -3,8 +3,9 @@
  * thread in the configured forum channel with the hike's details, before the
  * announcement, which links it. If that fails the panel shows why and offers
  * **Create hike thread** (`hb:thread:create:<round id>`) until the last
- * completed round has its thread; a retry never posts the announcement
- * again and never creates a second thread.
+ * completed round has its thread (`retryHikeThread` in `round-actions.ts`);
+ * a retry never posts the announcement again and never creates a second
+ * thread.
  */
 import type {
   APIMessageComponentInteraction,
@@ -28,20 +29,22 @@ import {
   type PollView,
   type RoundView,
 } from "../polls/store";
-import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
+import { POLL_CONTROL_IDS } from "./admin-panel";
 import {
   claimHikeThread,
   clearHikeThreadAttempt,
-  hikeThreadStatus,
   recordHikeThreadFailure,
 } from "./hike-thread-state";
 import {
-  deferPanel,
+  actorName,
+  actorOf,
+  answerPanel,
   errorText,
-  finishPanel,
+  roundContext,
   shorten,
   type CloseStep,
 } from "./poll-ui";
+import { retryHikeThread } from "./round-actions";
 
 /** Discord's limit on a thread name. */
 export const MAX_THREAD_NAME = 100;
@@ -121,18 +124,22 @@ function resultLine(
  * time zone as a relative timestamp, the link to the hike's scheduled
  * event once it exists, and the result of both votes
  * with links to their messages. Location labels (80) and details (300) are
- * bounded, so it stays far within 40 components and 4000 characters.
+ * bounded, so it stays far within 40 components and 4000 characters. A
+ * proposer whose id is `botId` (the application's own) is named hikebot.
  */
 export function renderThreadMessage(
   round: RoundView,
   guildId: string,
   timeZone: string,
+  botId?: string,
 ): APIMessageTopLevelComponent[] {
   const location = winnerOf(round.locationPoll);
   const date = winnerOf(round.datePoll);
   const head = [`## ${location?.label ?? "?"}`];
   if (location?.details) head.push(location.details);
-  if (location) head.push(`Proposed by <@${location.proposedBy}>`);
+  if (location) {
+    head.push(`Proposed by ${actorName(location.proposedBy, botId)}`);
+  }
   head.push(whenLine(date, timeZone));
   if (round.eventId !== null) {
     head.push(`**Hike event:** ${eventUrl(guildId, round.eventId)}`);
@@ -152,14 +159,15 @@ export function renderThreadMessage(
 }
 
 /** What creating the thread came to. */
-type Created = { ok: true; threadId: string } | { ok: false; reason: string };
+export type Created =
+  { ok: true; threadId: string } | { ok: false; reason: string };
 
 /**
  * Creates the round's thread in the forum channel and stores its id on the
  * round; on failure records why, for the panel. The caller has claimed the
  * creation with `claimHikeThread`.
  */
-async function createHikeThread(
+export async function createHikeThread(
   round: RoundView,
   guildId: string,
   timeZone: string,
@@ -179,7 +187,14 @@ async function createHikeThread(
         winnerOf(round.locationPoll)?.label ?? "Hike",
         winnerOf(round.datePoll)?.label ?? "?",
       ),
-      message: messageBody(renderThreadMessage(round, guildId, timeZone)),
+      message: messageBody(
+        renderThreadMessage(
+          round,
+          guildId,
+          timeZone,
+          context.env.DISCORD_APPLICATION_ID,
+        ),
+      ),
     });
     store.setRoundThread(round.id, thread.id);
     clearHikeThreadAttempt(context.storage, round.id);
@@ -214,58 +229,26 @@ export const createHikeThreadStep: CloseStep = {
 };
 
 /**
- * Create hike thread: retries the thread of the last round while it is
- * complete without one. The claim is taken before the answer, so a second
- * click while the first is running is told so and creates nothing.
+ * Create hike thread: creates the thread of the last round again with
+ * `retryHikeThread`, which claims it before the answer.
  */
-const retryHikeThread: ComponentHandler = adminOnly(
-  (interaction: APIMessageComponentInteraction, context) => {
-    const arg = parseCustomId(interaction.data.custom_id)?.arg;
-    const store = new PollStore(context.storage);
-    const round = store.getLastRound();
-    if (
-      round === null ||
-      String(round.id) !== arg ||
-      round.status !== "complete"
-    ) {
-      return adminPanelUpdate(
-        context,
-        "That hike is no longer the last one, so its thread is not created from here.",
-      );
-    }
-    const status = hikeThreadStatus(context.storage, round, store.now());
-    if (status.state === "created") {
-      return adminPanelUpdate(
-        context,
-        `The hike thread already exists: <#${status.threadId}>.`,
-      );
-    }
-    if (!claimHikeThread(context.storage, round, store.now())) {
-      return adminPanelUpdate(context, "The hike thread is being created.");
-    }
-    return {
-      response: deferPanel(interaction),
-      followUp: async () => {
-        const created = await createHikeThread(
-          round,
-          interaction.guild_id ?? "",
-          new GuildConfig(context.storage).get().timezone,
-          context,
-        );
-        await finishPanel(
-          context,
-          interaction,
-          created.ok
-            ? `The hike thread is open: <#${created.threadId}>.`
-            : created.reason,
-        );
-      },
-    };
-  },
+const createAgain: ComponentHandler = adminOnly(
+  (interaction: APIMessageComponentInteraction, context) =>
+    answerPanel(
+      interaction,
+      context,
+      retryHikeThread(
+        roundContext(interaction, context),
+        actorOf(interaction),
+        {
+          roundId: Number(parseCustomId(interaction.data.custom_id)?.arg),
+        },
+      ),
+    ),
 );
 
 /** Registers the Create hike thread button. */
 export function registerHikeThread(router: Router): Router {
-  router.component("hb:thread:create", retryHikeThread);
+  router.component("hb:thread:create", createAgain);
   return router;
 }

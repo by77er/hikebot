@@ -756,3 +756,92 @@ describe("cancel round", () => {
     expect(text(panel.components)).toContain("No hike is being planned.");
   });
 });
+
+describe("Post vote message", () => {
+  it("posts the message of a poll that has none once, however often it is clicked", async () => {
+    const guild = "200000000000000078";
+    const pollId = await runInDurableObject(stub(guild), (_i, state) => {
+      const config = new GuildConfig(state.storage);
+      config.set("voteChannelId", TEXT);
+      config.set("announceChannelId", NEWS);
+      config.set("forumChannelId", FORUM);
+      const round = new PollStore(state.storage).startRound(OWNER, [
+        { label: "Ridge", proposedBy: OWNER },
+      ]);
+      return round.locationPoll?.id ?? 0;
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((input, init) => {
+        const request = new Request(input, init);
+        if (request.url.endsWith(`/guilds/${guild}`)) {
+          return Promise.resolve(Response.json({ id: guild, owner_id: OWNER }));
+        }
+        // The post waits until the second click has been answered.
+        return held.then(() => Response.json({ id: POLL_MESSAGE }));
+      });
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const click = () => {
+      const interaction = componentInteraction(POLL_IDS.post(pollId), guild);
+      Object.assign(interaction, {
+        member: { user: { id: OWNER }, roles: [] },
+        message: { id: "800000000000000009", components: [] },
+      });
+      return interaction;
+    };
+    const ctx = createExecutionContext();
+    const first = await callWorker(
+      signer,
+      await signedRequest(signer, click()),
+      ctx,
+    );
+    expect(await first.json()).toEqual({
+      type: InteractionResponseType.DeferredMessageUpdate,
+    });
+    const second = await send(click());
+    expect(second.type).toBe(InteractionResponseType.UpdateMessage);
+    expect(text(second.data.components)).toContain(
+      "The location vote's message is being posted.",
+    );
+    release();
+    await waitOnExecutionContext(ctx);
+    const posts = requests(fetchSpy).filter((r) => r.method === "POST");
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.url).toMatch(new RegExp(`/channels/${TEXT}/messages$`));
+    const panel = bodyOf(
+      requests(fetchSpy).find((r) => r.url.includes("/webhooks/")),
+    );
+    expect(text(panel.components)).toContain(
+      `The location vote is open in <#${TEXT}>.`,
+    );
+    const third = await send(click());
+    expect(text(third.data.components)).toContain(
+      `The location vote's message is already posted in <#${TEXT}>.`,
+    );
+    expect(requests(fetchSpy).filter((r) => r.method === "POST")).toHaveLength(
+      1,
+    );
+  });
+});
+
+describe("a proposer that is the application", () => {
+  it("is named hikebot, not mentioned", () => {
+    const view = renderPollMessage(
+      poll({
+        options: [
+          option(1, "Ridge", 0),
+          { ...option(2, "Lake", 0), proposedBy: env.DISCORD_APPLICATION_ID },
+        ],
+      }),
+      LOCATION_POLL,
+      null,
+      env.DISCORD_APPLICATION_ID,
+    );
+    expect(text(view)).toContain("Proposed by hikebot");
+    expect(text(view)).toContain(`Proposed by <@${OWNER}>`);
+    expect(text(view)).not.toContain(`<@${env.DISCORD_APPLICATION_ID}>`);
+  });
+});

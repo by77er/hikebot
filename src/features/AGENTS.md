@@ -1,5 +1,102 @@
 # Working in src/features
 
+## Add a round action
+
+Use this for anything done to a round (start or close a vote, cancel,
+retry), so the panel's handlers, the web pages and the bot's own schedule
+call the same function. The example adds `reopenVote`; use your action's
+name, input and refusals.
+
+1. In `src/features/round-actions.ts`, write the function. It takes a
+   `RoundContext` (`env`, `storage`, `guildId`), the actor's user id and an
+   input object, and returns an `ActionOutcome`. Put every rule of the
+   action here: return `refuse("<code>", "<the sentence the panel shows>")`
+   for each refusal; make the stored change, and claim anything Discord
+   will create (see "Let an admin retry a close step from the panel"),
+   before the function returns; put the Discord calls in `work`, which
+   resolves to the panel's notes. Read the guild from `context.guildId` and
+   name the actor in a message with
+   `actorName(actor, context.env.DISCORD_APPLICATION_ID)` from
+   `./poll-ui`, so the bot acting by itself is named hikebot. Say in the doc
+   comment that the caller checks the actor may act:
+
+   ```ts
+   export type ReopenVoteCode = "not_closed";
+
+   /**
+    * Reopens the closed vote `pollId`. Does not check that the actor is an
+    * admin: the caller must.
+    */
+   export function reopenVote(
+     context: RoundContext,
+     actor: string,
+     input: { pollId: number },
+   ): ActionOutcome<ReopenVoteCode, { poll: PollView }> {
+     const store = storeOf(context);
+     const poll = store.getPoll(input.pollId);
+     if (poll?.status !== "closed") {
+       return refuse("not_closed", "That vote is not closed.");
+     }
+     // The stored change, through PollStore, recording `actor`.
+     return {
+       ok: true,
+       poll,
+       work: async () => {
+         // The Discord calls, through discordApi(context.env).
+         return [`The ${poll.kind} vote is open again.`];
+       },
+     };
+   }
+   ```
+
+   When the panel asks before acting (a confirmation or a modal), export
+   the check as a function of its own that returns the refusal, as
+   `closeVoteCheck` and `locationVoteRefusal` do, and call it from both the
+   action and the handler that asks.
+
+2. Call it from the button's handler in the feature's file, through
+   `adminOnly`, with no rule of the handler's own: read the input from the
+   `custom_id` or the modal's fields, and answer with `answerPanel`, which
+   redraws the panel with a refusal's sentence, or defers and runs `work` in
+   the follow-up:
+
+   ```ts
+   const reopen: ComponentHandler = adminOnly((interaction, context) =>
+     answerPanel(
+       interaction,
+       context,
+       reopenVote(roundContext(interaction, context), actorOf(interaction), {
+         pollId: Number(parseCustomId(interaction.data.custom_id)?.arg),
+       }),
+     ),
+   );
+   ```
+
+   A modal's handler passes a fourth argument,
+   `(message) => ({ response: ephemeralNotice(message) })`, to answer a
+   refusal ephemerally, as `submitStart` in `src/features/date-vote.ts`
+   does. A caller without an interaction awaits `work` itself. Add the
+   button to the panel as "Add an action to the admin panel" in
+   `src/guild/AGENTS.md` says.
+
+3. Test the action with no interaction in
+   `test/features/round-actions.test.ts`: inside `inGuild("<unique name>",
+(context, store) => ...)`, with `fakeDiscord()` standing in for Discord,
+   call it once per refusal and check
+   `toEqual({ ok: false, code, message })` and that nothing was stored;
+   then call it to succeed, check the stored change before `work` runs,
+   await `done(outcome).work()` and check its notes and `discord.sent`.
+   Call it once with `APP` as the actor and check the `*_by` column and
+   that no message holds `<@${APP}>`. Test the handler through the Worker
+   as "Post vote message" in `test/features/poll-ui.test.ts` does, and add
+   the click to an end-to-end scenario.
+4. Run them:
+
+   ```sh
+   npx vitest run test/features/round-actions.test.ts test/features/poll-ui.test.ts
+   npm run test:e2e
+   ```
+
 ## Add a poll kind to the shared poll UI
 
 The example adds a kind named `route` in `src/features/route-vote.ts`; use
@@ -40,23 +137,21 @@ table, through a migration as "Add a column or table for polls" in
    `title` and `announcementLines` receive, as `DATE_POLL` does for the
    location.
 
-2. Add it to `POLL_KINDS` in `src/features/index.ts`:
+2. Add it to what `pollWordings` returns in
+   `src/features/round-actions.ts`:
 
    ```ts
-   const POLL_KINDS: PollWordings = {
-     location: LOCATION_POLL,
-     date: DATE_POLL,
-     route: ROUTE_POLL,
-   };
+   export function pollWordings(): PollWordings {
+     return { location: LOCATION_POLL, date: DATE_POLL, route: ROUTE_POLL };
+   }
    ```
 
-3. Post the poll message with
-   `messageBody(renderPollMessage(poll, ROUTE_POLL, store.getRound(poll.roundId)))`
-   in a follow-up and record it with
-   `store.setPollMessage(poll.id, channelId, message.id)`, as
-   `startDateVote` in `src/features/date-vote.ts` does. Register the kind's
-   own controls in a `registerRouteVote(router)` called from
-   `registerFeatures`.
+3. Write the kind's start as a round action, as "Add a round action" above
+   says: it opens the poll before it returns, and its `work` posts and
+   records the poll message with `claimAndSend(context, poll.id, channelId)`
+   and takes the poll back when Discord refuses, as `startDateVote` in
+   `src/features/round-actions.ts` does. Register the kind's own controls
+   in a `registerRouteVote(router)` called from `registerFeatures`.
 4. Check that its poll message stays within Discord's limits by adding a
    case with 25 options at the longest label to the kind's tests, as "stays
    within Discord's limits with 25 dates" in
@@ -113,7 +208,9 @@ step's name and work.
    `closeSteps: [postNote]`.
 3. Test it the way "runs the kind's close steps after the final edit and
    before the announcement" in `test/features/date-vote.test.ts` does: run
-   `(await closePoll(...)).followUp` with `fetch` stubbed, then check the
+   `(await closePoll(...)).followUp` with `fetch` stubbed (or, with no
+   interaction, the `work` of `closeVote` as "closeVote" in
+   `test/features/round-actions.test.ts` does), then check the
    order of the requests, the announcement's last lines and the panel's
    notes. Check that the close-flow job runs it when the follow-up was
    lost, as "finishes the flow once when the follow-up never ran" in
@@ -145,7 +242,7 @@ now)` that says `"unconfirmed"` for a claim older than a minute (its run
    and otherwise stores `{ creatingSince: now }` and returns true. Read and
    write it with `storage.kv` in one synchronous step, with nothing awaited
    between the check and the write. Take `now` from `store.now()`.
-2. In the step and in the button's handler, claim before calling Discord.
+2. In the step and in the retry's round action, claim before calling Discord.
    On success store the result on the round and delete the key; on failure
    store `{ error: reason }`. The step returns no `note` for a failure the
    panel shows by itself.
@@ -154,15 +251,21 @@ now)` that says `"unconfirmed"` for a claim older than a minute (its run
    exist and to check before clicking), and return the button from
    `actionButtons` only while the round has no result and no fresh claim,
    as "Add an action to the admin panel" in `src/guild/AGENTS.md` says.
-4. In the handler (through `adminOnly`), check that the round in the
-   `custom_id` is still `store.getLastRound()` and still lacks the result,
-   claim, then answer `deferPanel(interaction)` and do the Discord call in
-   the `followUp`, ending with `finishPanel`. A refused claim answers
-   `adminPanelUpdate(context, "<it is being done>")`.
-5. Test a double click by holding the stubbed Discord call until both
-   clicks are answered, as "creates one thread when the button is clicked
-   twice quickly" in `test/features/hike-thread.test.ts` does, and in an
-   end-to-end scenario with two `owner.click` calls in one `Promise.all`.
+4. Write the retry as a round action, `retryPin(context, actor, { roundId })`
+   in `src/features/round-actions.ts`, as "Add a round action" says and
+   `retryHikeThread` there does: refuse unless the round is still
+   `store.getLastRound()`, complete and without the result, refuse a
+   refused claim with `refuse("pinning", "<it is being done>")`, claim, and
+   do the Discord call in `work`. The button's handler, through `adminOnly`,
+   reads the round id from the `custom_id` and answers with `answerPanel`,
+   as `createAgain` in `src/features/hike-thread.ts` does.
+5. Test the retry with no interaction, as "retryHikeThread" in
+   `test/features/round-actions.test.ts` does: each refusal, a second call
+   before the first's `work` ran, and the `work`. Test a double click by
+   holding the stubbed Discord call until both clicks are answered, as
+   "creates one thread when the button is clicked twice quickly" in
+   `test/features/hike-thread.test.ts` does, and in an end-to-end scenario
+   with two `owner.click` calls in one `Promise.all`.
 6. Test a step cut off half-way, as "does not create a cut-off thread
    again" in `test/features/close-flow.test.ts` does: close without the
    follow-up, mark the step started and claimed a few minutes back with
@@ -171,7 +274,7 @@ now)` that says `"unconfirmed"` for a claim older than a minute (its run
    and that the button creates it once. Run them:
 
    ```sh
-   npx vitest run test/features/hike-thread.test.ts test/features/close-flow.test.ts
+   npx vitest run test/features/round-actions.test.ts test/features/hike-thread.test.ts test/features/close-flow.test.ts
    npx vitest run --project e2e test/e2e/hike-thread.test.ts
    ```
 
@@ -195,10 +298,20 @@ now)` that says `"unconfirmed"` for a claim older than a minute (its run
      discordApi(context.env).editMessage(
        channelId,
        messageId,
-       messageBody(renderPollMessage(poll, wording)),
+       messageBody(
+         renderPollMessage(
+           poll,
+           wording,
+           store.getRound(poll.roundId),
+           context.env.DISCORD_APPLICATION_ID,
+         ),
+       ),
      ),
    );
    ```
+
+   The last argument names the options the bot entered itself hikebot;
+   pass it wherever the poll message is rendered.
 
 3. Test the refresh by running the alarm, as "Test a Durable Object alarm" in
    `test/AGENTS.md` says, then run:

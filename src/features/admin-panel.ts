@@ -57,6 +57,10 @@ import {
 } from "./announcement-state";
 import { hikeEventStatus, type HikeEventStatus } from "./hike-event-state";
 import { hikeThreadStatus, type HikeThreadStatus } from "./hike-thread-state";
+import {
+  voteMessageStatus,
+  type VoteMessageStatus,
+} from "./vote-message-state";
 
 /** Everything the panel shows. Later features add their state here. */
 export interface AdminPanelState {
@@ -74,6 +78,8 @@ export interface AdminPanelState {
    * round's, or the finished one's) that are not known to be posted.
    */
   announcements?: PollAnnouncement[];
+  /** Where the active round's open poll's message stands. */
+  voteMessage?: VoteMessageStatus | null;
   /** The time the panel is drawn at, for the clock in the guild's zone. */
   now?: number;
 }
@@ -113,6 +119,7 @@ export const POLL_CONTROL_IDS = {
   createHikeEvent: (roundId: number) =>
     customId("event", "create", String(roundId)),
   announce: (pollId: number) => customId("poll", "announce", String(pollId)),
+  postVoteMessage: (pollId: number) => customId("poll", "post", String(pollId)),
 } as const;
 
 /** How the panel names each kind of poll. */
@@ -163,6 +170,7 @@ export function loadAdminPanelState(
   const finished = last?.status === "complete" ? last : null;
   const settings = new GuildConfig(storage).get();
   const now = store.now();
+  const open = round === null ? null : openPoll(round);
   return {
     settings,
     round,
@@ -173,6 +181,7 @@ export function loadAdminPanelState(
         ? null
         : hikeEventStatus(storage, finished, now, settings.timezone),
     announcements: pollAnnouncements(storage, round ?? finished, now),
+    voteMessage: open === null ? null : voteMessageStatus(storage, open, now),
     now,
   };
 }
@@ -265,12 +274,26 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
     ];
   }
   const open = openPoll(round);
+  const unposted =
+    state.voteMessage?.state === "missing" ||
+    state.voteMessage?.state === "failed" ||
+    state.voteMessage?.state === "unconfirmed";
   return [
     ...(round.status === "location_decided"
       ? [
           button({
             custom_id: POLL_CONTROL_IDS.startDateVote,
             label: "Start date vote",
+          }),
+        ]
+      : []),
+    // Only while the open poll has no message and none is being posted.
+    ...(open !== null && unposted
+      ? [
+          button({
+            custom_id: POLL_CONTROL_IDS.postVoteMessage(open.id),
+            label: "Post vote message",
+            style: ButtonStyle.Secondary,
           }),
         ]
       : []),
@@ -378,12 +401,7 @@ function roundSection(state: AdminPanelState) {
   const lines: string[] = [];
   const open = openPoll(round);
   if (open !== null) {
-    const name = POLL_NAMES[open.kind];
-    lines.push(
-      open.messageId === null || open.channelId === null
-        ? `**The ${name} is open**, but its message has not been posted.`
-        : `**The ${name} is open** in <#${open.channelId}>.`,
-    );
+    lines.push(openLine(open, state.voteMessage));
     if (open.options.length === 0) {
       lines.push("No options yet.");
     } else {
@@ -409,6 +427,30 @@ function roundSection(state: AdminPanelState) {
   }
   lines.push(...announcementLines(state.announcements));
   return [separator(), textDisplay(lines.join("\n"))];
+}
+
+/** The open poll's first line: where its message is, or where that stands. */
+function openLine(
+  open: PollView,
+  message: VoteMessageStatus | null | undefined,
+): string {
+  const name = POLL_NAMES[open.kind];
+  const head = `**The ${name} is open**`;
+  if (open.messageId !== null && open.channelId !== null) {
+    return `${head} in <#${open.channelId}>.`;
+  }
+  switch (message?.state) {
+    case "posting":
+      return `${head}; its message is being posted.`;
+    case "failed":
+      return `${head}, but its message has not been posted. ${message.reason}`;
+    case "unconfirmed":
+      return `${head}, but its message is not confirmed: posting it was cut off, so it may or may not have been posted. Check the voting channel, and click Post vote message only if it is missing.`;
+    case "missing":
+      return `${head}, but its message has not been posted. Click Post vote message to post it.`;
+    default:
+      return `${head}, but its message has not been posted.`;
+  }
 }
 
 /** Where each announcement not known to be posted stands. */

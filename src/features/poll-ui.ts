@@ -5,7 +5,9 @@
  * cancel flows. A poll kind (`location-vote.ts`, `date-vote.ts`) supplies
  * its wording, extra buttons and close steps as a `PollWording`. The close
  * flow's remaining work is kept in storage (`close-flow-state.ts`), so the
- * `poll:close-flow` job finishes it when the follow-up was lost.
+ * `poll:close-flow` job finishes it when the follow-up was lost. The admin's
+ * actions on a vote are in `round-actions.ts`; the handlers here parse the
+ * interaction, call them and redraw the panel.
  */
 import {
   ButtonStyle,
@@ -60,8 +62,6 @@ import {
   adminPanelUpdate,
 } from "./admin-panel";
 import {
-  announcementContent,
-  announcementStatus,
   claimAnnouncement,
   recordAnnouncementFailure,
   recordAnnouncementPosted,
@@ -75,9 +75,17 @@ import {
   partState,
   pendingClose,
   pendingCloses,
-  recordPendingClose,
   startPart,
 } from "./close-flow-state";
+import {
+  cancelRound,
+  cancelRoundCheck,
+  closeVote,
+  closeVoteCheck,
+  postVoteMessage,
+  retryAnnouncement,
+  type RoundContext,
+} from "./round-actions";
 
 /** What a poll kind says and adds; the shared code does the rest. */
 export interface PollWording {
@@ -193,6 +201,7 @@ export const POLL_IDS = {
   cancel: (roundId: number) => customId("round", "cancel", String(roundId)),
   cancelConfirm: (roundId: number) =>
     customId("round", "cancel-confirm", String(roundId)),
+  post: (pollId: number) => customId("poll", "post", String(pollId)),
 } as const;
 
 // The poll message.
@@ -203,12 +212,14 @@ export const POLL_IDS = {
  * Closed, it marks the winner (and a tie broken at random) and has no
  * buttons; cancelled (closed without a winner) it says so. Details are
  * shortened so the message stays within Discord's 4000 characters with 25
- * options at the longest label and details.
+ * options at the longest label and details. A proposer whose id is `botId`
+ * (the application's own, for options the bot entered) is named hikebot.
  */
 export function renderPollMessage(
   poll: PollView,
   wording: PollWording,
   round: RoundView | null = null,
+  botId?: string,
 ): APIMessageTopLevelComponent[] {
   const open = poll.status === "open";
   const cancelled = !open && poll.winnerOptionId === null;
@@ -231,7 +242,9 @@ export function renderPollMessage(
       : rankOptions(poll.options);
   const titles = ranked.map((option) => optionTitle(option, poll));
   const proposers = ranked.map((option) =>
-    wording.showProposer ? `Proposed by <@${option.proposedBy}>` : "",
+    wording.showProposer
+      ? `Proposed by ${actorName(option.proposedBy, botId)}`
+      : "",
   );
   const fixed =
     head.join("\n").length +
@@ -285,6 +298,14 @@ export function chronological(options: readonly OptionView[]): OptionView[] {
     (a, b) =>
       (a.dateValue ?? "").localeCompare(b.dateValue ?? "") || a.id - b.id,
   );
+}
+
+/**
+ * How a message names the user `userId`: a mention, or "hikebot" when it is
+ * the application's own id `botId`, for what the bot did by itself.
+ */
+export function actorName(userId: string, botId?: string): string {
+  return userId === botId ? "hikebot" : `<@${userId}>`;
 }
 
 function optionTitle(option: OptionView, poll: PollView): string {
@@ -377,12 +398,6 @@ function numericArg(interaction: {
   const arg = parseCustomId(interaction.data.custom_id)?.arg;
   const id = Number(arg);
   return arg !== undefined && Number.isSafeInteger(id) ? id : null;
-}
-
-function userIdOf(
-  interaction: APIMessageComponentInteraction | APIModalSubmitInteraction,
-): string {
-  return interaction.member?.user.id ?? interaction.user?.id ?? "";
 }
 
 /** The option values the select `id` on the interaction's message lists. */
@@ -485,7 +500,12 @@ async function refreshPollMessages(
           poll.channelId,
           poll.messageId,
           messageBody(
-            renderPollMessage(poll, wording, store.getRound(poll.roundId)),
+            renderPollMessage(
+              poll,
+              wording,
+              store.getRound(poll.roundId),
+              context.env.DISCORD_APPLICATION_ID,
+            ),
           ),
         );
       } catch (error) {
@@ -505,7 +525,7 @@ function openVoteSelect(wordings: PollWordings): ComponentHandler {
     const pollId = numericArg(interaction);
     const store = new PollStore(context.storage);
     const poll =
-      pollId === null ? null : store.getPoll(pollId, userIdOf(interaction));
+      pollId === null ? null : store.getPoll(pollId, actorOf(interaction));
     const wording = poll && wordings[poll.kind];
     if (!poll || !wording) {
       return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
@@ -543,7 +563,7 @@ function saveVotes(wordings: PollWordings): ComponentHandler {
     ) {
       return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
     }
-    const userId = userIdOf(interaction);
+    const userId = actorOf(interaction);
     const store = new PollStore(context.storage);
     const before = store.getPoll(pollId, userId);
     const wording = before && wordings[before.kind];
@@ -608,16 +628,12 @@ export function renderConfirm(
 /** Close, first click: checks the poll can close and asks to confirm. */
 function askClose(wordings: PollWordings): ComponentHandler {
   return adminOnly((interaction, context) => {
-    const pollId = numericArg(interaction);
-    const poll =
-      pollId === null ? null : new PollStore(context.storage).getPoll(pollId);
-    const wording = poll && wordings[poll.kind];
-    if (!poll || !wording || poll.status !== "open") {
-      return adminPanelUpdate(context, "That vote is no longer open.");
-    }
-    if (poll.options.length === 0) {
-      return adminPanelUpdate(context, noOptionsToClose(wording));
-    }
+    const check = closeVoteCheck(
+      { ...roundContext(interaction, context), wordings },
+      numericArg(interaction) ?? 0,
+    );
+    if (!check.ok) return adminPanelUpdate(context, check.message);
+    const { poll, wording } = check;
     return {
       response: update(
         renderConfirm(
@@ -633,14 +649,9 @@ function askClose(wordings: PollWordings): ComponentHandler {
   });
 }
 
-function noOptionsToClose(wording: PollWording): string {
-  return `The ${wording.name} has no ${wording.nouns} yet, so it cannot be closed. Wait for a proposal, or cancel the round.`;
-}
-
 /**
- * Closes the poll through the poll core and records its close work in the
- * same transaction (the result and what is left to do are stored before
- * the response), schedules the close-flow job as a backstop, then in the
+ * Close, confirmed: closes the poll with `closeVote`, whose result and
+ * remaining close work are stored before the response, then in the
  * follow-up runs the close flow and redraws the panel with the result and
  * a line per step that failed or had something to say.
  */
@@ -650,41 +661,12 @@ export async function closePoll(
   wordings: PollWordings,
   store: PollStore = new PollStore(context.storage),
 ): Promise<HandlerResult> {
-  const { storage } = context;
-  const pollId = numericArg(interaction);
-  const before = pollId === null ? null : store.getPoll(pollId);
-  const wording = before && wordings[before.kind];
-  if (pollId === null || !before || !wording) {
-    return adminPanelUpdate(context, "That vote is no longer open.");
-  }
-  try {
-    storage.transactionSync(() => {
-      store.closePoll(pollId, userIdOf(interaction));
-      recordPendingClose(
-        storage,
-        pollId,
-        interaction.guild_id ?? "",
-        new GuildConfig(storage).get().timezone,
-        wording.closeSteps.map((step) => step.name),
-      );
-    });
-  } catch (error) {
-    if (isPollError(error, "no_options")) {
-      return adminPanelUpdate(context, noOptionsToClose(wording));
-    }
-    if (isPollError(error)) {
-      return adminPanelUpdate(context, "That vote is no longer open.");
-    }
-    throw error;
-  }
-  await schedule(storage, CLOSE_FLOW_JOB, store.now() + CLOSE_FLOW_DELAY_MS);
-  return {
-    response: deferPanel(interaction),
-    followUp: async () => {
-      const run = await runCloseFlow(pollId, context, wordings);
-      await finishPanel(context, interaction, run.notes.join("\n"));
-    },
-  };
+  const outcome = await closeVote(
+    { ...roundContext(interaction, context), wordings, store },
+    actorOf(interaction),
+    { pollId: numericArg(interaction) ?? 0 },
+  );
+  return answerPanel(interaction, context, outcome);
 }
 
 /** What one run of a poll's close flow came to. */
@@ -816,14 +798,15 @@ async function finishCloseFlows(
 }
 
 /** What posting the announcement came to. */
-type Posted = { ok: true; channelId: string } | { ok: false; reason: string };
+export type Posted =
+  { ok: true; channelId: string } | { ok: false; reason: string };
 
 /**
  * Posts the closed poll's announcement, made from `content`, in the
  * announcements channel and records its message id; on failure records
  * why, for the panel. The caller has claimed it with `claimAnnouncement`.
  */
-async function postAnnouncement(
+export async function postAnnouncement(
   { poll, round }: Pick<ClosedPoll, "poll" | "round">,
   wording: PollWording,
   content: AnnouncementContent,
@@ -868,61 +851,38 @@ function announceLabel(wording: Pick<PollWording, "name">): string {
 
 /**
  * Announce <vote>: posts the announcement of a poll of the last round again
- * after it failed or was cut off, made as the close flow made it. The claim
- * is taken before the answer, so a second click while the first is running
- * is told so, and a click after it was posted posts nothing.
+ * with `retryAnnouncement`, which claims it before the answer.
  */
-function retryAnnouncement(wordings: PollWordings): ComponentHandler {
-  return adminOnly((interaction, context) => {
-    const { storage } = context;
-    const pollId = numericArg(interaction);
-    const store = new PollStore(storage);
-    const poll = pollId === null ? null : store.getPoll(pollId);
-    const wording = poll && wordings[poll.kind];
-    const content = poll && announcementContent(storage, poll.id);
-    if (
-      !poll ||
-      !wording ||
-      !content ||
-      poll.roundId !== store.getLastRound()?.id
-    ) {
-      return adminPanelUpdate(
-        context,
-        "That vote is no longer in the last round, so its announcement is not posted from here.",
-      );
-    }
-    const now = store.now();
-    if (announcementStatus(storage, poll.id, now).state === "posted") {
-      return adminPanelUpdate(
-        context,
-        `The ${wording.name}'s announcement is already posted.`,
-      );
-    }
-    if (!claimAnnouncement(storage, poll.id, content, now)) {
-      return adminPanelUpdate(
-        context,
-        `The ${wording.name}'s announcement is being posted.`,
-      );
-    }
-    return {
-      response: deferPanel(interaction),
-      followUp: async () => {
-        const posted = await postAnnouncement(
-          { poll, round: store.getRound(poll.roundId) },
-          wording,
-          content,
-          context,
-        );
-        await finishPanel(
-          context,
-          interaction,
-          posted.ok
-            ? `The ${wording.name}'s result is announced in <#${posted.channelId}>.`
-            : posted.reason,
-        );
-      },
-    };
-  });
+function announceAgain(wordings: PollWordings): ComponentHandler {
+  return adminOnly((interaction, context) =>
+    answerPanel(
+      interaction,
+      context,
+      retryAnnouncement(
+        { ...roundContext(interaction, context), wordings },
+        actorOf(interaction),
+        { pollId: numericArg(interaction) ?? 0 },
+      ),
+    ),
+  );
+}
+
+/**
+ * Post vote message: posts the message of an open poll that has none with
+ * `postVoteMessage`, which claims it before the answer.
+ */
+function postMessage(wordings: PollWordings): ComponentHandler {
+  return adminOnly((interaction, context) =>
+    answerPanel(
+      interaction,
+      context,
+      postVoteMessage(
+        { ...roundContext(interaction, context), wordings },
+        actorOf(interaction),
+        { pollId: numericArg(interaction) ?? 0 },
+      ),
+    ),
+  );
 }
 
 /** Edits the poll message to its final state; a note if that failed. */
@@ -940,7 +900,14 @@ async function finalizePollMessage(
       discordApi(context.env).editMessage(
         channelId,
         messageId,
-        messageBody(renderPollMessage(poll, wording, round)),
+        messageBody(
+          renderPollMessage(
+            poll,
+            wording,
+            round,
+            context.env.DISCORD_APPLICATION_ID,
+          ),
+        ),
       ),
     );
     return null;
@@ -978,18 +945,17 @@ export function renderAnnouncement(
 
 /** Cancel round, first click: asks to confirm. */
 const askCancel: ComponentHandler = adminOnly((interaction, context) => {
-  const roundId = numericArg(interaction);
-  const round =
-    roundId === null ? null : new PollStore(context.storage).getRound(roundId);
-  if (!round || round.status === "complete" || round.status === "cancelled") {
-    return adminPanelUpdate(context, "That round has already ended.");
-  }
+  const check = cancelRoundCheck(
+    roundContext(interaction, context),
+    numericArg(interaction) ?? 0,
+  );
+  if (!check.ok) return adminPanelUpdate(context, check.message);
   return {
     response: update(
       renderConfirm(
         "**Cancel this round?** Any open vote closes without a result and its votes are discarded. You can start a new round afterwards.",
         button({
-          custom_id: POLL_IDS.cancelConfirm(round.id),
+          custom_id: POLL_IDS.cancelConfirm(check.round.id),
           label: "Cancel round",
           style: ButtonStyle.Danger,
         }),
@@ -999,58 +965,22 @@ const askCancel: ComponentHandler = adminOnly((interaction, context) => {
 });
 
 /**
- * Cancels the round through the poll core, then in the follow-up rewrites
- * the message of each poll that was open as cancelled, without buttons, and
- * redraws the panel.
+ * Cancel round, confirmed: cancels it with `cancelRound`, then in the
+ * follow-up rewrites the message of each poll that was open as cancelled
+ * and redraws the panel.
  */
-function cancelRound(wordings: PollWordings): ComponentHandler {
-  return adminOnly((interaction, context) => {
-    const roundId = numericArg(interaction);
-    const store = new PollStore(context.storage);
-    const before = roundId === null ? null : store.getRound(roundId);
-    if (roundId === null || !before) {
-      return adminPanelUpdate(context, "That round has already ended.");
-    }
-    const open = [before.locationPoll, before.datePoll].filter(
-      (poll): poll is PollView => poll?.status === "open",
-    );
-    try {
-      store.cancelRound(roundId, userIdOf(interaction));
-    } catch (error) {
-      if (isPollError(error)) {
-        return adminPanelUpdate(context, "That round has already ended.");
-      }
-      throw error;
-    }
-    return {
-      response: deferPanel(interaction),
-      followUp: async () => {
-        const notes = ["The round is cancelled."];
-        for (const { id } of open) {
-          const poll = store.getPoll(id);
-          const wording = poll && wordings[poll.kind];
-          if (!poll || !wording || !poll.channelId || !poll.messageId) continue;
-          const { channelId, messageId } = poll;
-          try {
-            await queuePollEdit(context.storage, () =>
-              discordApi(context.env).editMessage(
-                channelId,
-                messageId,
-                messageBody(
-                  renderPollMessage(poll, wording, store.getRound(roundId)),
-                ),
-              ),
-            );
-          } catch (error) {
-            notes.push(
-              `Could not mark the poll message in <#${channelId}> as cancelled: ${errorText(error)}.`,
-            );
-          }
-        }
-        await finishPanel(context, interaction, notes.join("\n"));
-      },
-    };
-  });
+function confirmCancel(wordings: PollWordings): ComponentHandler {
+  return adminOnly((interaction, context) =>
+    answerPanel(
+      interaction,
+      context,
+      cancelRound(
+        { ...roundContext(interaction, context), wordings },
+        actorOf(interaction),
+        { roundId: numericArg(interaction) ?? 0 },
+      ),
+    ),
+  );
 }
 
 // Shared helpers for panel follow-ups.
@@ -1066,6 +996,46 @@ export function deferPanel(
   return interaction.message === undefined
     ? deferredReply({ ephemeral: true })
     : deferredUpdate();
+}
+
+/**
+ * Answers a panel control with a round action's outcome (see
+ * `round-actions.ts`): a refusal is answered by `refused` (by default the
+ * panel redrawn with its sentence); a success defers, runs the action's
+ * `work` in the follow-up and redraws the panel with its notes.
+ */
+export function answerPanel(
+  interaction: APIMessageComponentInteraction | APIModalSubmitInteraction,
+  context: HandlerContext,
+  outcome:
+    | { ok: false; message: string }
+    | { ok: true; work: () => Promise<string[]> },
+  refused: (message: string) => HandlerResult = (message) =>
+    adminPanelUpdate(context, message),
+): HandlerResult {
+  if (!outcome.ok) return refused(outcome.message);
+  return {
+    response: deferPanel(interaction),
+    followUp: async () => {
+      const notes = await outcome.work();
+      await finishPanel(context, interaction, notes.join("\n"));
+    },
+  };
+}
+
+/** The round actions' context for an interaction in a guild. */
+export function roundContext(
+  interaction: APIMessageComponentInteraction | APIModalSubmitInteraction,
+  context: HandlerContext,
+): RoundContext {
+  return { ...context, guildId: interaction.guild_id ?? "" };
+}
+
+/** The id of the member who sent the interaction, the actor of an action. */
+export function actorOf(
+  interaction: APIMessageComponentInteraction | APIModalSubmitInteraction,
+): string {
+  return interaction.member?.user.id ?? interaction.user?.id ?? "";
 }
 
 /** Replaces the deferred panel with the status view and `notice`. */
@@ -1107,8 +1077,9 @@ export function registerPollUi(router: Router, wordings: PollWordings): Router {
     ),
   );
   router.component("hb:round:cancel", askCancel);
-  router.component("hb:round:cancel-confirm", cancelRound(wordings));
-  router.component("hb:poll:announce", retryAnnouncement(wordings));
+  router.component("hb:round:cancel-confirm", confirmCancel(wordings));
+  router.component("hb:poll:announce", announceAgain(wordings));
+  router.component("hb:poll:post", postMessage(wordings));
   router.job(REFRESH_JOB, (context) => refreshPollMessages(context, wordings));
   router.job(CLOSE_FLOW_JOB, (context) => finishCloseFlows(context, wordings));
   return router;

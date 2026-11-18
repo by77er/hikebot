@@ -1,8 +1,9 @@
 /**
  * The location vote: an admin starts it from the panel with optional
- * initial locations, members propose more while it runs (new ones in a
- * modal, or past ones again from a select), and the shared poll UI
- * (`poll-ui.ts`) does the voting, refreshing and closing.
+ * initial locations (`startLocationVote` in `round-actions.ts`), members
+ * propose more while it runs (new ones in a modal, or past ones again from
+ * a select), and the shared poll UI (`poll-ui.ts`) does the voting,
+ * refreshing and closing.
  */
 import {
   ButtonStyle,
@@ -14,7 +15,6 @@ import {
   type APIModalInteractionResponse,
   type APIModalSubmitInteraction,
 } from "discord-api-types/v10";
-import { discordApi } from "../discord/api";
 import {
   MAX_SELECT_OPTIONS,
   actionRow,
@@ -23,7 +23,6 @@ import {
   customId,
   ephemeralReply,
   label,
-  messageBody,
   modal,
   parseCustomId,
   stringSelect,
@@ -33,7 +32,6 @@ import {
   update,
 } from "../discord/components";
 import { ephemeralNotice } from "../discord/responses";
-import { setupComplete } from "../guild/config";
 import { adminOnly } from "../guild/permissions";
 import {
   UNAVAILABLE_MESSAGE,
@@ -59,23 +57,17 @@ import {
   type PollView,
   type RestingLocation,
 } from "../polls/store";
-import {
-  POLL_CONTROL_IDS,
-  adminPanelUpdate,
-  listing,
-  missingSettings,
-} from "./admin-panel";
+import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
 import {
   VOTE_CLOSED_MESSAGE,
-  deferPanel,
-  errorText,
-  finishPanel,
-  queuePollEdit,
-  renderPollMessage,
+  actorOf,
+  answerPanel,
+  roundContext,
   scheduleRefresh,
   shorten,
   type PollWording,
 } from "./poll-ui";
+import { locationVoteRefusal, startLocationVote } from "./round-actions";
 
 export const LOCATION_IDS = {
   start: POLL_CONTROL_IDS.startLocationVote,
@@ -165,172 +157,48 @@ export function restingRefusal(
   return `Nothing was started. Remove ${what} and try again:\n${refused.join("\n")}`;
 }
 
-function setupMissing(missing: string[]): string {
-  return `Set the ${listing(missing)} under Settings before starting a vote.`;
-}
-
 /** Start location vote: opens the modal for the initial locations. */
-const openStartModal: ComponentHandler = adminOnly(
-  (_interaction, context, settings) => {
-    if (!setupComplete(settings)) {
-      return adminPanelUpdate(context, setupMissing(missingSettings(settings)));
-    }
-    if (new PollStore(context.storage).getActiveRound() !== null) {
-      return adminPanelUpdate(context, "A round is already active.");
-    }
-    return {
-      response: modal(LOCATION_IDS.start, "Start location vote", [
-        label(
-          "Initial locations (one per line)",
-          textInput({
-            custom_id: LOCATION_IDS.initial,
-            style: TextInputStyle.Paragraph,
-            required: false,
-            max_length: 4000,
-            placeholder: "Leave empty to let members propose them",
-          }),
-          `Up to ${String(MAX_OPTIONS)}, each up to ${String(MAX_LABEL_LENGTH)} characters. Members can propose more.`,
-        ),
-      ]),
-    };
-  },
-);
-
-/**
- * After the poll message could not be posted: takes the round back with
- * `withdrawLocationRound` and returns the end of the panel note. If another
- * admin cancelled the round or closed the vote while the post was in
- * flight, nothing is taken back and the note says so.
- */
-function withdrawStarted(
-  store: PollStore,
-  started: PollView,
-  userId: string,
-): string {
-  try {
-    store.withdrawLocationRound(started.id, userId);
-    return "No round was started; check the bot's permissions in that channel and try again.";
-  } catch (error) {
-    if (!isPollError(error)) throw error;
-  }
-  if (store.getRound(started.roundId)?.status === "cancelled") {
-    return "The round had already been cancelled, so there was nothing to take back.";
-  }
-  const poll = store.getPoll(started.id);
-  const winner = poll?.options.find((o) => o.id === poll.winnerOptionId);
-  const won = winner === undefined ? "" : ` and **${winner.label}** won`;
-  return `The vote had already been closed${won}, so the round was kept.`;
-}
-
-/**
- * After the poll message was posted and recorded: if another admin
- * cancelled the round or closed the vote while the post was in flight,
- * edits the message to its cancelled or closed state, without buttons.
- * Returns the panel note.
- */
-async function retireIfOver(
-  context: HandlerContext,
-  store: PollStore,
-  pollId: number,
-  channelId: string,
-  messageId: string,
-): Promise<string> {
-  const poll = store.getPoll(pollId);
-  if (!poll || poll.status === "open") {
-    return `The location vote is open in <#${channelId}>.`;
-  }
-  const [why, shows] =
-    poll.winnerOptionId === null
-      ? ["the round had been cancelled", "cancelled"]
-      : ["the vote had been closed", "closed"];
-  const posted = `The location vote was posted in <#${channelId}>, but ${why} meanwhile`;
-  try {
-    await queuePollEdit(context.storage, () =>
-      discordApi(context.env).editMessage(
-        channelId,
-        messageId,
-        messageBody(
-          renderPollMessage(poll, LOCATION_POLL, store.getRound(poll.roundId)),
-        ),
+const openStartModal: ComponentHandler = adminOnly((_interaction, context) => {
+  const refusal = locationVoteRefusal(context);
+  if (refusal !== null) return adminPanelUpdate(context, refusal.message);
+  return {
+    response: modal(LOCATION_IDS.start, "Start location vote", [
+      label(
+        "Initial locations (one per line)",
+        textInput({
+          custom_id: LOCATION_IDS.initial,
+          style: TextInputStyle.Paragraph,
+          required: false,
+          max_length: 4000,
+          placeholder: "Leave empty to let members propose them",
+        }),
+        `Up to ${String(MAX_OPTIONS)}, each up to ${String(MAX_LABEL_LENGTH)} characters. Members can propose more.`,
       ),
-    );
-    return `${posted}, so the message now shows it as ${shows}.`;
-  } catch (error) {
-    return `${posted}, and the message could not be marked as ${shows}: ${errorText(error)}.`;
-  }
-}
+    ]),
+  };
+});
 
 /**
- * The start modal: starts the round with the initial locations, then in
- * the follow-up posts the poll message in the voting channel and records
- * it. If Discord refuses the post, the round is taken back and the panel
- * says which channel and why. If another admin cancelled the round or
- * closed the vote while the post was in flight, nothing is taken back, and
- * a message posted meanwhile is edited to show the vote is over.
+ * The start modal: starts the round with `startLocationVote` on the typed
+ * lines, then in the follow-up posts the poll message and redraws the
+ * panel. A refusal is answered ephemerally.
  */
-const startLocationVote: ModalHandler = adminOnly(
-  (interaction: APIModalSubmitInteraction, context, settings) => {
-    const parsed = parseInitialLocations(
-      textInputValue(interaction.data, LOCATION_IDS.initial) ?? "",
-    );
-    if (!parsed.ok) return { response: ephemeralNotice(parsed.error) };
-    const channelId = settings.voteChannelId;
-    if (!setupComplete(settings) || channelId === null) {
-      return {
-        response: ephemeralNotice(setupMissing(missingSettings(settings))),
-      };
-    }
-    const userId = interaction.member?.user.id ?? "";
-    const store = new PollStore(context.storage);
-    const resting = restingRefusal(parsed.labels, store.restingLocations());
-    if (resting !== null) return { response: ephemeralNotice(resting) };
-    let poll: PollView | null;
-    try {
-      poll = store.startRound(
-        userId,
-        parsed.labels.map((labelText) => ({
-          label: labelText,
-          proposedBy: userId,
-        })),
-      ).locationPoll;
-    } catch (error) {
-      if (isPollError(error, "round_active")) {
-        return { response: ephemeralNotice("A round is already active.") };
-      }
-      if (isPollError(error)) {
-        return { response: ephemeralNotice(error.message) };
-      }
-      throw error;
-    }
-    if (poll === null) throw new Error("startRound returned no location poll");
-    const started = poll;
-    return {
-      response: deferPanel(interaction),
-      followUp: async () => {
-        let messageId: string;
-        try {
-          const message = await discordApi(context.env).createMessage(
-            channelId,
-            messageBody(renderPollMessage(started, LOCATION_POLL)),
-          );
-          messageId = message.id;
-        } catch (error) {
-          await finishPanel(
-            context,
-            interaction,
-            `Could not post the location vote in <#${channelId}>: ${errorText(error)}. ${withdrawStarted(store, started, userId)}`,
-          );
-          return;
-        }
-        store.setPollMessage(started.id, channelId, messageId);
-        await finishPanel(
-          context,
-          interaction,
-          await retireIfOver(context, store, started.id, channelId, messageId),
-        );
-      },
-    };
-  },
+const submitStart: ModalHandler = adminOnly(
+  (interaction: APIModalSubmitInteraction, context) =>
+    answerPanel(
+      interaction,
+      context,
+      startLocationVote(
+        roundContext(interaction, context),
+        actorOf(interaction),
+        {
+          labels: (
+            textInputValue(interaction.data, LOCATION_IDS.initial) ?? ""
+          ).split(/\r?\n/),
+        },
+      ),
+      (message) => ({ response: ephemeralNotice(message) }),
+    ),
 );
 
 function pollIdArg(customIdValue: string): number | null {
@@ -576,7 +444,7 @@ const saveProposal: ModalHandler = async (interaction, context) => {
 /** Registers the location vote's start and propose controls. */
 export function registerLocationVote(router: Router): Router {
   router.component(LOCATION_IDS.start, openStartModal);
-  router.modal(LOCATION_IDS.start, startLocationVote);
+  router.modal(LOCATION_IDS.start, submitStart);
   router.component("hb:location:propose", openPropose);
   router.component("hb:location:new", openProposeModal);
   router.component("hb:location:again", pickPastLocation);

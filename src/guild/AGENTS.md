@@ -101,7 +101,10 @@ The examples use a feature named `trail`; replace it with your feature's name
    `loadAdminPanelState`). Keep the status view within 40 components and
    4000 characters.
 2. Write the handler in `src/features/<feature>.ts` and wrap it in
-   `adminOnly`, so non-admins who replay the `custom_id` are refused. Answer
+   `adminOnly`, so non-admins who replay the `custom_id` are refused. When
+   the button acts on the round, put the action in a round action and have
+   the handler call it, as "Add a round action" in `src/features/AGENTS.md`
+   says. Answer
    with `adminPanelUpdate(context, "<what happened>")` to redraw the status
    view in place:
 
@@ -193,8 +196,9 @@ take longer than Discord's 3-second window.
    transaction as the change, schedule a job a little later as "Add a
    scheduled job" says, and have the follow-up and the job run the same
    function, which takes no interaction and does only the parts still
-   recorded, as `closePoll`, `runCloseFlow` and the `poll:close-flow` job in
-   `src/features/poll-ui.ts` do.
+   recorded, as `closeVote` in `src/features/round-actions.ts` and
+   `runCloseFlow` and the `poll:close-flow` job in `src/features/poll-ui.ts`
+   do.
 2. Return a deferred response and a `followUp` function that finishes the
    work and replaces the deferred response. From a component, return
    `deferredUpdate()` in place of `deferredReply(...)`:

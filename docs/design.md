@@ -291,6 +291,46 @@ registered for is logged and dropped. The alarm handler does not throw for
 either, so the platform's automatic alarm retry never runs a job that
 succeeded a second time. A job that wants another go schedules itself again.
 
+## Round actions
+
+Everything done to a round (start the location vote, close a vote, start
+and withdraw the date vote, cancel the round, post a vote message that was
+never posted, and the panel's retries: create the hike thread, create the
+hike event, post an announcement) is one function in
+`src/features/round-actions.ts`. Three kinds of caller share them: the
+admin panel's Discord handlers, the web pages, and the bot acting on its own
+schedule. None of the functions takes an interaction, so each rule and each
+sentence an admin sees lives in one place.
+
+An action is `action(context, actor, input)`. `context` is a `RoundContext`:
+the object's `env` and `storage` and the guild's id (plus, for tests, the
+store and the poll kinds' wordings to use). `actor` is the user id recorded
+in the `*_by` columns; when the bot acts by itself it is the application's
+own id (`DISCORD_APPLICATION_ID`), so those columns always hold a snowflake,
+and a message that names who did something (the "Proposed by" line of the
+poll message and of the hike thread) names that id "hikebot" rather than
+mentioning it. An action returns an `ActionOutcome`: either a refusal,
+`{ ok: false, code, message }`, whose `message` is the sentence the panel
+shows, or a success with what changed and `work: () => Promise<string[]>`.
+The stored change, and the claim on anything Discord will create, are made
+before the action returns; `work` does the Discord calls that follow (posting
+the poll message, the close flow, the retries) and resolves to the panel's
+notes.
+
+The actions do not check who the actor is. The caller does: every Discord
+handler goes through `adminOnly` (see "Admin permission"), the web pages
+check in their own way, and the bot's schedule needs no check. A handler
+parses the interaction (the id in the `custom_id`, the modal's fields),
+calls the action with `roundContext(interaction, context)` and
+`actorOf(interaction)`, and answers with `answerPanel`
+(`src/features/poll-ui.ts`): a refusal redraws the panel with its sentence
+(a modal's refusal is an ephemeral notice), and a success is a deferred
+update whose follow-up awaits `work` and redraws the panel with the notes.
+Any other caller awaits `work` itself. Where the panel asks before it acts
+(the confirmation of Close and Cancel round, the start modals), the handler
+asks the same check the action makes (`closeVoteCheck`, `cancelRoundCheck`,
+`locationVoteRefusal`, `dateVoteRefusal`) before it shows the question.
+
 ## Talking to Discord
 
 Handlers and follow-ups call Discord's REST API only through `DiscordApi`
@@ -603,7 +643,12 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   that is being posted, failed or is not confirmed has a line, and one that
   failed or is not confirmed gets **Announce location vote** or **Announce
   date vote** (`hb:poll:announce:<poll id>`), after the other poll controls
-  and before Cancel round; see "Closing".
+  and before Cancel round; see "Closing". While the open vote has no
+  recorded message (see "Vote message"), its line says where that stands
+  ("its message is being posted", "has not been posted" with the reason of
+  a failed attempt, or "not confirmed" when a post was cut off) and, unless
+  a post is under way, the panel offers **Post vote message**
+  (`hb:poll:post:<poll id>`) before the Close button.
 - **Confirmation view**: Close and Cancel round first replace the status view
   with a question and a confirm button (`hb:poll:close-confirm:<poll id>`,
   `hb:round:cancel-confirm:<round id>`) next to Back; only the confirm button
@@ -820,7 +865,8 @@ to `registerPollUi`.
 One Components V2 container: the heading and one line of instructions, then
 one Text Display per option, each with its vote count, its details and, for
 the location vote, "Proposed by" and the proposer's mention (which pings no
-one). Location options are listed most votes first, ties in the order they
+one), or "hikebot" for a location the bot entered itself (see "Round
+actions"). Location options are listed most votes first, ties in the order they
 were added (`rankOptions` in `src/polls/tally.ts`); date options in
 chronological order whatever their votes (`chronological`). The location
 vote's heading is "Where should we hike?", the date vote's "When should we
@@ -925,7 +971,8 @@ ephemeral message naming the line or the count, and nothing starts. A line
 holding a resting location (see "Past locations and the cooldown") is
 refused the same way, naming each such location with its cooldown message.
 Otherwise
-the handler starts the round through `startRound` (recording the admin as
+the handler starts the round with the round action `startLocationVote`
+(see "Round actions"), which calls `startRound` (recording the admin as
 proposer of the initial locations) and answers with a deferred update of the
 panel. The follow-up posts the poll message in the voting channel, records it
 with `setPollMessage` and redraws the panel. If Discord refuses the post, the
@@ -946,6 +993,29 @@ what they did:
   buttons, and the panel says the round had been cancelled, or the vote
   closed, meanwhile. The close flow's announcement has no link to the vote,
   since no message was recorded when it ran.
+
+### Vote message
+
+A start action posts its poll's message in its `work`, after the round or
+poll is stored. If that work is lost (the object restarted between the
+answer and the post) or cut off half-way, the vote is open with no recorded
+message, and **Post vote message** (`postVoteMessage`) posts it in the
+voting channel and records it. Each post, the start's and the button's, is
+first claimed under `vote-message:<poll id>` in the object's key-value
+storage (`src/features/vote-message-state.ts`), in the same synchronous
+step that checks no message is recorded and no post that may still finish
+is under way, so pressing the button twice, from two panels, or while the
+start's own post runs, creates one message: the second press is told "The
+location vote's message is being posted.", and a press after the message
+was recorded "The location vote's message is already posted in
+<#channel>.". A claim made by an earlier instance of the object, or more
+than a minute ago (`VOTE_MESSAGE_CLAIM_MS`), was cut off: Discord may or may
+not have the message, so the panel says it is not confirmed and asks the
+admin to check the voting channel before pressing. A post from the button
+that Discord refuses keeps the vote open and shows the reason on the panel
+with the button; the start's own refused post takes the vote back as
+described above. A message posted after the round was cancelled or the vote
+closed is edited to that state, as for the start.
 
 ## Starting the date vote
 
@@ -970,8 +1040,9 @@ lines, then a count of the rest; a past date with "today is <day> in
 <zone>"), the count problem if any, and the accepted formats with examples
 and the 11:00 default.
 
-Valid dates open the date poll through `startDatePoll`, which stores the
-options in date order, and the handler answers with a deferred update of the
+Valid dates open the date poll with the round action `startDateVote`,
+through `startDatePoll`, which stores the options in date order (a caller
+that gives no dates gets the modal's prefilled dates, `defaultDates`), and the handler answers with a deferred update of the
 panel. The follow-up posts the poll message in the voting channel, records it
 with `setPollMessage` and redraws the panel. If Discord refuses the post, the
 follow-up takes the poll back with `withdrawDatePoll`, so the round stays
@@ -989,7 +1060,8 @@ show final results, and a message is posted in the configured announcements
 channel. Closing the date vote also creates a thread with the hike details in
 the configured forum channel and a Discord scheduled event for the hike.
 
-The confirm button closes the poll through `closePoll` before answering, so
+The confirm button closes the poll with the round action `closeVote`, which
+calls the poll core's `closePoll`, before answering, so
 the result stands whatever Discord does next, and answers with a deferred
 update of the panel. Closing a poll without options is refused in the panel
 with an explanation, at the first click and at the confirmation. In the same
@@ -1037,7 +1109,8 @@ announcement:** not posted. Could not post the announcement in <#channel>:
 with **Announce date vote** (or **Announce location vote**,
 `hb:poll:announce:<poll id>`); see "Durable close" below.
 
-**Cancel round**, confirmed, cancels the round through `cancelRound` and
+**Cancel round**, confirmed, cancels the round with the round action
+`cancelRound`, through the poll core's `cancelRound`, and
 answers with a deferred update; the follow-up rewrites the message of each
 poll that was open as cancelled, without buttons, and redraws the panel,
 which offers **Start location vote** again. A failed rewrite is named in the
@@ -1045,7 +1118,7 @@ panel. No announcement is posted.
 
 Every admin control (the start buttons and modals of both votes, close,
 cancel and their confirmations, Create hike thread, Create hike event,
-Announce, Set time zone and its modal) is registered through
+Announce, Post vote message, Set time zone and its modal) is registered through
 `adminOnly`, so a member who replays its `custom_id` is refused.
 
 ### Durable close

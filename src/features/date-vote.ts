@@ -1,7 +1,8 @@
 /**
  * The date vote: once the location is decided, an admin starts it from the
- * panel with the candidate dates, prefilled with the Saturdays and Sundays
- * of the next two weekends at the default time. While it runs, members
+ * panel (`startDateVote` in `round-actions.ts`) with the candidate dates,
+ * prefilled with the Saturdays and Sundays of the next two weekends at the
+ * default time. While it runs, members
  * propose more dates with **Propose a date**, from today to
  * `MAX_PROPOSAL_DAYS_AHEAD` days ahead in the guild's time zone. The shared
  * poll UI (`poll-ui.ts`) does the voting, refreshing and closing.
@@ -12,19 +13,17 @@ import {
   type APIInteractionResponse,
   type APIModalSubmitInteraction,
 } from "discord-api-types/v10";
-import { discordApi } from "../discord/api";
 import {
   button,
   customId,
   label,
-  messageBody,
   modal,
   parseCustomId,
   textInput,
   textInputValue,
 } from "../discord/components";
 import { ephemeralNotice } from "../discord/responses";
-import { GuildConfig, setupComplete } from "../guild/config";
+import { GuildConfig } from "../guild/config";
 import { adminOnly } from "../guild/permissions";
 import {
   UNAVAILABLE_MESSAGE,
@@ -45,26 +44,20 @@ import {
   MAX_OPTIONS,
   MIN_DATE_OPTIONS,
   PollStore,
-  type PollView,
   type RoundView,
 } from "../polls/store";
-import {
-  POLL_CONTROL_IDS,
-  adminPanelUpdate,
-  listing,
-  missingSettings,
-} from "./admin-panel";
+import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
 import { createHikeEventStep } from "./hike-event";
 import { createHikeThreadStep, whenLine } from "./hike-thread";
 import {
   VOTE_CLOSED_MESSAGE,
-  deferPanel,
-  errorText,
-  finishPanel,
-  renderPollMessage,
+  actorOf,
+  answerPanel,
+  roundContext,
   scheduleRefresh,
   type PollWording,
 } from "./poll-ui";
+import { dateVoteRefusal, startDateVote } from "./round-actions";
 
 export const DATE_IDS = {
   start: POLL_CONTROL_IDS.startDateVote,
@@ -197,12 +190,6 @@ function quoted(line: string): string {
   return plain.length <= 40 ? plain : `${plain.slice(0, 39)}…`;
 }
 
-function setupMissing(missing: string[]): string {
-  return `Set the ${listing(missing)} under Settings before starting a vote.`;
-}
-
-const NOT_DECIDED = "The date vote starts once the location is decided.";
-
 /**
  * The Start date vote modal, its field prefilled with the default
  * candidates for `today` (`YYYY-MM-DD`), one per line.
@@ -226,87 +213,35 @@ export function startModal(today: string): APIInteractionResponse {
 
 /**
  * Start date vote: opens the modal for the candidate dates, prefilled with
- * the next two weekends after today in the guild's time zone.
+ * the next two weekends after today in the guild's time zone, the dates
+ * `startDateVote` starts on when none are given.
  */
 const openStartModal: ComponentHandler = adminOnly(
   (_interaction, context, settings) => {
-    if (!setupComplete(settings)) {
-      return adminPanelUpdate(context, setupMissing(missingSettings(settings)));
-    }
-    const store = new PollStore(context.storage);
-    if (store.getActiveRound()?.status !== "location_decided") {
-      return adminPanelUpdate(context, NOT_DECIDED);
-    }
-    return { response: startModal(todayIn(settings.timezone, store.now())) };
+    const refusal = dateVoteRefusal(context);
+    if (refusal !== null) return adminPanelUpdate(context, refusal.message);
+    const now = new PollStore(context.storage).now();
+    return { response: startModal(todayIn(settings.timezone, now)) };
   },
 );
 
 /**
- * The start modal: checks the dates, opens the date poll, then in the
- * follow-up posts the poll message in the voting channel and records it.
- * If Discord refuses the post, the poll is withdrawn, so the round is back
- * at `location_decided`, and the panel says which channel and why.
+ * The start modal: opens the date poll with `startDateVote` on the typed
+ * lines, then in the follow-up posts the poll message and redraws the
+ * panel. A refusal is answered ephemerally.
  */
-const startDateVote: ModalHandler = adminOnly(
-  (interaction: APIModalSubmitInteraction, context, settings) => {
-    const store = new PollStore(context.storage);
-    const parsed = parseCandidateDates(
-      textInputValue(interaction.data, DATE_IDS.dates) ?? "",
-      store.now(),
-      settings.timezone,
-    );
-    if (!parsed.ok) return { response: ephemeralNotice(parsed.error) };
-    const channelId = settings.voteChannelId;
-    if (!setupComplete(settings) || channelId === null) {
-      return {
-        response: ephemeralNotice(setupMissing(missingSettings(settings))),
-      };
-    }
-    const round = store.getActiveRound();
-    if (round?.status !== "location_decided") {
-      return { response: ephemeralNotice(NOT_DECIDED) };
-    }
-    const userId = interaction.member?.user.id ?? "";
-    let poll: PollView;
-    try {
-      poll = store.startDatePoll(round.id, userId, parsed.dates);
-    } catch (error) {
-      if (isPollError(error)) {
-        return { response: ephemeralNotice(error.message) };
-      }
-      throw error;
-    }
-    const started = poll;
-    return {
-      response: deferPanel(interaction),
-      followUp: async () => {
-        let notice: string;
-        try {
-          const message = await discordApi(context.env).createMessage(
-            channelId,
-            messageBody(
-              renderPollMessage(
-                started,
-                DATE_POLL,
-                store.getRound(started.roundId),
-              ),
-            ),
-          );
-          store.setPollMessage(started.id, channelId, message.id);
-          notice = `The date vote is open in <#${channelId}>.`;
-        } catch (error) {
-          try {
-            store.withdrawDatePoll(started.id);
-          } catch (withdrawError) {
-            // Cancelled in the meantime: there is nothing to take back.
-            if (!isPollError(withdrawError)) throw withdrawError;
-          }
-          notice = `Could not post the date vote in <#${channelId}>: ${errorText(error)}. The date vote was not started; check the bot's permissions in that channel and try again.`;
-        }
-        await finishPanel(context, interaction, notice);
-      },
-    };
-  },
+const submitStart: ModalHandler = adminOnly(
+  (interaction: APIModalSubmitInteraction, context) =>
+    answerPanel(
+      interaction,
+      context,
+      startDateVote(roundContext(interaction, context), actorOf(interaction), {
+        dates: (textInputValue(interaction.data, DATE_IDS.dates) ?? "").split(
+          /\r?\n/,
+        ),
+      }),
+      (message) => ({ response: ephemeralNotice(message) }),
+    ),
 );
 
 const FULL = `This vote already has ${String(MAX_OPTIONS)} dates, the most it can hold. Vote for one of them instead.`;
@@ -413,7 +348,7 @@ const saveDateProposal: ModalHandler = async (interaction, context) => {
 /** Registers the date vote's start and propose controls. */
 export function registerDateVote(router: Router): Router {
   router.component(DATE_IDS.start, openStartModal);
-  router.modal(DATE_IDS.start, startDateVote);
+  router.modal(DATE_IDS.start, submitStart);
   router.component("hb:date:propose", openPropose);
   router.modal("hb:date:propose", saveDateProposal);
   return router;

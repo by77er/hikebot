@@ -2,19 +2,14 @@ import type { HandlerContext, Router } from "../guild/router";
 import { runDueJobs } from "../guild/schedule";
 import { PollStore } from "../polls/store";
 import { registerAdminPanel } from "./admin-panel";
-import { DATE_POLL, registerDateVote } from "./date-vote";
+import { registerDateVote } from "./date-vote";
 import { hikeCommand } from "./hike";
 import { registerHikeEvent } from "./hike-event";
 import { registerHikeLog } from "./hike-log";
 import { registerHikeThread } from "./hike-thread";
-import { LOCATION_POLL, registerLocationVote } from "./location-vote";
-import { registerPollUi, type PollWordings } from "./poll-ui";
-
-/** The poll kinds the shared poll controls serve. */
-const POLL_KINDS: PollWordings = {
-  location: LOCATION_POLL,
-  date: DATE_POLL,
-};
+import { registerLocationVote } from "./location-vote";
+import { registerPollUi } from "./poll-ui";
+import { pollWordings } from "./round-actions";
 
 /**
  * Registers every feature's handlers. A feature keeps its handlers in its own
@@ -31,7 +26,7 @@ const POLL_KINDS: PollWordings = {
 export function registerFeatures(router: Router): Router {
   router.command("hike", hikeCommand);
   registerAdminPanel(router);
-  registerPollUi(router, POLL_KINDS);
+  registerPollUi(router, pollWordings());
   registerLocationVote(router);
   registerDateVote(router);
   registerHikeThread(router);
