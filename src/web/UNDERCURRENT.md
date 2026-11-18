@@ -273,3 +273,58 @@ if grep -HnE "(from|import\()[[:space:]]*[\"'][./]*(polls/store|guild/(config|sc
   exit 1
 fi
 ```
+
+## Pages show no emoji
+only: *.tsx
+
+Emoji render differently on every device (and not at all on some), read
+out inconsistently in screen readers, and clash with Cairn's quiet look
+("Visual direction" in `docs/design-system.md`). Say it in words, and use
+an icon from `src/web/components/icons.tsx` where a picture helps, as
+"Add an icon" in `src/web/AGENTS.md` says.
+
+```tsx good
+<p class="cluster">
+  <MountainIcon /> Mailbox Peak won the vote.
+</p>
+```
+
+```tsx bad
+<p>🏔️ Mailbox Peak won the vote! 🎉</p>
+```
+
+```sh
+perl -CSD -ne '
+  if (/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}\x{1F1E6}-\x{1F1FF}]/) {
+    print "$ARGV:$.: an emoji; say it in words, or use an icon from src/web/components/icons.tsx (\"Add an icon\" in src/web/AGENTS.md)\n";
+    $bad = 1;
+  }
+  END { exit($bad ? 1 : 0) }
+' "$FILE"
+```
+
+## Icons are Cairn icons
+only: *.tsx
+
+Every icon is drawn by `Icon` in `src/web/components/icon.tsx`, on one
+24-unit grid with one stroke, in the text colour, hidden from screen
+readers unless labelled. An `<svg>` written in a page or another component
+breaks that consistency and usually its accessibility. Add the shape to
+`src/web/components/icons.tsx` as "Add an icon" in `src/web/AGENTS.md`
+says, and use the icon component.
+
+```tsx good
+<Button variant="primary" icon={VoteIcon}>Vote</Button>
+```
+
+```tsx bad
+<button>
+  <svg viewBox="0 0 16 16" fill="#1f5d45"><path d="M2 8l4 4 8-8" /></svg>
+  Vote
+</button>
+```
+
+```sh
+case "$FILE" in ./components/icon.tsx) exit 0 ;; esac
+! grep -Hn "<svg\b" "$FILE" | sed 's/$/: an <svg> outside Icon; add the shape to src\/web\/components\/icons.tsx ("Add an icon" in src\/web\/AGENTS.md)/' | grep .
+```
