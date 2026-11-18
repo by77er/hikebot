@@ -1,0 +1,20 @@
+/*
+ * Icon: a stroke icon on a 24-unit grid, drawn in the text colour around
+ * it. Two sizes: 20px next to body text and 16px next to small text.
+ */
+
+.icon {
+  flex: none;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon--small {
+  width: var(--icon-size-small);
+  height: var(--icon-size-small);
+}

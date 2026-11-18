@@ -20,6 +20,11 @@
     "directory": "./public",
     "binding": "ASSETS",
   },
+  // The deployed version's id names the versioned asset paths
+  // (/assets/v/<id>/...), so every deploy gets new, long-cacheable URLs.
+  "version_metadata": {
+    "binding": "CF_VERSION_METADATA",
+  },
   "durable_objects": {
     "bindings": [
       {

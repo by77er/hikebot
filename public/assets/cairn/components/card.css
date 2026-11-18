@@ -1,0 +1,96 @@
+/*
+ * Card: one thing (a hike, a location, a setting) on a surface of its own.
+ * A card with a link in its title is a link as a whole: the title's link
+ * stretches over the card, which then has hover, active and focus states.
+ */
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-card);
+  color: var(--color-text);
+}
+
+.card__title {
+  font-size: var(--font-size-h3);
+  line-height: var(--line-height-h3);
+  font-weight: var(--font-weight-bold);
+}
+
+.card__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.card__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-card);
+}
+
+.card__link:focus-visible {
+  outline: none;
+}
+
+.card__link:focus-visible::after,
+.card__link[data-preview="focus"]::after {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+.card__link[data-preview="focus"] {
+  outline: none;
+}
+
+.card--link {
+  transition-property: border-color, background-color;
+  transition-duration: var(--duration-quick);
+  transition-timing-function: var(--easing-standard);
+}
+
+.card--link:where(:hover, [data-preview="hover"]) {
+  border-color: var(--color-border-strong);
+}
+
+.card--link:where(:hover, [data-preview="hover"]) .card__link {
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--border-width-strong);
+  text-underline-offset: var(--underline-offset);
+}
+
+.card--link:where(:active, [data-preview="active"]) {
+  background: var(--color-surface-subtle);
+}
+
+.card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block-start: auto;
+  padding-block-start: var(--space-3);
+  border-block-start: var(--border-width) solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+/* Controls in the footer sit above the stretched link. */
+.card__footer :where(a, button) {
+  position: relative;
+  z-index: 1;
+}

@@ -1,0 +1,489 @@
+/*
+ * The style guide page (/styleguide): swatches, samples and specimens that
+ * show each token by name. A swatch or sample names its token in a data
+ * attribute, and the rules below paint it; a new colour token gets a line
+ * in each list ("Add a token" in src/web/AGENTS.md).
+ */
+
+.styleguide-index ol {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--width-index)), 1fr)
+  );
+  gap: 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.styleguide-index li + li {
+  margin: 0;
+}
+
+.styleguide-index a {
+  display: flex;
+  align-items: center;
+  min-height: var(--target-min);
+}
+
+.styleguide-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-block-start: var(--space-6);
+  border-block-start: var(--border-width) solid var(--color-border);
+}
+
+.styleguide-swatches {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--width-swatch)), 1fr)
+  );
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.styleguide-swatches li + li {
+  margin: 0;
+}
+
+.styleguide-swatch {
+  display: grid;
+  grid-template-columns: var(--target-min) 1fr;
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.styleguide-swatch .styleguide-sample {
+  grid-row: span 2;
+  height: var(--target-min);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.styleguide-swatch code {
+  background: none;
+  padding: 0;
+  font-size: var(--font-size-small);
+}
+
+.styleguide-table th,
+.styleguide-table td {
+  vertical-align: middle;
+}
+
+.styleguide-sample--text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--space-8);
+  min-height: var(--target-min);
+  padding-inline: var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-control);
+  font-weight: var(--font-weight-semibold);
+}
+
+.styleguide-sample--non-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--space-8);
+  min-height: var(--target-min);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.styleguide-sample--non-text::after {
+  content: "";
+  width: var(--space-6);
+  height: var(--space-5);
+  border: var(--focus-width) solid currentColor;
+  border-radius: var(--radius-blaze);
+}
+
+.styleguide-pass {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+.styleguide-type {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: 0;
+  list-style: none;
+}
+
+.styleguide-type li + li {
+  margin: 0;
+}
+
+.styleguide-type__meta {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.styleguide-type__sample {
+  display: block;
+  max-width: var(--measure);
+}
+
+.styleguide-type__sample[data-type="small"] {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+.styleguide-type__sample[data-type="body"] {
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+.styleguide-type__sample[data-type="lead"] {
+  font-size: var(--font-size-lead);
+  line-height: var(--line-height-lead);
+}
+.styleguide-type__sample[data-type="h3"] {
+  font-size: var(--font-size-h3);
+  line-height: var(--line-height-h3);
+  font-weight: var(--font-weight-bold);
+}
+.styleguide-type__sample[data-type="h2"] {
+  font-size: var(--font-size-h2);
+  line-height: var(--line-height-h2);
+  font-weight: var(--font-weight-bold);
+}
+.styleguide-type__sample[data-type="h1"] {
+  font-size: var(--font-size-h1);
+  line-height: var(--line-height-h1);
+  font-weight: var(--font-weight-bold);
+}
+.styleguide-type__sample[data-weight="regular"] {
+  font-weight: var(--font-weight-regular);
+}
+.styleguide-type__sample[data-weight="semibold"] {
+  font-weight: var(--font-weight-semibold);
+}
+.styleguide-type__sample[data-weight="bold"] {
+  font-weight: var(--font-weight-bold);
+}
+
+.styleguide-glyphs {
+  font-size: var(--font-size-h1);
+  line-height: var(--line-height-h1);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--letter-spacing-wide);
+}
+
+.styleguide-scale {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.styleguide-scale li {
+  display: grid;
+  grid-template-columns: var(--width-scale-label) 1fr;
+  gap: var(--space-3);
+  align-items: center;
+  margin: 0;
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.styleguide-bar {
+  height: var(--space-4);
+  background: var(--color-primary);
+  border-radius: var(--radius-blaze);
+}
+
+.styleguide-bar[data-space="1"] {
+  width: var(--space-1);
+}
+.styleguide-bar[data-space="2"] {
+  width: var(--space-2);
+}
+.styleguide-bar[data-space="3"] {
+  width: var(--space-3);
+}
+.styleguide-bar[data-space="4"] {
+  width: var(--space-4);
+}
+.styleguide-bar[data-space="5"] {
+  width: var(--space-5);
+}
+.styleguide-bar[data-space="6"] {
+  width: var(--space-6);
+}
+.styleguide-bar[data-space="7"] {
+  width: var(--space-7);
+}
+.styleguide-bar[data-space="8"] {
+  width: var(--space-8);
+}
+
+.styleguide-shapes {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--width-shape)), 1fr)
+  );
+  gap: var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.styleguide-shapes li + li {
+  margin: 0;
+}
+
+.styleguide-shape {
+  display: flex;
+  align-items: flex-end;
+  min-height: var(--space-8);
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: var(--border-width-strong) solid var(--color-border-strong);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.styleguide-shape[data-radius="control"] {
+  border-radius: var(--radius-control);
+}
+.styleguide-shape[data-radius="card"] {
+  border-radius: var(--radius-card);
+}
+.styleguide-shape[data-radius="pill"] {
+  border-radius: var(--radius-pill);
+}
+.styleguide-shape[data-radius="blaze"] {
+  border-radius: var(--radius-blaze);
+}
+.styleguide-shape[data-elevation="overlay"] {
+  border-color: var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-raised);
+  box-shadow: var(--elevation-overlay);
+}
+
+.styleguide-states {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--width-state)), 1fr)
+  );
+  gap: var(--space-4) var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.styleguide-states li {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2);
+}
+
+.styleguide-states__label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.styleguide-icons {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--width-shape)), 1fr)
+  );
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.styleguide-icons li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+/* Each colour token as a background, then as a foreground, one per line. */
+.styleguide-sample[data-bg="color-bg"] {
+  background: var(--color-bg);
+}
+.styleguide-sample[data-bg="color-surface"] {
+  background: var(--color-surface);
+}
+.styleguide-sample[data-bg="color-surface-raised"] {
+  background: var(--color-surface-raised);
+}
+.styleguide-sample[data-bg="color-surface-subtle"] {
+  background: var(--color-surface-subtle);
+}
+.styleguide-sample[data-bg="color-text"] {
+  background: var(--color-text);
+}
+.styleguide-sample[data-bg="color-text-muted"] {
+  background: var(--color-text-muted);
+}
+.styleguide-sample[data-bg="color-border"] {
+  background: var(--color-border);
+}
+.styleguide-sample[data-bg="color-border-strong"] {
+  background: var(--color-border-strong);
+}
+.styleguide-sample[data-bg="color-primary"] {
+  background: var(--color-primary);
+}
+.styleguide-sample[data-bg="color-primary-hover"] {
+  background: var(--color-primary-hover);
+}
+.styleguide-sample[data-bg="color-primary-active"] {
+  background: var(--color-primary-active);
+}
+.styleguide-sample[data-bg="color-on-primary"] {
+  background: var(--color-on-primary);
+}
+.styleguide-sample[data-bg="color-accent"] {
+  background: var(--color-accent);
+}
+.styleguide-sample[data-bg="color-link"] {
+  background: var(--color-link);
+}
+.styleguide-sample[data-bg="color-info"] {
+  background: var(--color-info);
+}
+.styleguide-sample[data-bg="color-info-subtle"] {
+  background: var(--color-info-subtle);
+}
+.styleguide-sample[data-bg="color-success"] {
+  background: var(--color-success);
+}
+.styleguide-sample[data-bg="color-success-subtle"] {
+  background: var(--color-success-subtle);
+}
+.styleguide-sample[data-bg="color-warning"] {
+  background: var(--color-warning);
+}
+.styleguide-sample[data-bg="color-warning-subtle"] {
+  background: var(--color-warning-subtle);
+}
+.styleguide-sample[data-bg="color-danger"] {
+  background: var(--color-danger);
+}
+.styleguide-sample[data-bg="color-danger-hover"] {
+  background: var(--color-danger-hover);
+}
+.styleguide-sample[data-bg="color-danger-active"] {
+  background: var(--color-danger-active);
+}
+.styleguide-sample[data-bg="color-on-danger"] {
+  background: var(--color-on-danger);
+}
+.styleguide-sample[data-bg="color-danger-subtle"] {
+  background: var(--color-danger-subtle);
+}
+.styleguide-sample[data-bg="color-focus"] {
+  background: var(--color-focus);
+}
+.styleguide-sample[data-bg="color-contour"] {
+  background: var(--color-contour);
+}
+
+.styleguide-sample[data-fg="color-bg"] {
+  color: var(--color-bg);
+}
+.styleguide-sample[data-fg="color-surface"] {
+  color: var(--color-surface);
+}
+.styleguide-sample[data-fg="color-surface-raised"] {
+  color: var(--color-surface-raised);
+}
+.styleguide-sample[data-fg="color-surface-subtle"] {
+  color: var(--color-surface-subtle);
+}
+.styleguide-sample[data-fg="color-text"] {
+  color: var(--color-text);
+}
+.styleguide-sample[data-fg="color-text-muted"] {
+  color: var(--color-text-muted);
+}
+.styleguide-sample[data-fg="color-border"] {
+  color: var(--color-border);
+}
+.styleguide-sample[data-fg="color-border-strong"] {
+  color: var(--color-border-strong);
+}
+.styleguide-sample[data-fg="color-primary"] {
+  color: var(--color-primary);
+}
+.styleguide-sample[data-fg="color-primary-hover"] {
+  color: var(--color-primary-hover);
+}
+.styleguide-sample[data-fg="color-primary-active"] {
+  color: var(--color-primary-active);
+}
+.styleguide-sample[data-fg="color-on-primary"] {
+  color: var(--color-on-primary);
+}
+.styleguide-sample[data-fg="color-accent"] {
+  color: var(--color-accent);
+}
+.styleguide-sample[data-fg="color-link"] {
+  color: var(--color-link);
+}
+.styleguide-sample[data-fg="color-info"] {
+  color: var(--color-info);
+}
+.styleguide-sample[data-fg="color-info-subtle"] {
+  color: var(--color-info-subtle);
+}
+.styleguide-sample[data-fg="color-success"] {
+  color: var(--color-success);
+}
+.styleguide-sample[data-fg="color-success-subtle"] {
+  color: var(--color-success-subtle);
+}
+.styleguide-sample[data-fg="color-warning"] {
+  color: var(--color-warning);
+}
+.styleguide-sample[data-fg="color-warning-subtle"] {
+  color: var(--color-warning-subtle);
+}
+.styleguide-sample[data-fg="color-danger"] {
+  color: var(--color-danger);
+}
+.styleguide-sample[data-fg="color-danger-hover"] {
+  color: var(--color-danger-hover);
+}
+.styleguide-sample[data-fg="color-danger-active"] {
+  color: var(--color-danger-active);
+}
+.styleguide-sample[data-fg="color-on-danger"] {
+  color: var(--color-on-danger);
+}
+.styleguide-sample[data-fg="color-danger-subtle"] {
+  color: var(--color-danger-subtle);
+}
+.styleguide-sample[data-fg="color-focus"] {
+  color: var(--color-focus);
+}
+.styleguide-sample[data-fg="color-contour"] {
+  color: var(--color-contour);
+}

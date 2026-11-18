@@ -1,0 +1,55 @@
+/*
+ * Banner: a message about the whole page or the result of an action, in
+ * four tones. The tone shows three ways, never by colour alone: its icon,
+ * its title's words and its colour.
+ */
+
+.banner {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: start;
+  max-width: var(--width-task);
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--banner-color);
+  border-inline-start-width: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--banner-bg);
+  color: var(--color-text);
+}
+
+.banner__icon {
+  color: var(--banner-color);
+  margin-block-start: calc((var(--line-height-body) - var(--icon-size)) / 2);
+}
+
+.banner__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.banner__title {
+  font-weight: var(--font-weight-semibold);
+}
+
+.banner--info {
+  --banner-color: var(--color-info);
+  --banner-bg: var(--color-info-subtle);
+}
+
+.banner--success {
+  --banner-color: var(--color-success);
+  --banner-bg: var(--color-success-subtle);
+}
+
+.banner--warning {
+  --banner-color: var(--color-warning);
+  --banner-bg: var(--color-warning-subtle);
+}
+
+.banner--danger {
+  --banner-color: var(--color-danger);
+  --banner-bg: var(--color-danger-subtle);
+}
