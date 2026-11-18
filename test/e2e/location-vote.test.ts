@@ -548,6 +548,48 @@ describe("the location vote", () => {
     expect(e2e.discord.channelMessages(g.channels.news)).toHaveLength(1);
   });
 
+  it("posts the vote message from the panel once when the start's post was lost", async () => {
+    const g = guild(21);
+    const [ana] = g.members as [Member];
+    await setUpPanel(g);
+    await play.seedUnpostedLocationVote(g, ["Ridge", "Lake"]);
+
+    await g.owner.run("hike", [subcommand("admin")]);
+    const panel = g.owner.lastReply();
+    expect(messageText(shown(panel))).toContain(
+      "**The location vote is open**, but its message has not been posted. Click Post vote message to post it.",
+    );
+    const post = idStarting(shown(panel), "hb:poll:post:");
+    // A second panel, opened while the button is offered.
+    await g.owner.run("hike", [subcommand("admin")]);
+    const stale = g.owner.lastReply();
+    expect(idsStarting(shown(stale), "hb:poll:post:")).toEqual([post]);
+
+    await Promise.all([g.owner.click(panel, post), g.owner.click(panel, post)]);
+    // The second click's "being posted" can land after the first click's
+    // follow-up, so wait until a Refresh, answered from storage, shows it.
+    await eventually(async () => {
+      await g.owner.click(panel, "hb:admin:refresh");
+      expect(messageText(shown(panel))).toContain(
+        `**The location vote is open** in <#${g.channels.text}>.`,
+      );
+    });
+    expect(idsStarting(shown(panel), "hb:poll:post:")).toEqual([]);
+    const posted = e2e.discord.channelMessages(g.channels.text);
+    expect(posted).toHaveLength(1);
+    const [poll] = posted;
+    if (!poll) throw new Error("the poll message was not posted");
+    expect(messageText(shown(poll))).toContain(TITLE);
+    expect(messageText(shown(poll))).toContain("**Ridge**");
+    await vote(ana, poll, ["Ridge"]);
+
+    await g.owner.click(stale, post);
+    expect(messageText(shown(stale))).toContain(
+      `The location vote's message is already posted in <#${g.channels.text}>.`,
+    );
+    expect(e2e.discord.channelMessages(g.channels.text)).toHaveLength(1);
+  });
+
   it("refuses non-admins, including replayed admin custom_ids", async () => {
     const g = guild(11);
     const [ana] = g.members as [Member];

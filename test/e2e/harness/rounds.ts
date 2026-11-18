@@ -318,6 +318,49 @@ export class RoundPlayer {
     await this.closeVote(g.owner, panel, "date vote");
   }
 
+  /**
+   * Stores in the guild's object what Start location vote stores before it
+   * answers, a round with its open location vote on `labels` proposed by
+   * the owner, without the post that follows: the state the object is left
+   * in when it restarts between its answer and the post. Writes through the
+   * harness's access to the object's SQLite storage.
+   */
+  async seedUnpostedLocationVote(
+    g: TestGuild,
+    labels: string[],
+  ): Promise<void> {
+    const sql = await this.e2e.harness
+      .getWorker()
+      .getDurableObjectStorage("GUILD_HIKE", { name: g.guildId });
+    const owner = g.owner.actor.userId;
+    const at = Date.UTC(2026, 10, 18);
+    const [round] = await sql.exec<{ id: number }>(
+      `INSERT INTO rounds (status, started_by, started_at)
+       VALUES ('location_voting', ?, ?) RETURNING id`,
+      owner,
+      at,
+    );
+    const [poll] = await sql.exec<{ id: number }>(
+      `INSERT INTO polls (round_id, kind, status, opened_by, opened_at)
+       VALUES (?, 'location', 'open', ?, ?) RETURNING id`,
+      round?.id ?? 0,
+      owner,
+      at,
+    );
+    for (const label of labels) {
+      await sql.exec(
+        `INSERT INTO poll_options
+           (poll_id, label, label_key, proposed_by, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        poll?.id ?? 0,
+        label,
+        label.toLowerCase(),
+        owner,
+        at,
+      );
+    }
+  }
+
   /** Cancels the active round from the panel, confirming. */
   async cancelRound(owner: Member, panel: FakeMessage): Promise<void> {
     await owner.click(panel, idStarting(this.shown(panel), "hb:round:cancel:"));
