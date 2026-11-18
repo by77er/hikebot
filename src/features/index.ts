@@ -2,6 +2,7 @@ import type { HandlerContext, Router } from "../guild/router";
 import { registerAdminPanel } from "./admin-panel";
 import { DATE_POLL, registerDateVote } from "./date-vote";
 import { hikeCommand } from "./hike";
+import { registerHikeThread } from "./hike-thread";
 import { LOCATION_POLL, registerLocationVote } from "./location-vote";
 import {
   refreshPollMessages,
@@ -32,6 +33,7 @@ export function registerFeatures(router: Router): Router {
   registerPollUi(router, POLL_KINDS);
   registerLocationVote(router);
   registerDateVote(router);
+  registerHikeThread(router);
   return router;
 }
 

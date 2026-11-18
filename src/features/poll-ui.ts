@@ -261,7 +261,8 @@ export function shortenAll(texts: readonly string[], budget: number): string[] {
   return texts.map((text) => shorten(text, low));
 }
 
-function shorten(text: string, cap: number): string {
+/** Cuts `text` to at most `cap` characters, ending a cut with "…". */
+export function shorten(text: string, cap: number): string {
   if (text.length <= cap) return text;
   if (cap <= 1) return "";
   // Cut on a code point boundary so no half of a surrogate pair is left.
