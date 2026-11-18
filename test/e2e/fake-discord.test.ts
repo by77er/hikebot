@@ -649,6 +649,70 @@ describe("authorization, failures and rate limits", () => {
       body: { code: 10004 },
     });
   });
+
+  it("serves a guild's members with their roles, and 404 Unknown Member for anyone else", async () => {
+    const guild = "220000000000000005";
+    const owner = "420000000000000001";
+    const member = "420000000000000002";
+    discord.addGuild({ id: guild, ownerId: owner, icon: "abc" });
+    discord.addMember(guild, member, ["520000000000000001"]);
+    expect(await call("GET", `/guilds/${guild}`)).toMatchObject({
+      body: { icon: "abc" },
+    });
+    expect(
+      await call("GET", `/guilds/${guild}/members/${owner}`),
+    ).toMatchObject({ status: 200, body: { user: { id: owner }, roles: [] } });
+    expect(
+      await call("GET", `/guilds/${guild}/members/${member}`),
+    ).toMatchObject({
+      status: 200,
+      body: { user: { id: member }, roles: ["520000000000000001"] },
+    });
+    discord.removeMember(guild, member);
+    expect(
+      await call("GET", `/guilds/${guild}/members/${member}`),
+    ).toMatchObject({ status: 404, body: { code: 10007 } });
+    expect(
+      await call("GET", `/guilds/229999999999999999/members/${member}`),
+    ).toMatchObject({ status: 404, body: { code: 10004 } });
+    expect(
+      await call("GET", `/guilds/${guild}/members/${owner}`, undefined, null),
+    ).toMatchObject({ status: 401 });
+    discord.takeRejections();
+  });
+
+  it("serves a guild's channels without its threads", async () => {
+    const guild = "220000000000000006";
+    discord.addGuild({ id: guild, ownerId: "420000000000000001" });
+    discord.addChannel({
+      id: "320000000000000601",
+      guildId: guild,
+      name: "votes",
+    });
+    discord.addChannel({
+      id: "320000000000000602",
+      guildId: guild,
+      type: ChannelType.GuildForum,
+      name: "hikes",
+    });
+    expect(
+      await call("POST", "/channels/320000000000000602/threads", {
+        name: "Ridge",
+        message: v2(text("hi")),
+      }),
+    ).toMatchObject({ status: 201 });
+    const reply = await call("GET", `/guilds/${guild}/channels`);
+    expect(reply.status).toBe(200);
+    expect(
+      (reply.body as { id: string; name: string }[]).map((c) => [c.id, c.name]),
+    ).toEqual([
+      ["320000000000000601", "votes"],
+      ["320000000000000602", "hikes"],
+    ]);
+    expect(
+      await call("GET", "/guilds/229999999999999999/channels"),
+    ).toMatchObject({ status: 404, body: { code: 10004 } });
+  });
 });
 
 describe("scheduled events", () => {
