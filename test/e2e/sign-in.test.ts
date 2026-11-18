@@ -64,7 +64,9 @@ describe("signing in", () => {
     );
     expect(servers.body).not.toContain(ana.withoutBot.name);
     expect(servers.body).toContain("Signed in as Hiker 1.");
-    expect(servers.body).toContain('<button type="submit">Sign out</button>');
+    expect(servers.body).toContain(
+      '<button class="button button--quiet" type="submit"><span>Sign out</span></button>',
+    );
     expect(servers.body).toContain(
       '<a href="/login?next=/servers">Refresh servers</a>',
     );

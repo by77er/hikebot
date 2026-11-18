@@ -39,7 +39,11 @@ export function HomePage() {
           </div>
           <div class="stack stack--tight">
             <div class="cluster">
-              <Button variant="primary" href="/login" iconAfter={ArrowRightIcon}>
+              <Button
+                variant="primary"
+                href="/login"
+                iconAfter={ArrowRightIcon}
+              >
                 Sign in with Discord
               </Button>
             </div>

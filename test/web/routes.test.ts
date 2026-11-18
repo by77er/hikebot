@@ -57,7 +57,8 @@ describe("GET /", () => {
 
   it("offers sign-in with Discord and says what hikebot learns", async () => {
     const html = await (await get("/")).text();
-    expect(html).toContain('<a href="/login">Sign in with Discord</a>');
+    expect(html).toContain('<a class="button button--primary" href="/login">');
+    expect((await outline(html)).text).toContain("Sign in with Discord");
     expect((await outline(html)).text.replace(/\s+/g, " ")).toContain(
       "Signing in tells hikebot your Discord name and avatar, and which of your servers hikebot is in.",
     );
@@ -83,16 +84,16 @@ describe("GET /", () => {
     expect(html).toContain('href="https://github.com/by77er/hikebot"');
   });
 
-  it("has one primary action, to the project, and the steps in the bot's words", async () => {
+  it("has one primary action, Sign in with Discord, and the steps in the bot's words", async () => {
     const html = await (await get("/")).text();
     const primaries = [
       ...html.matchAll(/class="button button--primary[^"]*"[^>]*>/g),
     ];
     expect(primaries.map(([tag]) => tag)).toEqual([
-      'class="button button--primary" href="https://github.com/by77er/hikebot">',
+      'class="button button--primary" href="/login">',
     ]);
     const page = await outline(html);
-    expect(page.text).toContain("See the project");
+    expect(page.text).toContain("Sign in with Discord");
     expect(page.text).toContain("Plan the next hike together");
     for (const step of [
       "How it works",

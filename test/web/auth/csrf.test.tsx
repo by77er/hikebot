@@ -157,9 +157,13 @@ describe("Layout with a signed-in user", () => {
         <p>x</p>
       </Layout>,
     ).text();
-    expect(html).toContain('<form method="post" action="/logout">');
+    expect(html).toContain(
+      '<form class="shell__user" method="post" action="/logout">',
+    );
     expect(html).toContain(`name="csrf" value="${user.csrf}"`);
-    expect(html).toContain('<button type="submit">Sign out</button>');
+    expect(html).toContain(
+      '<button class="button button--quiet" type="submit"><span>Sign out</span></button>',
+    );
     expect((await outline(html)).text).toContain("Signed in as Ana.");
   });
 
