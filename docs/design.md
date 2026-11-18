@@ -383,25 +383,48 @@ for example to schedule an alarm. Every operation that writes more than one row 
 `transactionSync`, so a failure leaves no partial rows. A refusal throws
 `PollError` with a `code` and a message a member can read.
 
-| Operation                                           | Does                                                                                                                           | Refuses with                                                                                                                |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| `startRound(userId, initialLocations)`              | creates a `location_voting` round and its open location poll with the given options (may be none)                              | `round_active`, plus the option codes below                                                                                 |
-| `addOption(pollId, { label, details, proposedBy })` | adds an option; on a date poll the label is parsed as a date and stored as its display label                                   | `poll_not_found`, `poll_closed`, `invalid_label`, `invalid_details`, `invalid_date`, `too_many_options`, `duplicate_option` |
-| `setVotes(pollId, userId, optionIds)`               | replaces the member's votes in the poll with exactly that set; empty clears them                                               | `poll_not_found`, `poll_closed`, `unknown_option`                                                                           |
-| `closePoll(pollId, userId)`                         | picks the winner (below), closes the poll, and moves the round to `location_decided` (location poll) or `complete` (date poll) | `poll_not_found`, `poll_closed`, `no_options`, `invalid_state`                                                              |
-| `startDatePoll(roundId, userId, dates)`             | from `location_decided` only: opens the date poll with 2-25 distinct dates, sorted chronologically; round -> `date_voting`     | `round_not_found`, `invalid_state`, `invalid_date`, `duplicate_option`, `too_few_options`, `too_many_options`               |
-| `withdrawDatePoll(pollId)`                          | deletes an open date poll with its options and votes; round `date_voting` -> `location_decided`                                | `poll_not_found`, `poll_closed`, `invalid_state`                                                                            |
-| `cancelRound(roundId, userId)`                      | closes any open poll without a winner; round -> `cancelled`                                                                    | `round_not_found`, `invalid_state` (already ended)                                                                          |
-| `setPollMessage(pollId, channelId, messageId)`      | records the poll's Discord message                                                                                             | `poll_not_found`                                                                                                            |
-| `setRoundThread(roundId, threadId)`                 | records the hike's forum thread                                                                                                | `round_not_found`                                                                                                           |
+| Operation                                           | Does                                                                                                                           | Refuses with                                                                                                                                                         |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `startRound(userId, initialLocations)`              | creates a `location_voting` round and its open location poll with the given options (may be none)                              | `round_active`, `location_on_cooldown`, plus the option codes below                                                                                                  |
+| `addOption(pollId, { label, details, proposedBy })` | adds an option; on a date poll the label is parsed as a date and stored as its display label                                   | `poll_not_found`, `poll_closed`, `invalid_label`, `invalid_details`, `invalid_date`, `too_many_options`, `duplicate_option`, `location_on_cooldown` (location polls) |
+| `setVotes(pollId, userId, optionIds)`               | replaces the member's votes in the poll with exactly that set; empty clears them                                               | `poll_not_found`, `poll_closed`, `unknown_option`                                                                                                                    |
+| `closePoll(pollId, userId)`                         | picks the winner (below), closes the poll, and moves the round to `location_decided` (location poll) or `complete` (date poll) | `poll_not_found`, `poll_closed`, `no_options`, `invalid_state`                                                                                                       |
+| `startDatePoll(roundId, userId, dates)`             | from `location_decided` only: opens the date poll with 2-25 distinct dates, sorted chronologically; round -> `date_voting`     | `round_not_found`, `invalid_state`, `invalid_date`, `duplicate_option`, `too_few_options`, `too_many_options`                                                        |
+| `withdrawDatePoll(pollId)`                          | deletes an open date poll with its options and votes; round `date_voting` -> `location_decided`                                | `poll_not_found`, `poll_closed`, `invalid_state`                                                                                                                     |
+| `cancelRound(roundId, userId)`                      | closes any open poll without a winner; round -> `cancelled`                                                                    | `round_not_found`, `invalid_state` (already ended)                                                                                                                   |
+| `setPollMessage(pollId, channelId, messageId)`      | records the poll's Discord message                                                                                             | `poll_not_found`                                                                                                                                                     |
+| `setRoundThread(roundId, threadId)`                 | records the hike's forum thread                                                                                                | `round_not_found`                                                                                                                                                    |
 
 Reads return null when there is nothing to return:
 `getPoll(pollId, viewerId?)`, `getRound(roundId, viewerId?)`,
 `getActiveRound(viewerId?)` and `getLastRound(viewerId?)` (the most recently
-started round). A poll read model has its options in creation order, each
-with its vote count, the number of distinct voters, and `viewerVotes`, the
-viewer's current votes. A round read model includes its location and date
-polls.
+started round), and `getOption(optionId)`, an option of any poll. A poll
+read model has its options in creation order, each with its vote count, the
+number of distinct voters, and `viewerVotes`, the viewer's current votes. A
+round read model includes its location and date polls.
+
+### Past locations and the cooldown
+
+Past suggestions are not stored separately: every location ever proposed is
+a row of `poll_options` in a location poll, and those rows are never
+deleted. `listPastLocations(viewerId, pollId)` reads them across all rounds
+and returns one entry per `label_key`: the newest option's id, label and
+details, `proposedByViewer` (the viewer proposed it in any round),
+`lastProposedAt`, `timesHiked` (complete rounds it was the location of),
+`cooldownHikesLeft` (0 when free) and `onPoll` (it is an option of poll
+`pollId`). The viewer's own come first, then everyone else's, each most
+recently proposed first.
+
+A location rests for `COOLDOWN_HIKES` (2) hikes: the decided location of one
+of the two most recent `complete` rounds cannot be added to a location poll,
+by `addOption` or in `startRound`'s initial list, compared by `label_key`.
+Cancelled rounds do not count, so a location decided in a round that was then
+cancelled does not rest, and a rest ends by itself once two more rounds have
+completed. `restingLocations()` lists them, the most recent hike first, each
+with its label, the hike's date and the hikes left; the refusal is
+`location_on_cooldown` with `cooldownMessage`'s text, for example "**Eagle
+Peak** was the hike on Sat, 5 Dec 2026. It can be suggested again after 2 more
+hikes." ("1 more hike" for one). Date polls have no cooldown.
 
 The hike log reads hikes, which are rounds with status `complete` (cancelled
 and active rounds are not hikes), from the existing tables; nothing extra is
@@ -448,7 +471,8 @@ and a Vote button. Vote opens an ephemeral multi-select preselected with the
 member's current choices; submitting replaces their votes for that poll.
 Individual voters are not shown. A poll has at most 25 options (Discord's
 select limit). During the location vote, members add options with a Propose a
-location button and modal. Date options are entered by the admin as
+location button: a new one in a modal, or one from an earlier round picked
+again from a select. Date options are entered by the admin as
 `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` and shown as entered, with the weekday; no
 timezone conversion.
 
@@ -499,17 +523,32 @@ what they now vote for (or that their votes are cleared) and a fresh select.
 
 ### Propose a location
 
-**Propose a location** opens a modal (`hb:location:propose:<poll id>`) with
-Name (required, up to 80 characters) and Details (optional paragraph, up to
-300: a trail link, distance, notes). A valid submit adds the option through
-`addOption` and confirms ephemerally. A duplicate name ("**X** is already on
-the list."), a full poll ("This vote already has 25 locations…") and a closed
-poll each get their own ephemeral answer; a full or closed poll is refused
-already at the button.
+**Propose a location** first looks for past locations (see "Past locations
+and the cooldown") that are neither on this poll nor resting. When there is
+at least one, it answers with an ephemeral Components V2 message: a string
+select "Suggest one again" (`hb:location:again:<poll id>`) of up to 25 of
+them, the member's own suggestions first, each option with the label and its
+details cut to 100 characters (Discord's description limit); under it a
+**New location** button (`hb:location:new:<poll id>`) that opens the modal
+below; and, when some rest, one line naming them with the hikes left
+("Resting: **Eagle Peak** (2 more hikes), **Lake** (1 more hike)"). Picking
+one adds it through `addOption` at once, with its saved label and details and
+the member as proposer, and updates the ephemeral message with the
+confirmation and a fresh select. When there is nothing to suggest again,
+the button opens the modal directly.
+
+The modal (`hb:location:propose:<poll id>`) has Name (required, up to 80
+characters) and Details (optional paragraph, up to 300: a trail link,
+distance, notes). A valid submit adds the option through `addOption` and
+confirms ephemerally. A duplicate name ("**X** is already on the list."), a
+full poll ("This vote already has 25 locations…"), a closed poll and a
+resting location (the cooldown message) each get their own ephemeral answer,
+whether typed or picked from a stale select (which is replaced by the
+answer); a full or closed poll is refused already at the buttons.
 
 ### Live updates
 
-A vote or proposal marks its poll for a refresh (a `poll-refresh:<poll id>`
+A vote, proposal or pick of a past location marks its poll for a refresh (a `poll-refresh:<poll id>`
 key in the object's storage, holding when it is due) and, unless the object
 already has an alarm, sets one `REFRESH_DELAY_MS` (2 seconds) after the
 store's clock. The alarm edits the message of every marked poll that is still
@@ -528,7 +567,10 @@ ephemeral "This vote has closed." (a stale select is replaced by it).
 optional paragraph, "Initial locations (one per line)". Lines are trimmed,
 blank lines dropped and duplicates (compared as `labelKey` does) collapsed; a
 line over 80 characters, or more than 25 locations, is refused with an
-ephemeral message naming the line or the count, and nothing starts. Otherwise
+ephemeral message naming the line or the count, and nothing starts. A line
+holding a resting location (see "Past locations and the cooldown") is
+refused the same way, naming each such location with its cooldown message.
+Otherwise
 the handler starts the round through `startRound` (recording the admin as
 proposer of the initial locations) and answers with a deferred update of the
 panel. The follow-up posts the poll message in the voting channel, records it

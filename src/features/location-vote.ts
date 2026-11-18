@@ -1,23 +1,36 @@
 /**
  * The location vote: an admin starts it from the panel with optional
- * initial locations, members propose more while it runs, and the shared
- * poll UI (`poll-ui.ts`) does the voting, refreshing and closing.
+ * initial locations, members propose more while it runs (new ones in a
+ * modal, or past ones again from a select), and the shared poll UI
+ * (`poll-ui.ts`) does the voting, refreshing and closing.
  */
 import {
   ButtonStyle,
+  ComponentType,
   TextInputStyle,
+  type APIComponentInContainer,
+  type APIMessageComponentInteraction,
+  type APIMessageTopLevelComponent,
+  type APIModalInteractionResponse,
   type APIModalSubmitInteraction,
 } from "discord-api-types/v10";
 import { discordApi } from "../discord/api";
 import {
+  MAX_SELECT_OPTIONS,
+  actionRow,
   button,
+  container,
   customId,
+  ephemeralReply,
   label,
   messageBody,
   modal,
   parseCustomId,
+  stringSelect,
+  textDisplay,
   textInput,
   textInputValue,
+  update,
 } from "../discord/components";
 import { ephemeralNotice } from "../discord/responses";
 import { setupComplete } from "../guild/config";
@@ -25,17 +38,26 @@ import { adminOnly } from "../guild/permissions";
 import {
   UNAVAILABLE_MESSAGE,
   type ComponentHandler,
+  type HandlerContext,
+  type HandlerResult,
   type ModalHandler,
   type Router,
 } from "../guild/router";
-import { isPollError } from "../polls/errors";
+import {
+  isPollError,
+  type PollError,
+  type PollErrorCode,
+} from "../polls/errors";
 import {
   MAX_DETAILS_LENGTH,
   MAX_LABEL_LENGTH,
   MAX_OPTIONS,
   PollStore,
+  cooldownMessage,
   labelKey,
+  type PastLocation,
   type PollView,
+  type RestingLocation,
 } from "../polls/store";
 import {
   POLL_CONTROL_IDS,
@@ -50,6 +72,7 @@ import {
   finishPanel,
   renderPollMessage,
   scheduleRefresh,
+  shorten,
   type PollWording,
 } from "./poll-ui";
 
@@ -59,6 +82,8 @@ export const LOCATION_IDS = {
   propose: (pollId: number) => customId("location", "propose", String(pollId)),
   name: customId("location", "name"),
   details: customId("location", "details"),
+  again: (pollId: number) => customId("location", "again", String(pollId)),
+  newLocation: (pollId: number) => customId("location", "new", String(pollId)),
 } as const;
 
 export const LOCATION_POLL: PollWording = {
@@ -122,6 +147,23 @@ export function parseInitialLocations(text: string): ParsedLocations {
   return { ok: true, labels };
 }
 
+/**
+ * Why the initial locations are refused when some of them rest after a
+ * recent hike, naming each; null when none does.
+ */
+export function restingRefusal(
+  labels: readonly string[],
+  resting: readonly RestingLocation[],
+): string | null {
+  const refused = labels.flatMap((line) => {
+    const found = resting.find((r) => r.key === labelKey(line));
+    return found ? [`- ${cooldownMessage(found)}`] : [];
+  });
+  if (refused.length === 0) return null;
+  const what = refused.length === 1 ? "this location" : "these locations";
+  return `Nothing was started. Remove ${what} and try again:\n${refused.join("\n")}`;
+}
+
 function setupMissing(missing: string[]): string {
   return `Set the ${listing(missing)} under Settings before starting a vote.`;
 }
@@ -173,6 +215,8 @@ const startLocationVote: ModalHandler = adminOnly(
     }
     const userId = interaction.member?.user.id ?? "";
     const store = new PollStore(context.storage);
+    const resting = restingRefusal(parsed.labels, store.restingLocations());
+    if (resting !== null) return { response: ephemeralNotice(resting) };
     let poll: PollView | null;
     try {
       poll = store.startRound(
@@ -221,8 +265,120 @@ function pollIdArg(customIdValue: string): number | null {
 
 const TOO_MANY = `This vote already has ${String(MAX_OPTIONS)} locations, the most it can hold. Vote for one of them instead.`;
 
-/** Propose a location: opens the modal, unless the poll is closed or full. */
-const openProposeModal: ComponentHandler = (interaction, context) => {
+function added(labelText: string): string {
+  return `Added **${labelText}** to the location vote. Use **Vote** to vote for it.`;
+}
+
+/** The answer to a refused proposal of `name`, typed or picked. */
+function proposalRefusal(error: PollError, name: string): string {
+  const messages: Partial<Record<PollErrorCode, string>> = {
+    poll_closed: VOTE_CLOSED_MESSAGE,
+    poll_not_found: UNAVAILABLE_MESSAGE,
+    duplicate_option: `**${name}** is already on the list. Vote for it instead.`,
+    too_many_options: TOO_MANY,
+  };
+  return messages[error.code] ?? error.message;
+}
+
+function userIdOf(interaction: APIMessageComponentInteraction): string {
+  return interaction.member?.user.id ?? interaction.user?.id ?? "";
+}
+
+/** The past locations a member can put on the poll again, at most 25. */
+export function suggestable(past: readonly PastLocation[]): PastLocation[] {
+  return past
+    .filter((p) => !p.onPoll && p.cooldownHikesLeft === 0)
+    .slice(0, MAX_SELECT_OPTIONS);
+}
+
+function hikesLeft(n: number): string {
+  return n === 1 ? "1 more hike" : `${String(n)} more hikes`;
+}
+
+/**
+ * The ephemeral "suggest again" message: `notice` (or what it is for), the
+ * select of past locations that are neither on the poll nor resting, the
+ * New location button, and one line naming the resting locations, the
+ * most recent hike first.
+ */
+export function renderSuggestAgain(
+  pollId: number,
+  past: readonly PastLocation[],
+  notice?: string,
+): APIMessageTopLevelComponent[] {
+  const offer = suggestable(past);
+  const resting = past
+    .filter((p) => p.cooldownHikesLeft > 0)
+    .sort((a, b) => b.cooldownHikesLeft - a.cooldownHikesLeft);
+  const body: APIComponentInContainer[] = [
+    textDisplay(
+      notice ??
+        "**Propose a location**\nPut one from an earlier round on the vote again, or add a new one.",
+    ),
+  ];
+  if (offer.length > 0) {
+    body.push(
+      actionRow(
+        stringSelect({
+          custom_id: LOCATION_IDS.again(pollId),
+          placeholder: "Suggest one again",
+          options: offer.map((p) => ({
+            label: p.label,
+            value: String(p.optionId),
+            ...(p.details === null
+              ? {}
+              : { description: shorten(p.details, 100) }),
+          })),
+        }),
+      ),
+    );
+  }
+  body.push(
+    actionRow(
+      button({
+        custom_id: LOCATION_IDS.newLocation(pollId),
+        label: "New location",
+        style: ButtonStyle.Secondary,
+      }),
+    ),
+  );
+  if (resting.length > 0) {
+    const names = resting.map(
+      (p) => `**${p.label}** (${hikesLeft(p.cooldownHikesLeft)})`,
+    );
+    body.push(textDisplay(`Resting: ${names.join(", ")}`));
+  }
+  return [container(body)];
+}
+
+function proposeModal(pollId: number): APIModalInteractionResponse {
+  return modal(LOCATION_IDS.propose(pollId), "Propose a location", [
+    label(
+      "Name",
+      textInput({
+        custom_id: LOCATION_IDS.name,
+        max_length: MAX_LABEL_LENGTH,
+        placeholder: "Ridge Trail",
+      }),
+    ),
+    label(
+      "Details",
+      textInput({
+        custom_id: LOCATION_IDS.details,
+        style: TextInputStyle.Paragraph,
+        required: false,
+        max_length: MAX_DETAILS_LENGTH,
+      }),
+      "Optional: a trail link, the distance, notes",
+    ),
+  ]);
+}
+
+/** The poll a proposal control is for, or the answer refusing it. */
+function proposablePoll(
+  interaction: APIMessageComponentInteraction,
+  context: HandlerContext,
+): { poll: PollView } | HandlerResult {
   const pollId = pollIdArg(interaction.data.custom_id);
   const poll =
     pollId === null ? null : new PollStore(context.storage).getPoll(pollId);
@@ -235,27 +391,86 @@ const openProposeModal: ComponentHandler = (interaction, context) => {
   if (poll.options.length >= MAX_OPTIONS) {
     return { response: ephemeralNotice(TOO_MANY) };
   }
+  return { poll };
+}
+
+/**
+ * Propose a location: the suggest-again message when a past location can
+ * go on the poll again, else the modal; refused when the poll is closed or
+ * full.
+ */
+const openPropose: ComponentHandler = (interaction, context) => {
+  const found = proposablePoll(interaction, context);
+  if (!("poll" in found)) return found;
+  const past = new PollStore(context.storage).listPastLocations(
+    userIdOf(interaction),
+    found.poll.id,
+  );
+  if (suggestable(past).length === 0) {
+    return { response: proposeModal(found.poll.id) };
+  }
+  return { response: ephemeralReply(renderSuggestAgain(found.poll.id, past)) };
+};
+
+/** New location: the modal, unless the poll is closed or full. */
+const openProposeModal: ComponentHandler = (interaction, context) => {
+  const found = proposablePoll(interaction, context);
+  if (!("poll" in found)) return found;
+  return { response: proposeModal(found.poll.id) };
+};
+
+/**
+ * The suggest-again select: adds the picked past location with its saved
+ * label and details and the member as proposer, refreshes the poll message,
+ * and confirms in place with a fresh select. A refusal gets the answer a
+ * typed proposal gets.
+ */
+const pickPastLocation: ComponentHandler = async (interaction, context) => {
+  const pollId = pollIdArg(interaction.data.custom_id);
+  const picked =
+    interaction.data.component_type === ComponentType.StringSelect
+      ? Number(interaction.data.values[0])
+      : NaN;
+  const store = new PollStore(context.storage);
+  const source = Number.isSafeInteger(picked) ? store.getOption(picked) : null;
+  if (
+    pollId === null ||
+    source === null ||
+    store.getPoll(source.pollId)?.kind !== "location"
+  ) {
+    return { response: update([textDisplay(UNAVAILABLE_MESSAGE)]) };
+  }
+  const userId = userIdOf(interaction);
+  let notice: string;
+  try {
+    const option = store.addOption(pollId, {
+      label: source.label,
+      details: source.details,
+      proposedBy: userId,
+    });
+    await scheduleRefresh(context.storage, pollId, store.now());
+    notice = added(option.label);
+  } catch (error) {
+    if (!isPollError(error)) throw error;
+    notice = proposalRefusal(error, source.label);
+  }
+  const poll = store.getPoll(pollId);
+  if (
+    !poll ||
+    poll.kind !== "location" ||
+    poll.status !== "open" ||
+    poll.options.length >= MAX_OPTIONS
+  ) {
+    return { response: update([textDisplay(notice)]) };
+  }
   return {
-    response: modal(LOCATION_IDS.propose(poll.id), "Propose a location", [
-      label(
-        "Name",
-        textInput({
-          custom_id: LOCATION_IDS.name,
-          max_length: MAX_LABEL_LENGTH,
-          placeholder: "Ridge Trail",
-        }),
+    response: update(
+      renderSuggestAgain(
+        poll.id,
+        store.listPastLocations(userId, poll.id),
+        notice,
       ),
-      label(
-        "Details",
-        textInput({
-          custom_id: LOCATION_IDS.details,
-          style: TextInputStyle.Paragraph,
-          required: false,
-          max_length: MAX_DETAILS_LENGTH,
-        }),
-        "Optional: a trail link, the distance, notes",
-      ),
-    ]),
+    ),
   };
 };
 
@@ -274,22 +489,10 @@ const saveProposal: ModalHandler = async (interaction, context) => {
       proposedBy: interaction.member?.user.id ?? "",
     });
     await scheduleRefresh(context.storage, pollId, store.now());
-    return {
-      response: ephemeralNotice(
-        `Added **${option.label}** to the location vote. Use **Vote** to vote for it.`,
-      ),
-    };
+    return { response: ephemeralNotice(added(option.label)) };
   } catch (error) {
     if (isPollError(error)) {
-      const messages: Partial<Record<string, string>> = {
-        poll_closed: VOTE_CLOSED_MESSAGE,
-        poll_not_found: UNAVAILABLE_MESSAGE,
-        duplicate_option: `**${name.trim()}** is already on the list. Vote for it instead.`,
-        too_many_options: TOO_MANY,
-      };
-      return {
-        response: ephemeralNotice(messages[error.code] ?? error.message),
-      };
+      return { response: ephemeralNotice(proposalRefusal(error, name.trim())) };
     }
     throw error;
   }
@@ -299,7 +502,9 @@ const saveProposal: ModalHandler = async (interaction, context) => {
 export function registerLocationVote(router: Router): Router {
   router.component(LOCATION_IDS.start, openStartModal);
   router.modal(LOCATION_IDS.start, startLocationVote);
-  router.component("hb:location:propose", openProposeModal);
+  router.component("hb:location:propose", openPropose);
+  router.component("hb:location:new", openProposeModal);
+  router.component("hb:location:again", pickPastLocation);
   router.modal("hb:location:propose", saveProposal);
   return router;
 }

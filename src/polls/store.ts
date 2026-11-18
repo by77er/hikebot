@@ -15,6 +15,8 @@ export const MAX_OPTIONS = 25;
 export const MAX_LABEL_LENGTH = 80;
 export const MAX_DETAILS_LENGTH = 300;
 export const MIN_DATE_OPTIONS = 2;
+/** How many completed hikes a location rests after it was the hike. */
+export const COOLDOWN_HIKES = 2;
 
 export interface NewOption {
   label: string;
@@ -87,6 +89,35 @@ export interface HikeView {
   completedAt: number;
   locationPoll: MessageLocation;
   datePoll: MessageLocation;
+}
+
+/** A location that was the hike of a recent complete round, so it rests. */
+export interface RestingLocation {
+  label: string;
+  key: string;
+  /** The hike's date as `parseDateOption` labels it, without the time. */
+  hikedOn: string | null;
+  /** Complete rounds still to go before it can be proposed again. */
+  hikesLeft: number;
+}
+
+/** A location proposed in any round, merged by `label_key`. */
+export interface PastLocation {
+  /** The newest option with this key; its label and details are the latest. */
+  optionId: number;
+  label: string;
+  key: string;
+  details: string | null;
+  /** Whether the viewer proposed it in any round. */
+  proposedByViewer: boolean;
+  /** When anyone last proposed it. */
+  lastProposedAt: number;
+  /** How many complete rounds it was the hike of. */
+  timesHiked: number;
+  /** Complete rounds still to go before it can be proposed again; 0 when free. */
+  cooldownHikesLeft: number;
+  /** Whether it is an option of the poll the read was for. */
+  onPoll: boolean;
 }
 
 export interface PollStoreOptions {
@@ -165,6 +196,19 @@ export function labelKey(label: string): string {
   return label.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+/**
+ * Why a resting location is refused: "**Eagle Peak** was the hike on Sat, 5
+ * Dec 2026. It can be suggested again after 2 more hikes."
+ */
+export function cooldownMessage(resting: RestingLocation): string {
+  const when = resting.hikedOn === null ? "" : ` on ${resting.hikedOn}`;
+  const left =
+    resting.hikesLeft === 1
+      ? "1 more hike"
+      : `${String(resting.hikesLeft)} more hikes`;
+  return `**${resting.label}** was the hike${when}. It can be suggested again after ${left}.`;
+}
+
 interface ValidOption {
   label: string;
   key: string;
@@ -222,6 +266,15 @@ function validateDate(
   };
 }
 
+function refuseResting(
+  option: ValidOption,
+  resting: readonly RestingLocation[],
+): void {
+  const found = resting.find((r) => r.key === option.key);
+  if (found)
+    throw new PollError("location_on_cooldown", cooldownMessage(found));
+}
+
 /**
  * Rounds, polls, options and votes in a GuildHike's SQLite storage. Every
  * operation that writes more than one row runs in one `transactionSync`, so
@@ -258,6 +311,8 @@ export class PollStore {
       if (this.activeRoundRow()) {
         throw new PollError("round_active", "A hike round is already active.");
       }
+      const resting = this.restingLocations();
+      for (const option of valid) refuseResting(option, resting);
       const at = this.now();
       const roundId = this.insertId(
         `INSERT INTO rounds (status, started_by, started_at)
@@ -291,6 +346,9 @@ export class PollStore {
           "too_many_options",
           `A poll has at most ${String(MAX_OPTIONS)} options.`,
         );
+      }
+      if (poll.kind === "location") {
+        refuseResting(valid, this.restingLocations());
       }
       const id = this.insertOption(pollId, valid, this.now());
       const view = this.optionRows(pollId).find((row) => row.id === id);
@@ -359,6 +417,110 @@ export class PollStore {
       .exec<RoundRow>("SELECT * FROM rounds ORDER BY id DESC LIMIT 1")
       .toArray()[0];
     return row ? this.roundView(row, viewerId) : null;
+  }
+
+  /** The option `optionId` of any poll, or null if there is none. */
+  getOption(optionId: number): OptionView | null {
+    const row = this.sql
+      .exec<{ poll_id: number }>(
+        "SELECT poll_id FROM poll_options WHERE id = ?",
+        optionId,
+      )
+      .toArray()[0];
+    if (!row) return null;
+    return this.optionRows(row.poll_id).find((o) => o.id === optionId) ?? null;
+  }
+
+  /**
+   * The locations of the `COOLDOWN_HIKES` most recent complete rounds, the
+   * newest first. Cancelled rounds do not count, so a location rests until
+   * that many more rounds have completed.
+   */
+  restingLocations(): RestingLocation[] {
+    const rows = this.sql
+      .exec<{ label: string; label_key: string; date_value: string | null }>(
+        `SELECT o.label, o.label_key, d.date_value
+         FROM rounds r
+         JOIN poll_options o ON o.id = r.location_option_id
+         LEFT JOIN poll_options d ON d.id = r.date_option_id
+         WHERE r.status = 'complete'
+         ORDER BY r.ended_at DESC, r.id DESC LIMIT ?`,
+        COOLDOWN_HIKES,
+      )
+      .toArray();
+    const resting: RestingLocation[] = [];
+    rows.forEach((row, i) => {
+      if (resting.some((r) => r.key === row.label_key)) return;
+      resting.push({
+        label: row.label,
+        key: row.label_key,
+        hikedOn:
+          row.date_value === null
+            ? null
+            : (parseDateOption(row.date_value.slice(0, 10))?.label ?? null),
+        hikesLeft: COOLDOWN_HIKES - i,
+      });
+    });
+    return resting;
+  }
+
+  /**
+   * Every location proposed in a location poll of any round, one entry per
+   * `label_key` with its newest label and details: the viewer's own first,
+   * then everyone else's, each most recently proposed first.
+   */
+  listPastLocations(viewerId: string, pollId: number): PastLocation[] {
+    const rows = this.sql
+      .exec<{
+        id: number;
+        poll_id: number;
+        label: string;
+        label_key: string;
+        details: string | null;
+        proposed_by: string;
+        created_at: number;
+      }>(
+        `SELECT o.id, o.poll_id, o.label, o.label_key, o.details,
+           o.proposed_by, o.created_at
+         FROM poll_options o JOIN polls p ON p.id = o.poll_id
+         WHERE p.kind = 'location' ORDER BY o.created_at, o.id`,
+      )
+      .toArray();
+    const hiked = new Map<string, number>();
+    for (const { label_key } of this.sql
+      .exec<{ label_key: string }>(
+        `SELECT o.label_key FROM rounds r
+         JOIN poll_options o ON o.id = r.location_option_id
+         WHERE r.status = 'complete'`,
+      )
+      .toArray()) {
+      hiked.set(label_key, (hiked.get(label_key) ?? 0) + 1);
+    }
+    const resting = new Map(
+      this.restingLocations().map((r) => [r.key, r.hikesLeft]),
+    );
+    const byKey = new Map<string, PastLocation>();
+    for (const row of rows) {
+      const before = byKey.get(row.label_key);
+      byKey.set(row.label_key, {
+        optionId: row.id,
+        label: row.label,
+        key: row.label_key,
+        details: row.details,
+        proposedByViewer:
+          (before?.proposedByViewer ?? false) || row.proposed_by === viewerId,
+        lastProposedAt: row.created_at,
+        timesHiked: hiked.get(row.label_key) ?? 0,
+        cooldownHikesLeft: resting.get(row.label_key) ?? 0,
+        onPoll: (before?.onPoll ?? false) || row.poll_id === pollId,
+      });
+    }
+    return [...byKey.values()].sort(
+      (a, b) =>
+        Number(b.proposedByViewer) - Number(a.proposedByViewer) ||
+        b.lastProposedAt - a.lastProposedAt ||
+        b.optionId - a.optionId,
+    );
   }
 
   /**
