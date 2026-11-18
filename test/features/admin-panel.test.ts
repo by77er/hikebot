@@ -1161,6 +1161,10 @@ describe("the admin panel", () => {
         POLL_CONTROL_IDS.announce(1),
         (g) => click(POLL_CONTROL_IDS.announce(1), g, STRANGER),
       ],
+      [
+        POLL_CONTROL_IDS.postVoteMessage(1),
+        (g) => click(POLL_CONTROL_IDS.postVoteMessage(1), g, STRANGER),
+      ],
       [ADMIN_PANEL_IDS.role, (g) => pickRole(g, STRANGER, ROLE)],
       ...[
         ADMIN_PANEL_IDS.voteChannel,
