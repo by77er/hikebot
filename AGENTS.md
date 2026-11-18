@@ -108,21 +108,185 @@ To exercise interactions, write a test that sends a signed interaction, as
 4. Add a row for it to the secrets table in `README.md`, saying where to find
    its value.
 5. Follow "Change wrangler.jsonc" from step 2, then run `npm test`.
-6. Set the deployed value, typing it at the prompt so it stays out of files
-   and shell history:
+6. Add the production value as a GitHub Actions secret of the same name,
+   typing it at the prompt so it stays out of files and shell history (or
+   add it under Settings, Secrets and variables, Actions on GitHub):
 
    ```sh
-   npx wrangler secret put <NAME>
+   gh secret set <NAME>
+   ```
+
+7. In `.github/workflows/deploy.yml`, add `<NAME>: ${{ secrets.<NAME> }}` to
+   the `env` of the steps "Check the secrets are set" and "Write the Worker
+   secrets file", add the name to the `for name in` list of the first, and
+   add it to the object passed to `JSON.stringify` in the second.
+8. Follow "Check a workflow change". Once the pull request merges, follow
+   "Confirm a merge was deployed", then list the Worker's secrets:
+
+   ```sh
+   npx wrangler secret list
    ```
 
 ## Add infrastructure
 
 1. If Cloudflare can create it from `wrangler.jsonc` (a binding such as a
    Durable Object class, a KV namespace or a route), declare it there and
-   follow "Change wrangler.jsonc". `npm run deploy` creates it.
+   follow "Change wrangler.jsonc". The `Deploy` workflow creates it when the
+   pull request merges; follow "Confirm a merge was deployed" to check.
 2. Otherwise, write it with `by77er/inframe`, the owner's functional frontend
    for OpenTofu, in a new directory, and give that directory an `AGENTS.md`
    with the commands to plan and apply it.
+
+## Sign in to Cloudflare for production commands
+
+1. Sign in through the browser, with a Cloudflare user that has access to
+   the account holding the Worker `hiking`:
+
+   ```sh
+   npx wrangler login
+   ```
+
+   Without a browser, export an API token and the account id instead:
+   `export CLOUDFLARE_API_TOKEN=<token> CLOUDFLARE_ACCOUNT_ID=<account id>`.
+
+2. Check the account:
+
+   ```sh
+   npx wrangler whoami
+   ```
+
+## Confirm a merge was deployed
+
+1. Find the `Undercurrent` run of the merge commit on `main`, then the
+   `Deploy` run it started, and wait for it:
+
+   ```sh
+   gh run list --workflow Undercurrent --branch main --limit 5
+   gh run list --workflow Deploy --limit 5
+   gh run watch <run-id> --exit-status
+   ```
+
+   A `Deploy` run whose commit is no longer the tip of `main` ends green with
+   `Skipping deploy of <sha>` in its log; the run of the newer commit is the
+   one that deploys. To read a failed run, use
+   `gh run view <run-id> --log-failed`.
+
+2. Check that the active deployment's message is the merge commit, after
+   "Sign in to Cloudflare for production commands":
+
+   ```sh
+   git fetch origin main
+   git rev-parse origin/main
+   npx wrangler deployments list
+   ```
+
+3. Check that production answers with the health line,
+   `hikebot is running`:
+
+   ```sh
+   curl -fsS https://hiking.bitcru.sh/
+   ```
+
+## Roll production back
+
+1. After "Sign in to Cloudflare for production commands", find the version
+   to go back to: the newest deployment whose message is a commit from before
+   the bad one.
+
+   ```sh
+   npx wrangler deployments list
+   ```
+
+2. Turn off the `Deploy` workflow, so a merge to `main` before the revert
+   cannot deploy the bad commit again:
+
+   ```sh
+   gh workflow disable Deploy
+   ```
+
+3. Roll back:
+
+   ```sh
+   npx wrangler rollback <version-id> --message "Roll back <bad sha>: <reason>"
+   ```
+
+4. Revert the bad commit on `main` in a pull request:
+
+   ```sh
+   git fetch origin main
+   git checkout -b revert-<short sha> origin/main
+   git revert <bad sha>
+   git push -u origin HEAD
+   gh pr create --base main --title "Revert \"<bad commit's title>\"" --body "Production was rolled back to <version-id>; this reverts <bad sha>."
+   ```
+
+5. Once the revert has merged and its `Undercurrent` run on `main` has
+   passed, turn `Deploy` back on and deploy `main`:
+
+   ```sh
+   gh workflow enable Deploy
+   gh workflow run Deploy --ref main
+   ```
+
+6. Follow "Confirm a merge was deployed" from step 1.
+
+## Read production logs
+
+1. After "Sign in to Cloudflare for production commands", stream the
+   Worker's logs; add `--status error` to see only failed requests:
+
+   ```sh
+   npx wrangler tail hiking --format pretty
+   ```
+
+2. In another terminal, make a request and check that it appears in the
+   stream:
+
+   ```sh
+   curl -fsS https://hiking.bitcru.sh/
+   ```
+
+## Rotate a secret
+
+1. Make the new value where the secrets table in `README.md` says it comes
+   from (for `DISCORD_BOT_TOKEN`, Bot, Reset Token in the Discord developer
+   portal).
+2. Replace the GitHub Actions secret, typing the value at the prompt (or
+   under Settings, Secrets and variables, Actions on GitHub). Each deploy
+   sets the three `DISCORD_*` Worker secrets from these GitHub secrets, so a
+   value set with `npx wrangler secret put` for one of them is replaced at
+   the next deploy:
+
+   ```sh
+   gh secret set DISCORD_BOT_TOKEN
+   ```
+
+3. Deploy `main` by hand, so the Worker gets the new value:
+
+   ```sh
+   gh workflow run Deploy --ref main
+   ```
+
+4. Follow "Confirm a merge was deployed" from step 1.
+
+## Check a workflow change
+
+1. Install `actionlint` and `shellcheck`, which `actionlint` runs on every
+   `run:` script, into `~/.local/bin` (on macOS: `brew install actionlint
+shellcheck`):
+
+   ```sh
+   mkdir -p ~/.local/bin
+   curl -fsSL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz | tar -xz -C ~/.local/bin actionlint
+   curl -fsSL https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz | tar -xJ --strip-components=1 -C ~/.local/bin shellcheck-v0.11.0/shellcheck
+   export PATH="$HOME/.local/bin:$PATH"
+   ```
+
+2. Check every workflow. It prints nothing and exits 0 when they are clean:
+
+   ```sh
+   actionlint .github/workflows/*.yml
+   ```
 
 ## Check your change before opening a pull request
 

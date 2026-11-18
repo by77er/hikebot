@@ -11,7 +11,10 @@ that, and progress is tracked on the task board.
 
 ## Runtime
 
-One Cloudflare Worker, `hikebot`. Secrets: `DISCORD_PUBLIC_KEY`,
+One Cloudflare Worker, `hiking`, served at `https://hiking.bitcru.sh` (a
+Custom Domain on the `bitcru.sh` zone; workers.dev is off), so Discord's
+Interactions Endpoint URL is `https://hiking.bitcru.sh/interactions`.
+Secrets: `DISCORD_PUBLIC_KEY`,
 `DISCORD_APPLICATION_ID`, `DISCORD_BOT_TOKEN`, declared under
 `secrets.required` in `wrangler.jsonc` (which also types them in `Env`). The
 var `DISCORD_API_BASE` (default `https://discord.com/api/v10`) is where REST
@@ -19,8 +22,15 @@ calls go; tests point it at a fake Discord API. One
 `GuildHike` Durable Object per Discord guild (binding `GUILD_HIKE`,
 `idFromName(guild_id)`) holds all of that guild's state in its SQLite storage
 and makes every state change, so votes and poll closes never race.
-`wrangler deploy` creates everything the bot needs; there is no other
-infrastructure.
+`wrangler deploy` creates everything the bot needs, including the Custom
+Domain's DNS record; there is no other infrastructure.
+
+Production is deployed by the `Deploy` workflow
+(`.github/workflows/deploy.yml`): after the `Undercurrent` workflow succeeds
+on a push to `main`, it deploys exactly that commit if it is still the tip of
+`main`, setting the three secrets from GitHub Actions secrets with
+`wrangler deploy --secrets-file`, then runs `npm run register --if-present`
+and checks that `GET /` answers with the health line.
 
 ## Request flow
 

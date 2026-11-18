@@ -1,8 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "hikebot",
+  "name": "hiking",
   "main": "src/index.ts",
   "compatibility_date": "2026-11-17",
+  "workers_dev": false,
+  "routes": [{ "pattern": "hiking.bitcru.sh", "custom_domain": true }],
   "observability": {
     "enabled": true,
   },
@@ -24,7 +26,8 @@
   "vars": {
     "DISCORD_API_BASE": "https://discord.com/api/v10",
   },
-  // Values are set with `wrangler secret put` and locally in .dev.vars.
+  // The deploy workflow sets them from GitHub Actions secrets; locally they come
+  // from .dev.vars.
   "secrets": {
     "required": [
       "DISCORD_PUBLIC_KEY",

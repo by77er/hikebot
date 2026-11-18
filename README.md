@@ -22,28 +22,69 @@ To receive real interactions locally, expose the dev server with a tunnel
 (for example `cloudflared tunnel --url http://localhost:8787`) and use the
 tunnel's URL as the Interactions Endpoint URL below.
 
-## Setup
+## Deployment
 
-1. Create an application in the
-   [Discord developer portal](https://discord.com/developers/applications)
-   and add a bot to it.
-2. Set the Worker's three secrets:
+Production is the Cloudflare Worker `hiking`, served at
+`https://hiking.bitcru.sh`. Every pull request merged to `main` goes live
+without a manual step:
 
-   | Secret                   | Where to find it                    |
-   | ------------------------ | ----------------------------------- |
-   | `DISCORD_PUBLIC_KEY`     | General Information, Public Key     |
-   | `DISCORD_APPLICATION_ID` | General Information, Application ID |
-   | `DISCORD_BOT_TOKEN`      | Bot, Token                          |
+1. The merge pushes to `main`, which runs the `Undercurrent` workflow
+   (`.github/workflows/undercurrent.yml`).
+2. When that run succeeds, the `Deploy` workflow
+   (`.github/workflows/deploy.yml`) starts for the same commit. If `main` has
+   moved on to a newer commit by then, it skips with a log line and the newer
+   commit's own run deploys. A failed or cancelled `Undercurrent` run deploys
+   nothing.
+3. `Deploy` checks that the five secrets below are set, runs
+   `wrangler deploy` with the repository's own wrangler, setting the Worker's
+   three secrets from the GitHub secrets, then runs
+   `npm run register --if-present` to register the slash commands, and
+   finally requests `https://hiking.bitcru.sh/` until it answers
+   `hikebot is running`, failing after about two minutes.
 
-   ```sh
-   npx wrangler secret put DISCORD_PUBLIC_KEY
-   npx wrangler secret put DISCORD_APPLICATION_ID
-   npx wrangler secret put DISCORD_BOT_TOKEN
-   ```
+The first deploy creates the Worker, its Durable Object and the DNS record
+for `hiking.bitcru.sh`; there is no other infrastructure.
 
-3. Deploy with `npm run deploy`. This creates the Worker and its Durable
-   Object; there is no other infrastructure.
-4. In the developer portal, under General Information, set the Interactions
-   Endpoint URL to `https://<worker-host>/interactions`, for example
-   `https://hikebot.<your-subdomain>.workers.dev/interactions`. Discord sends
-   a signed PING to check it before saving.
+### GitHub Actions secrets
+
+Set under Settings, Secrets and variables, Actions in the GitHub repository.
+The three `DISCORD_*` values are from the
+[Discord developer portal](https://discord.com/developers/applications); the
+deploy sets them as the Worker's secrets on every run.
+
+| Secret                   | What it is for                                        | Where to find it                         |
+| ------------------------ | ----------------------------------------------------- | ---------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`   | Lets wrangler deploy the Worker and its Custom Domain | Cloudflare dashboard, API Tokens (below) |
+| `CLOUDFLARE_ACCOUNT_ID`  | The Cloudflare account that holds the Worker and zone | Cloudflare dashboard, account home       |
+| `DISCORD_PUBLIC_KEY`     | The Worker verifies interaction signatures with it    | General Information, Public Key          |
+| `DISCORD_APPLICATION_ID` | The application the slash commands are registered for | General Information, Application ID      |
+| `DISCORD_BOT_TOKEN`      | The Worker and the register step call Discord's API   | Bot, Token                               |
+
+### Cloudflare API token
+
+Create a custom token with these permissions:
+
+- Account, Workers Scripts, Edit, on the account that holds the `bitcru.sh`
+  zone;
+- Zone, Workers Routes, Edit, on the zone `bitcru.sh`.
+
+The custom domain needs no other permission. Cloudflare's
+[Workers authorization](https://developers.cloudflare.com/workers/authorization/workers/)
+page lists only the Worker and Workers Routes permissions for adding a Custom
+Domain during `wrangler deploy`, and a deploy of this repository against a
+fake Cloudflare API calls only `/accounts/<account>/workers/...` endpoints:
+the script upload, its settings and subdomain, and
+`workers/scripts/hiking/domains/records`, which creates the DNS record and
+certificate itself.
+
+### Discord, once after the first deploy
+
+1. In the developer portal, under General Information, set the Interactions
+   Endpoint URL to `https://hiking.bitcru.sh/interactions`. Discord sends a
+   signed PING to check it before saving.
+2. Invite the bot to the server with the scopes `bot` and
+   `applications.commands`: under OAuth2, URL Generator, tick both scopes,
+   then open the generated URL.
+
+To confirm a deploy, roll back, read production logs or rotate a secret,
+follow the procedures in [`AGENTS.md`](AGENTS.md).
