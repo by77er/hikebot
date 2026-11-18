@@ -325,8 +325,8 @@ on every change you push to a draft, and again before marking it ready.
 
 1. Open the pull request as a draft and push to it while you work. The
    `Undercurrent` jobs `commands`, `semantic` and `review` are skipped on a
-   draft without starting a runner; check each change as "Check your change before opening a pull
-   request" says:
+   draft without starting a runner; check each change as "Check your change
+   before opening a pull request" says:
 
    ```sh
    git push -u origin HEAD
