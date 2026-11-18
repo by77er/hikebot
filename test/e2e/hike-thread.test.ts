@@ -63,11 +63,14 @@ describe("the hike thread", () => {
     expect(thread?.name).toBe("Lake Loop — Sat, 15 Jun 2030 · 09:00");
     const first = starter(thread?.id ?? "");
     expect(first.flags & MessageFlags.IsComponentsV2).toBeTruthy();
+    // The event is created after the thread, which is then edited to link it.
+    const [event] = e2e.discord.scheduledEvents(g.guildId);
     expect(messageText(first).split("\n")).toEqual([
       "## Lake Loop",
       `Proposed by <@${g.owner.actor.userId}>`,
       // 09:00 in Los Angeles, the default zone, is 16:00 UTC in June.
       "**When:** Sat, 15 Jun 2030 · 09:00 (<t:1907769600:R>)",
+      `**Hike event:** https://discord.com/events/${g.guildId}/${event?.id ?? ""}`,
       `**Location vote:** **Lake Loop** won with 1 vote; 1 member voted. [See the location vote](https://discord.com/channels/${g.guildId}/${g.channels.text}/${where.id})`,
       `**Date vote:** **Sat, 15 Jun 2030 · 09:00** won with 1 vote; 1 member voted. [See the date vote](https://discord.com/channels/${g.guildId}/${g.channels.text}/${when.id})`,
     ]);
@@ -75,7 +78,7 @@ describe("the hike thread", () => {
     await eventually(() => {
       expect(announcements(g)).toHaveLength(2);
     });
-    expect(announcements(g)[1]?.split("\n").at(-1)).toBe(
+    expect(announcements(g)[1]?.split("\n")).toContain(
       `**Hike thread:** <#${thread?.id ?? ""}>`,
     );
     expect(messageText(play.shown(panel))).toContain(

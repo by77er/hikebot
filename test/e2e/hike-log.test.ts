@@ -37,20 +37,25 @@ it("shows a member who is not an admin the group's hikes, newest first", async (
     const answer = await member.run("hike", [subcommand("log")]);
     expect(answer.type).toBe(InteractionResponseType.ChannelMessageWithSource);
     expect(
-      messageText(member.lastReply()).match(/Thread: <#\d+>/g),
+      messageText(member.lastReply()).match(/Thread: <#\d+> · \[Event\]/g),
     ).toHaveLength(2);
   });
   const [ridge, lake] = e2e.discord.threads(g.channels.forum);
   if (!ridge || !lake) throw new Error("the hike threads were not created");
+  const [ridgeEvent, lakeEvent] = e2e.discord.scheduledEvents(g.guildId);
+  if (!ridgeEvent || !lakeEvent) {
+    throw new Error("the hike events were not created");
+  }
+  const events = `https://discord.com/events/${g.guildId}`;
   expectEphemeral(member, "Hike log");
   const shown = messageText(member.lastReply());
   expect(shown).toContain("2 hikes");
   expect(shown).toContain(
     [
       "Sat, 15 Jun 2030 · 11:00 · **Ridge**",
-      `Thread: <#${ridge.id}>`,
+      `Thread: <#${ridge.id}> · [Event](${events}/${ridgeEvent.id})`,
       "Sat, 2 Mar 2030 · 11:00 · **Lake**",
-      `Thread: <#${lake.id}>`,
+      `Thread: <#${lake.id}> · [Event](${events}/${lakeEvent.id})`,
     ].join("\n"),
   );
   expect(buttonLabels(member.lastReply())).toEqual([]);
