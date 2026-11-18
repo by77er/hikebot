@@ -31,6 +31,7 @@ import {
   renderAdminSettings,
   type PollAnnouncement,
 } from "../../src/features/admin-panel";
+import type { HikeDayStatus } from "../../src/features/hike-day-state";
 import type { HikeEventStatus } from "../../src/features/hike-event-state";
 import type { HikeThreadStatus } from "../../src/features/hike-thread-state";
 import type { PollView, RoundView } from "../../src/polls/store";
@@ -618,6 +619,117 @@ describe("renderAdminPanel", () => {
       });
     });
 
+    describe("and its hike-day announcement", () => {
+      const thread: HikeThreadStatus = {
+        state: "created",
+        threadId: "900000000000000001",
+      };
+      const at = Date.UTC(2027, 5, 12, 14);
+      const withHikeDay = (
+        status: HikeDayStatus,
+        settings: GuildSettings = COMPLETE,
+      ) => {
+        const state = {
+          settings,
+          round: null,
+          finished: { ...finished, threadId: thread.threadId },
+          thread,
+          hikeDay: { status, at },
+        };
+        return {
+          buttons: actionButtons(state).map((b) => b.custom_id),
+          shown: text(asNodes(renderAdminPanel(state))),
+        };
+      };
+
+      it("says when and where it will be posted, with no button", () => {
+        const { buttons, shown } = withHikeDay({ state: "planned" });
+        expect(shown).toContain(
+          `**Hike-day announcement:** <t:${String(at / 1000)}:f> in <#${COMPLETE.announceChannelId ?? ""}>.`,
+        );
+        expect(buttons).not.toContain(
+          POLL_CONTROL_IDS.postHikeDay(finished.id),
+        );
+      });
+
+      it("says it will not be posted while no announcements channel is set", () => {
+        const { shown } = withHikeDay(
+          { state: "planned" },
+          { ...COMPLETE, announceChannelId: null },
+        );
+        expect(shown).toContain(
+          `**Hike-day announcement:** due <t:${String(at / 1000)}:f>, but no announcements channel is set, so it will not be posted. Pick one under Settings.`,
+        );
+      });
+
+      it("shows why it failed and offers Post hike-day announcement", () => {
+        const { buttons, shown } = withHikeDay({
+          state: "failed",
+          reason: "Discord said no.",
+        });
+        expect(shown).toContain(
+          "**Hike-day announcement:** not posted. Discord said no.",
+        );
+        expect(buttons).toEqual([
+          POLL_CONTROL_IDS.startLocationVote,
+          POLL_CONTROL_IDS.postHikeDay(finished.id),
+          ADMIN_PANEL_IDS.settings,
+          ADMIN_PANEL_IDS.refresh,
+        ]);
+      });
+
+      it("says a cut-off post is not confirmed and offers Post hike-day announcement", () => {
+        const { buttons, shown } = withHikeDay({ state: "unconfirmed" });
+        expect(shown).toContain(
+          "**Hike-day announcement:** not confirmed: posting it was cut off, so it may or may not have been posted. Check the announcements channel, and click Post hike-day announcement only if it is missing.",
+        );
+        expect(buttons).toContain(POLL_CONTROL_IDS.postHikeDay(finished.id));
+      });
+
+      it("offers no button while it is being posted or once it is posted", () => {
+        const posting = withHikeDay({ state: "posting" });
+        expect(posting.shown).toContain(
+          "**Hike-day announcement:** being posted.",
+        );
+        const posted = withHikeDay({
+          state: "posted",
+          channelId: "300000000000000002",
+          messageId: "960000000000000001",
+        });
+        expect(posted.shown).toContain(
+          "**Hike-day announcement:** posted in <#300000000000000002>.",
+        );
+        for (const { buttons } of [posting, posted]) {
+          expect(buttons).not.toContain(
+            POLL_CONTROL_IDS.postHikeDay(finished.id),
+          );
+        }
+      });
+
+      it("keeps every retry and the panel within Discord's limits when all failed", () => {
+        const state = {
+          settings: COMPLETE,
+          round: null,
+          finished,
+          thread: { state: "failed", reason: "t".repeat(500) } as const,
+          event: { state: "failed", reason: "e".repeat(500) } as const,
+          hikeDay: {
+            status: { state: "failed", reason: "h".repeat(500) } as const,
+            at,
+          },
+        };
+        expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
+          POLL_CONTROL_IDS.startLocationVote,
+          POLL_CONTROL_IDS.createHikeThread(finished.id),
+          POLL_CONTROL_IDS.createHikeEvent(finished.id),
+          POLL_CONTROL_IDS.postHikeDay(finished.id),
+          ADMIN_PANEL_IDS.settings,
+          ADMIN_PANEL_IDS.refresh,
+        ]);
+        expectWithinLimits(renderAdminPanel(state, "x".repeat(300)));
+      });
+    });
+
     describe("and its announcements", () => {
       const thread: HikeThreadStatus = {
         state: "created",
@@ -1165,6 +1277,10 @@ describe("the admin panel", () => {
       [
         POLL_CONTROL_IDS.postVoteMessage(1),
         (g) => click(POLL_CONTROL_IDS.postVoteMessage(1), g, STRANGER),
+      ],
+      [
+        POLL_CONTROL_IDS.postHikeDay(1),
+        (g) => click(POLL_CONTROL_IDS.postHikeDay(1), g, STRANGER),
       ],
       [ADMIN_PANEL_IDS.role, (g) => pickRole(g, STRANGER, ROLE)],
       ...[
