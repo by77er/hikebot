@@ -172,17 +172,10 @@ and which headers they carry.
 
 ## Take the screenshots
 
-Every page has committed screenshots in `docs/screenshots/`, named
-`<page>--<viewport>--<scheme>.png`: a phone (390x844) and a desktop
-(1280x800) viewport, each in the light and the dark colour scheme. Only the
-script makes them; never edit, add or delete a PNG there by hand.
-
-1. Take them. The script starts the Worker with the fake Discord API, opens
-   every page in `test/screenshots/pages.json` in headless Chromium, prints
-   `wrote docs/screenshots/<file>` for each file and deletes the PNGs no page
-   makes any more. It exits non-zero, naming the page, viewport and scheme,
-   when a page answers with another status than its entry gives or a file
-   it loads fails:
+1. Run the script. It prints `wrote docs/screenshots/<file>` for each file,
+   and exits non-zero naming the page, viewport and scheme when a page
+   answers with another status than its entry in
+   `test/screenshots/pages.json` gives, or a file it loads fails:
 
    ```sh
    npm run screenshots
