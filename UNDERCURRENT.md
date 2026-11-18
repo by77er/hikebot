@@ -60,12 +60,19 @@ if (found.length > 0) {
 ## Bot messages use Components V2 only
 only: *.ts
 
-Every message the bot sends or edits, whether an interaction response, a
-follow-up, a webhook edit or a REST call, sets the `IS_COMPONENTS_V2` flag
-(`32768`, `MessageFlags.IsComponentsV2`) and puts all text in components such
-as Text Display. It never sets `content` or `embeds`. Ephemeral replies add
-`64` to the flags. Build the payload with Components V2 parts instead of
-plain text.
+Every message the bot sends or edits, whether an interaction response that
+carries a message (`ChannelMessageWithSource`, `UpdateMessage`), a follow-up,
+a webhook edit or a REST call, sets the `IS_COMPONENTS_V2` flag (`32768`,
+`MessageFlags.IsComponentsV2`) and puts all text in components such as Text
+Display. It never sets `content` or `embeds`. Ephemeral replies add `64` to
+the flags. Build the payload with Components V2 parts instead of plain text.
+
+A deferred response (`DeferredChannelMessageWithSource`), a deferred update
+(`DeferredMessageUpdate`) and a modal (`Modal`) are not messages and set no
+`IS_COMPONENTS_V2`; "Deferred responses carry only the ephemeral flag" in
+`src/UNDERCURRENT.md` says what a deferral may carry. The edit that replaces a
+deferred response, or the edit after a deferred update, is the message and
+sets `IS_COMPONENTS_V2`.
 
 ```ts good
 return {
@@ -84,6 +91,27 @@ await api.editMessage(channelId, messageId, {
   components: [pollContainer(poll)],
   allowed_mentions: { parse: [] },
 });
+```
+
+```ts good
+return {
+  response: deferredReply({ ephemeral: true }),
+  followUp: async () => {
+    await api.editOriginalInteractionResponse(
+      interaction.application_id,
+      interaction.token,
+      messageBody([container([textDisplay(resultText(result))])]),
+    );
+  },
+};
+```
+
+```ts good
+return {
+  response: modal(customId("poll", "propose"), "Propose a location", [
+    label("Location", textInput({ custom_id: customId("poll", "name") })),
+  ]),
+};
 ```
 
 ```ts bad
@@ -106,12 +134,29 @@ Every message the bot sends or edits sets `allowed_mentions: { parse: [] }`,
 so a mention in a location name or a role in an announcement never notifies
 anyone. Add it to the payload; do not list users or roles to ping.
 
+A deferred response, a deferred update and a modal are not messages and carry
+no `allowed_mentions`; the edit or follow-up that carries the message does, as
+`messageBody(...)` sets it.
+
 ```ts good
 await api.createMessage(announcementsChannelId, {
   flags: MessageFlags.IsComponentsV2,
   components: [resultContainer(result)],
   allowed_mentions: { parse: [] },
 });
+```
+
+```ts good
+return {
+  response: deferredReply(),
+  followUp: async () => {
+    await api.editOriginalInteractionResponse(
+      interaction.application_id,
+      interaction.token,
+      messageBody([resultContainer(result)]),
+    );
+  },
+};
 ```
 
 ```ts bad
