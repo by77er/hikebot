@@ -180,12 +180,9 @@ Run `npm test` for the whole suite before opening a pull request.
 
 ## Run the end-to-end suite
 
-1. Run the suite. It starts the Worker from `wrangler.jsonc` in local workerd
-   once per test file, with a fake Discord API and its own key pair, bot
-   token, application id and `DISCORD_API_BASE`. These replace whatever
-   `.dev.vars`, `.env` files and `DISCORD_*` variables hold, so the suite
-   runs the same with or without a `.dev.vars`, and needs no credentials and
-   no network beyond localhost. `npm test` runs it after the unit tests.
+1. Run the suite, with or without a `.dev.vars` in the checkout. It needs no
+   credentials and no network beyond localhost, and `npm test` runs it after
+   the unit tests.
 
    ```sh
    npm run test:e2e
