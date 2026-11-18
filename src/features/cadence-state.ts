@@ -306,6 +306,20 @@ export async function scheduleCadence(
 }
 
 /**
+ * Sets the job's next run after `now` for the guild as it is stored,
+ * replacing any run already scheduled, while the schedule is on.
+ */
+export async function replaceCadenceRun(
+  storage: DurableObjectStorage,
+  store: PollStore,
+  settings: GuildSettings,
+  now: number,
+): Promise<void> {
+  await unschedule(storage, CADENCE_JOB);
+  await scheduleCadence(storage, store, settings, now);
+}
+
+/**
  * After a schedule setting or the time zone changed: drops the job's run,
  * and, while the schedule is on, marks the instants up to now as handled
  * and schedules the next run from the new settings.

@@ -20,6 +20,7 @@ import {
   discordTime,
   previousInstant,
   readCadenceState,
+  replaceCadenceRun,
   scheduleCadence,
   writeCadenceState,
   type CadenceStep,
@@ -36,7 +37,8 @@ import {
 
 /**
  * The job: schedules the next run, then takes the step the guild's state
- * calls for. A step that throws leaves the next run scheduled.
+ * calls for, then sets the next run again from the state the step left. A
+ * step that throws leaves the first next run scheduled.
  */
 export const cadenceTick: JobHandler = async (context) => {
   const { storage } = context;
@@ -61,7 +63,8 @@ export const cadenceTick: JobHandler = async (context) => {
   );
   const round: RoundContext = { ...context, guildId: state.guildId, store };
   await takeStep(step, round, settings, now);
-  await scheduleCadence(storage, store, settings, now);
+  // The step changed the round: run next for the round as it is now.
+  await replaceCadenceRun(storage, store, settings, now);
 };
 
 /** Does `step` through the round actions, as the application. */
