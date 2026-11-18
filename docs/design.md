@@ -391,6 +391,7 @@ for example to schedule an alarm. Every operation that writes more than one row 
 | `closePoll(pollId, userId)`                         | picks the winner (below), closes the poll, and moves the round to `location_decided` (location poll) or `complete` (date poll) | `poll_not_found`, `poll_closed`, `no_options`, `invalid_state`                                                                                                       |
 | `startDatePoll(roundId, userId, dates)`             | from `location_decided` only: opens the date poll with 2-25 distinct dates, sorted chronologically; round -> `date_voting`     | `round_not_found`, `invalid_state`, `invalid_date`, `duplicate_option`, `too_few_options`, `too_many_options`                                                        |
 | `withdrawDatePoll(pollId)`                          | deletes an open date poll with its options and votes; round `date_voting` -> `location_decided`                                | `poll_not_found`, `poll_closed`, `invalid_state`                                                                                                                     |
+| `withdrawLocationRound(pollId, userId)`             | from `location_voting` with this location poll open only: closes it without a winner; round -> `cancelled`                     | `poll_not_found`, `poll_closed`, `invalid_state`                                                                                                                     |
 | `cancelRound(roundId, userId)`                      | closes any open poll without a winner; round -> `cancelled`                                                                    | `round_not_found`, `invalid_state` (already ended)                                                                                                                   |
 | `setPollMessage(pollId, channelId, messageId)`      | records the poll's Discord message                                                                                             | `poll_not_found`                                                                                                                                                     |
 | `setRoundThread(roundId, threadId)`                 | records the hike's forum thread                                                                                                | `round_not_found`                                                                                                                                                    |
@@ -575,8 +576,23 @@ the handler starts the round through `startRound` (recording the admin as
 proposer of the initial locations) and answers with a deferred update of the
 panel. The follow-up posts the poll message in the voting channel, records it
 with `setPollMessage` and redraws the panel. If Discord refuses the post, the
-follow-up cancels the round again, so no round is left active, and the panel
-names the channel and Discord's error.
+follow-up takes the round back with `withdrawLocationRound`, so no round is
+left active, and the panel names the channel and Discord's error.
+
+The round is active and on the panel while the post is in flight, so another
+admin can cancel it or close the vote in that window. The follow-up keeps
+what they did:
+
+- If the post fails, `withdrawLocationRound` refuses, because the poll is no
+  longer open, and changes nothing. A cancelled round stays cancelled and a
+  decided round keeps its winner. The panel names the channel and Discord's
+  error, then says the round had already been cancelled, or that the vote
+  had already been closed (naming the winner) and the round was kept.
+- If the post succeeds, the follow-up records the message, then edits it to
+  the cancelled or closed rendering the cancel and close flows use, without
+  buttons, and the panel says the round had been cancelled, or the vote
+  closed, meanwhile. The close flow's announcement has no link to the vote,
+  since no message was recorded when it ran.
 
 ## Starting the date vote
 
