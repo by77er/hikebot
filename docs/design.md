@@ -155,7 +155,18 @@ RPC call, and so the Durable Object, alive until the job finishes (Cloudflare
 lets a pending call run for up to 15 minutes). `runFollowUp` runs each job
 once and returns false if there is no job, for example because the object was
 evicted in between, so follow-ups must tolerate being lost: anything that must
-survive belongs in storage, written before the response is returned.
+survive belongs in storage, written before the response is returned. Every
+deploy restarts the objects, so this happens in production. The Worker logs
+a lost follow-up (`runFollowUp` returned false) and a failed one (it threw)
+once each, with the interaction's id and its command name or `custom_id`,
+never its token.
+
+Work that must be finished even when its follow-up is lost is recorded in
+storage before the response, together with the change that needs it, and a
+scheduled job (below) is scheduled as a backstop that finishes whatever the
+follow-up did not. The follow-up and the job run the same code, which takes
+no interaction, so only the follow-up redraws the admin's panel. The close
+flow (see "Closing") works this way.
 
 Work due at a later time is a scheduled job (`src/guild/schedule.ts`). A
 Durable Object has a single alarm, which the scheduler shares among named
@@ -464,7 +475,13 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   "The hike's start time has passed, so no event was created."; while the
   round has no event, none is being created and its start is ahead, the
   panel offers **Create hike event** (`hb:event:create:<round id>`) after
-  Create hike thread; see "Hike event".
+  Create hike thread; see "Hike event". The thread and the event can also
+  be "not confirmed" when their creation was cut off. Under the round (the
+  active one or the last completed one), each announcement of its votes
+  that is being posted, failed or is not confirmed has a line, and one that
+  failed or is not confirmed gets **Announce location vote** or **Announce
+  date vote** (`hb:poll:announce:<poll id>`), after the other poll controls
+  and before Cancel round; see "Closing".
 - **Confirmation view**: Close and Cancel round first replace the status view
   with a question and a confirm button (`hb:poll:close-confirm:<poll id>`,
   `hb:round:cancel-confirm:<round id>`) next to Back; only the confirm button
@@ -853,9 +870,15 @@ the configured forum channel and a Discord scheduled event for the hike.
 The confirm button closes the poll through `closePoll` before answering, so
 the result stands whatever Discord does next, and answers with a deferred
 update of the panel. Closing a poll without options is refused in the panel
-with an explanation, at the first click and at the confirmation. The
-follow-up runs the close flow (`runCloseFlow` in `src/features/poll-ui.ts`)
-in this order:
+with an explanation, at the first click and at the confirmation. In the same
+transaction as `closePoll`, it records the close work still to do in the
+object's key-value storage under `pending-close:<poll id>`
+(`src/features/close-flow-state.ts`): the final edit of the poll message,
+each close step by its name, and the announcement, with the guild id and
+the guild's time zone at the close. It then schedules the `poll:close-flow`
+job 30 seconds ahead (`CLOSE_FLOW_DELAY_MS`). The follow-up runs the close
+flow (`runCloseFlow(pollId, context, wordings)` in
+`src/features/poll-ui.ts`), which reads that record, in this order:
 
 1. Edit the poll message to its final state.
 2. Run the kind's close steps (`PollWording.closeSteps`), in order. A
@@ -884,8 +907,13 @@ in this order:
    after the date vote the round is `complete` and the panel sums up the
    hike and offers **Start location vote** for the next round.
 
-If the edit or the announcement fails, the panel says which step failed, in
-which channel, and Discord's error.
+If the edit fails, the panel says so, in which channel, and Discord's
+error. If the announcement fails (no announcements channel, or Discord
+refuses it), the panel shows the reason under the round, "**Date vote
+announcement:** not posted. Could not post the announcement in <#channel>:
+<error>. Check that the bot can post there, then click Announce date vote.",
+with **Announce date vote** (or **Announce location vote**,
+`hb:poll:announce:<poll id>`); see "Durable close" below.
 
 **Cancel round**, confirmed, cancels the round through `cancelRound` and
 answers with a deferred update; the follow-up rewrites the message of each
@@ -894,9 +922,52 @@ which offers **Start location vote** again. A failed rewrite is named in the
 panel. No announcement is posted.
 
 Every admin control (the start buttons and modals of both votes, close,
-cancel and their confirmations, Create hike thread, Create hike event, Set
-time zone and its modal) is registered through
+cancel and their confirmations, Create hike thread, Create hike event,
+Announce, Set time zone and its modal) is registered through
 `adminOnly`, so a member who replays its `custom_id` is refused.
+
+### Durable close
+
+Each part of the close flow is started (claimed) in the `pending-close`
+record before it runs, and removed from it when it finished, whether it
+succeeded or failed; the record is deleted when no part is left. A part is
+run only by the run that started it: one started by a run of this object
+that has not finished, within a minute (`CLOSE_PART_CLAIM_MS`), makes any
+other run stop there. The `poll:close-flow` job runs the flow of every
+record left: it does every part no run started, so a follow-up that was
+lost (the object restarted between the answer and `runFollowUp`) or cut off
+half-way is finished about 30 seconds after the close, without redrawing
+the admin's panel. While a part is still held by a live run, the job
+schedules itself again 30 seconds later; once no record is left it
+schedules nothing. After a normal close the follow-up has done everything,
+so the job finds nothing and posts nothing.
+
+A part started by a run that was cut off (the object restarted since it
+started, or it started more than a minute ago) is not run again, because
+its Discord call may have gone through: nothing is created twice. The
+final edit of the poll message is the exception: an edit is safe to repeat,
+so the job does it again. A cut-off close step or announcement shows on the
+panel as not confirmed, with its retry button, for the admin to check
+Discord and retry if it is missing: "**Hike thread:** not confirmed:
+creating it was cut off, so it may or may not exist. Check the hike threads
+channel, and click Create hike thread only if it is missing." (likewise for
+the hike event and the announcements).
+
+Where a poll's announcement stands is kept under `announcement:<poll id>`
+(`src/features/announcement-state.ts`) from the moment a run starts posting
+it: being posted (since when), posted (its message id), or why it failed,
+together with what it is made from besides the poll (the guild id, the time
+zone at the close and the close steps' lines, such as the thread's link).
+The panel shows each announcement of the shown round (the active one, or
+the last one when it was completed) that is being posted, failed or not
+confirmed, and offers **Announce <vote>** for one that failed or is not
+confirmed. The button, through `adminOnly`, claims the post in that key
+before answering, like **Create hike thread**: a second click while the
+first is posting is told "The date vote's announcement is being posted.",
+and a click after it was posted is told "The date vote's announcement is
+already posted." and posts nothing. It answers with a deferred update, posts
+the same announcement the close flow would have, and redraws the panel with
+"The date vote's result is announced in <#channel>." or the new reason.
 
 ## Hike log
 
@@ -973,7 +1044,8 @@ button answers, so a second click while the first is running is told "The
 hike thread is being created." and creates nothing, and a click after it
 succeeded is told the thread already exists. A claim older than a minute
 (`THREAD_CLAIM_MS`) counts as lost, for example when the object restarted
-during the follow-up, so the button comes back.
+during the follow-up: the panel shows the thread as not confirmed (see
+"Durable close"), and the button comes back.
 
 ## Hike event
 
@@ -1040,7 +1112,8 @@ it last failed, and removed once the event id is on the round. The close
 step and the button both claim the creation there, synchronously and before
 the button answers, so a second click while the first is running is told
 "The hike event is being created." and creates nothing. A claim older than a
-minute (`EVENT_CLAIM_MS`) counts as lost, so the button comes back.
+minute (`EVENT_CLAIM_MS`) counts as lost: the panel shows the event as not
+confirmed (see "Durable close"), and the button comes back.
 
 The bot needs the Create Events permission in the server; `README.md` lists
 it among the invite's permissions.
