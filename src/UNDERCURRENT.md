@@ -165,12 +165,13 @@ return {
 ## Modals have no action rows
 only: *.ts
 
-This backstops "Modal fields are Labels" for what a command can see: an
-action row (`actionRow(...)`, `ComponentType.ActionRow` or `type: 1` with
+Wrap each input in `label("<field name>", input)` from
+`src/discord/components.ts` and pass the labels to `modal(...)`. This
+backstops "Modal fields are Labels" for what a command can see: an action
+row (`actionRow(...)`, `ComponentType.ActionRow` or `type: 1` with
 `components`) inside the components given to `modal(...)` or inside an
 `InteractionResponseType.Modal` response, and an action row holding a text
-input anywhere, since text inputs exist only in modals. Wrap each input in
-`label("<field name>", input)` from `src/discord/components.ts` instead.
+input anywhere, since text inputs exist only in modals.
 
 ```sh
 node -e '
@@ -290,14 +291,14 @@ export const startHike: CommandHandler = async (interaction, context) => {
 ## Handlers make one Discord REST call before they answer
 only: *.ts
 
-This backstops "A handler answers inside Discord's 3-second window" for what
-a command can count: in a function typed `CommandHandler`,
-`ComponentHandler` or `ModalHandler`, or one returning `HandlerResult`, the
-calls to `DiscordApi` methods outside its `followUp` job, a call inside a
-loop or a `map`/`forEach` callback counting as many. Move every call but one
-into `followUp`, behind `deferredReply(...)` or `deferredUpdate()`. Calls
-made inside helper functions are not counted; the rule above still covers
-them.
+Move every Discord REST call but one into the handler's `followUp` job,
+behind `deferredReply(...)` or `deferredUpdate()`. This backstops "A handler
+answers inside Discord's 3-second window" for what a command can count: in a
+function typed `CommandHandler`, `ComponentHandler` or `ModalHandler`, or one
+returning `HandlerResult`, the calls to `DiscordApi` methods outside its
+`followUp` job, a call inside a loop or a `map`/`forEach` callback counting
+as many. Calls made inside helper functions are not counted; the rule above
+still covers them.
 
 ```sh
 node -e '
@@ -417,8 +418,10 @@ const featured = trails[Math.floor(Math.random() * trails.length)];
 ## Only the defaults read the clock and randomness, anywhere in src/
 only: *.ts
 
-This backstops "Code takes time and randomness from injected sources". Take
-the time and randomness from the caller instead, as that rule says. Under
+Take the time as a `now: () => number` and randomness as a `RandomSource`
+from the caller, through a parameter or an options field, instead of reading
+them. This backstops "Code takes time and randomness from injected sources".
+Under
 `src/polls/` it matches exactly what "Only the defaults read the clock and
 randomness directly" in `src/polls/UNDERCURRENT.md` matches, with the same
 two exempt default lines, so the two never disagree about a line there;

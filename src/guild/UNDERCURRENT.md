@@ -59,14 +59,15 @@ export const migrations: readonly Migration[] = [
 ## Migrations on the base branch are unchanged
 only: schema.ts
 
-This backstops the rule above. It compares the `migrations` list in the
-working tree with the one at the merge base of `HEAD` and the base branch
+Restore each migration it names exactly as the base branch has it, in its
+place, and append a new migration to the end of `migrations` instead. This
+backstops the rule above: it compares the `migrations` list in the working
+tree with the one at the merge base of `HEAD` and the base branch
 (`origin/$GITHUB_BASE_REF` in a pull request's CI, otherwise `origin/HEAD`
-or `origin/main`), entry by entry, by each property's value: every entry the
-base has must still be there, unchanged and in the same position. Entries
+or `origin/main`), entry by entry, by each property's value. Every entry the
+base has must still be there, unchanged and in the same position; entries
 appended after them pass. On a push to the base branch the merge base is
-`HEAD` itself, so only uncommitted changes are compared. Restore the entries
-it names and append a new migration instead.
+`HEAD` itself, so only uncommitted changes are compared.
 
 ```sh
 base=""
