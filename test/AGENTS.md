@@ -377,6 +377,33 @@ Run `npm test` for the whole suite before opening a pull request.
    );
    ```
 
+   When a follow-up creates something on Discord and the Worker stores its
+   id (a thread, a poll message), wait until the bot shows the stored id
+   before asserting on it: click Refresh inside `eventually`, so each try is
+   answered from storage. The fake holds the new thread or message before
+   its answer reaches the Worker, and a follow-up's edit can be overwritten
+   by another interaction's update to the same message that lands later:
+
+   ```ts
+   await Promise.all([g.owner.click(panel, id), g.owner.click(panel, id)]);
+   await eventually(async () => {
+     await g.owner.click(panel, ROUND_IDS.refresh);
+     expect(messageText(play.shown(panel))).toContain("**Hike thread:** <#");
+   });
+   ```
+
+   To check that a scenario waits on the right thing, hold the fake's
+   answer to that route for half a second in a scratch worktree (as "Find an
+   intermittent test failure" step 4 sets one up), by adding this before the
+   `res.writeHead` call in `handle()` of `test/e2e/harness/fake-discord.ts`,
+   then run the file there; it must still pass:
+
+   ```ts
+   if (method === "POST" && /\/threads$/.test(url.pathname)) {
+     await new Promise((r) => setTimeout(r, 500));
+   }
+   ```
+
 5. Assert on what members see: the message text and its controls.
 
    ```ts
