@@ -1,7 +1,7 @@
 /**
  * The parts of a poll every kind shares: the public poll message, the Vote
  * button and its ephemeral multi-select, the debounced refresh of the poll
- * message through the Durable Object alarm, and the admin's close and
+ * message as a scheduled job (`src/guild/schedule.ts`), and the admin's close and
  * cancel flows. A poll kind (`location-vote.ts`, `date-vote.ts`) supplies
  * its wording, extra buttons and close steps as a `PollWording`.
  */
@@ -34,6 +34,7 @@ import {
 import { ephemeralNotice } from "../discord/responses";
 import { GuildConfig } from "../guild/config";
 import { adminOnly } from "../guild/permissions";
+import { schedule } from "../guild/schedule";
 import {
   UNAVAILABLE_MESSAGE,
   type ComponentHandler,
@@ -135,6 +136,9 @@ export const MAX_MESSAGE_TEXT = 4000;
 export const REFRESH_DELAY_MS = 2_000;
 
 const REFRESH_KEY_PREFIX = "poll-refresh:";
+
+/** The scheduled job that refreshes the marked poll messages. */
+export const REFRESH_JOB = "poll:refresh";
 
 export const POLL_IDS = {
   vote: (pollId: number) => customId("poll", "vote", String(pollId)),
@@ -383,9 +387,9 @@ export function queuePollEdit<T>(
 }
 
 /**
- * Marks the poll's public message for a refresh and, unless an alarm is
- * already set, sets one `REFRESH_DELAY_MS` from now, so a burst of changes
- * causes one edit.
+ * Marks the poll's public message for a refresh and schedules the refresh
+ * job `REFRESH_DELAY_MS` from now, unless it is already scheduled earlier,
+ * so a burst of changes causes one edit.
  */
 export async function scheduleRefresh(
   storage: DurableObjectStorage,
@@ -394,15 +398,15 @@ export async function scheduleRefresh(
 ): Promise<void> {
   const due = now + REFRESH_DELAY_MS;
   await storage.put(`${REFRESH_KEY_PREFIX}${String(pollId)}`, due);
-  if ((await storage.getAlarm()) === null) await storage.setAlarm(due);
+  await schedule(storage, REFRESH_JOB, due);
 }
 
 /**
- * The alarm's work: edits the message of every poll marked for a refresh
+ * The refresh job: edits the message of every poll marked for a refresh
  * that is still open. A failed edit is logged and dropped. Marks added while
- * it ran get an alarm of their own.
+ * it runs schedule the job again, so they get a run of their own.
  */
-export async function refreshPollMessages(
+async function refreshPollMessages(
   context: HandlerContext,
   wordings: PollWordings,
 ): Promise<void> {
@@ -438,10 +442,6 @@ export async function refreshPollMessages(
         );
       }
     });
-  }
-  const later = await storage.list<number>({ prefix: REFRESH_KEY_PREFIX });
-  if (later.size > 0 && (await storage.getAlarm()) === null) {
-    await storage.setAlarm(Math.min(...later.values()));
   }
 }
 
@@ -867,5 +867,6 @@ export function registerPollUi(router: Router, wordings: PollWordings): Router {
   );
   router.component("hb:round:cancel", askCancel);
   router.component("hb:round:cancel-confirm", cancelRound(wordings));
+  router.job(REFRESH_JOB, (context) => refreshPollMessages(context, wordings));
   return router;
 }
