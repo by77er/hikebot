@@ -396,8 +396,7 @@ Run `npm test` for the whole suite before opening a pull request.
 ## Play a hike round in an end-to-end scenario
 
 1. Create a `RoundPlayer` for the file next to `useE2E()`, and a guild per
-   test with its own number (0-99), which adds the guild, its owner, 12
-   members and a text, an announcement and a forum channel to the fake:
+   test with its own number (0-99) through `play.guild(n)`:
 
    ```ts
    import { Member, messageText, waitForMessage } from "./harness/helpers";
@@ -412,41 +411,43 @@ Run `npm test` for the whole suite before opening a pull request.
      const [ana] = g.members as [Member];
    ```
 
-2. Set up the panel, then take the round's steps. Each start returns the
-   poll message as the fake stores it and waits until the panel says the
-   vote is open; `closeVote` and `cancelRound` confirm and wait for the
-   panel's answer:
+2. Set up the panel, then take the round's steps with `startLocationVote`,
+   `startDateVote`, `vote`, `closeVote` and `cancelRound`. Put one location
+   or date per line, joined with `\n`:
 
    ```ts
-     const panel = await play.setUpPanel(g);
-     const where = await play.startLocationVote(g, panel, "Ridge
+   const panel = await play.setUpPanel(g);
+   const where = await play.startLocationVote(
+     g,
+     panel,
+     ["Ridge", "Lake"].join("\n"),
+   );
+   await play.vote(ana, where, ["Lake"]);
+   await play.closeVote(g.owner, panel, "location vote");
+   const when = await play.startDateVote(
+     g,
+     panel,
+     ["2030-06-08", "2030-06-15"].join("\n"),
+   );
+   await play.vote(ana, when, ["Sat, 15 Jun 2030"]);
+   await play.closeVote(g.owner, panel, "date vote");
    ```
 
-Lake");
-await play.vote(ana, where, ["Lake"]);
-await play.closeVote(g.owner, panel, "location vote");
-const when = await play.startDateVote(g, panel, "2030-06-08
-2030-06-15");
-await play.vote(ana, when, ["Sat, 15 Jun 2030"]);
-await play.closeVote(g.owner, panel, "date vote");
+   Write candidate dates years ahead of today. To test refused input, call
+   `play.submitDates(g, panel, text)` and check the reply with
+   `expectEphemeral(g.owner, "<text>")`.
 
-````
+3. Assert on what members see with `play.shown(message)`,
+   `buttonLabels(message)` and `e2e.discord.channelMessages(id)`, and wait
+   for background edits with `eventually` or `waitForMessage`:
 
-Use dates years ahead: the Worker checks them against the real clock.
-To test refused input, call `play.submitDates(g, panel, text)` and read
-the reply with `expectEphemeral(g.owner, "<text>")`.
-
-3. Read what members see with `play.shown(message)` (the message as stored
-now), `buttonLabels(message)` and `e2e.discord.channelMessages(id)`, and
-wait for background edits with `eventually` or `waitForMessage`:
-
-```ts
-  const announcement = await waitForMessage(e2e.discord, g.channels.news, (m) =>
-    messageText(m).includes("Hike planned"),
-  );
-  expect(messageText(announcement)).toContain("**When:** Sat, 15 Jun 2030");
-});
-````
+   ```ts
+     const announcement = await waitForMessage(e2e.discord, g.channels.news, (m) =>
+       messageText(m).includes("Hike planned"),
+     );
+     expect(messageText(announcement)).toContain("**When:** Sat, 15 Jun 2030");
+   });
+   ```
 
 4. Run the file and check that no `workerd` process is left:
 
