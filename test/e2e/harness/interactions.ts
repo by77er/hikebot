@@ -338,6 +338,20 @@ export class InteractionClient {
    * a response Discord would refuse for this interaction type.
    */
   async send(interaction: Interaction): Promise<APIInteractionResponse> {
+    // Follow-up jobs the Worker starts as it answers may call webhooks with
+    // this token before `answer` has read the response; the fake holds them
+    // until the response is recorded.
+    this.discord.sendingInteraction(interaction.token);
+    try {
+      return await this.answer(interaction);
+    } finally {
+      this.discord.sentInteraction(interaction.token);
+    }
+  }
+
+  private async answer(
+    interaction: Interaction,
+  ): Promise<APIInteractionResponse> {
     const body = JSON.stringify(interaction);
     const started = performance.now();
     let response: Response;
