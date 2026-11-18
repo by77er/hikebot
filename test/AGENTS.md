@@ -178,6 +178,33 @@ Run `npm test` for the whole suite before opening a pull request.
    `src/polls/AGENTS.md` describes.
 6. Run the file: `npx vitest run test/<dir>/<file>.test.ts`.
 
+## Fix the clock in a test that goes through the Worker
+
+Handlers read the time from `PollStore`'s default clock, `Date.now`. In a
+unit test (not an end-to-end one) the Worker and its objects run in the
+test's runtime, so a faked `Date` reaches them.
+
+1. Fake only `Date` and set the time before sending the interaction or
+   writing the rows whose time matters, and restore real timers after each
+   test:
+
+   ```ts
+   afterEach(() => {
+     vi.useRealTimers();
+   });
+
+   it("judges today in the guild's zone", async () => {
+     // 03:00 UTC on Saturday 21 November is Friday evening in Los Angeles.
+     vi.useFakeTimers({ toFake: ["Date"] });
+     vi.setSystemTime(Date.UTC(2026, 10, 21, 3));
+     const reply = await send(click);
+   ```
+
+   Pick an instant where UTC and the guild's zone are on different days
+   when the behaviour depends on "today".
+
+2. Run the file: `npx vitest run test/features/date-vote.test.ts`.
+
 ## Test a Durable Object alarm
 
 1. Do what sets the alarm, for example send a vote through the Worker, with
@@ -532,6 +559,14 @@ Run `npm test` for the whole suite before opening a pull request.
    Write candidate dates years ahead of today. To test refused input, call
    `play.submitDates(g, panel, text)` and check the reply with
    `expectEphemeral(g.owner, "<text>")`.
+
+   To have a member propose a date on the open date vote, call
+   `play.proposeDate(member, when, "<YYYY-MM-DD[ HH:MM]>")`; it returns the
+   modal and the answer to the submit. A member may propose only from today
+   to 31 days ahead in the guild's time zone, so compute those dates from
+   today in Los Angeles, the default zone, as
+   `test/e2e/date-vote.test.ts` does, and check the answer with
+   `expectEphemeral(member, "Added **<label>** to the date vote.")`.
 
    To make creating the hike's thread in `g.channels.forum` fail when the
    date vote closes, call
