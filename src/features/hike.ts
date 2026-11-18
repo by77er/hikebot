@@ -5,6 +5,7 @@ import {
 import { ephemeralNotice } from "../discord/responses";
 import { UNAVAILABLE_MESSAGE, type CommandHandler } from "../guild/router";
 import { openAdminPanel } from "./admin-panel";
+import { showHikeLog } from "./hike-log";
 
 /**
  * The handlers of `/hike`'s subcommands, by name. Each subcommand here is
@@ -12,6 +13,7 @@ import { openAdminPanel } from "./admin-panel";
  */
 const subcommands: Record<string, CommandHandler | undefined> = {
   admin: openAdminPanel,
+  log: showHikeLog,
 };
 
 /**

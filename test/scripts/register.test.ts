@@ -60,7 +60,7 @@ describe("register", () => {
     expect(await request.json()).toEqual(commands);
     expect(lines).toEqual([
       `Registered 1 global command(s) for application ${ENV.DISCORD_APPLICATION_ID}:`,
-      "  /hike (admin)",
+      "  /hike (admin, log)",
     ]);
   });
 

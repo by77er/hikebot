@@ -229,6 +229,29 @@ export class RoundPlayer {
     });
   }
 
+  /**
+   * Plays a whole round from the panel: a location vote that `location`
+   * wins over a second location, then a date vote between `dates` that the
+   * date shown as `date` wins. Returns once the date vote is closed.
+   */
+  async playHike(
+    g: TestGuild,
+    panel: FakeMessage,
+    hike: { location: string; dates: [string, string]; date: string },
+  ): Promise<void> {
+    const [voter] = g.members as [Member];
+    const where = await this.startLocationVote(
+      g,
+      panel,
+      [hike.location, `Not ${hike.location}`].join("\n"),
+    );
+    await this.vote(voter, where, [hike.location]);
+    await this.closeVote(g.owner, panel, "location vote");
+    const when = await this.startDateVote(g, panel, hike.dates.join("\n"));
+    await this.vote(voter, when, [hike.date]);
+    await this.closeVote(g.owner, panel, "date vote");
+  }
+
   /** Cancels the active round from the panel, confirming. */
   async cancelRound(owner: Member, panel: FakeMessage): Promise<void> {
     await owner.click(panel, idStarting(this.shown(panel), "hb:round:cancel:"));

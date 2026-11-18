@@ -70,3 +70,28 @@ export function count(storage: DurableObjectStorage, table: string): number {
     .exec<{ n: number }>(`SELECT count(*) AS n FROM ${table}`)
     .one().n;
 }
+
+/**
+ * Plays a round to `complete` with `label` as its location and `date` (a
+ * `parseDateOption` line) as its date, and returns the round's id.
+ */
+export function completeRound(
+  store: PollStore,
+  label: string,
+  date: string,
+  details: string | null = null,
+): number {
+  const round = store.startRound("u-admin", [
+    { label, details, proposedBy: "u-proposer" },
+  ]);
+  const where = round.locationPoll;
+  if (!where) throw new Error("no location poll");
+  store.closePoll(where.id, "u-admin");
+  const other = date.startsWith("2099-12-31") ? "2099-12-30" : "2099-12-31";
+  const when = store.startDatePoll(round.id, "u-admin", [date, other]);
+  const pick = when.options.find((o) => o.dateValue === date.trim());
+  if (!pick) throw new Error(`no date option ${date}`);
+  store.setVotes(when.id, "u1", [pick.id]);
+  store.closePoll(when.id, "u-admin");
+  return round.id;
+}
