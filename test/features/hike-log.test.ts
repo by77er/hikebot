@@ -1,3 +1,4 @@
+import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import {
   ApplicationCommandOptionType,
@@ -25,9 +26,10 @@ import { Router } from "../../src/guild/router";
 import {
   MAX_DETAILS_LENGTH,
   MAX_LABEL_LENGTH,
+  PollStore,
   type HikeView,
-  type PollStore,
 } from "../../src/polls/store";
+import { discordFetch } from "../guild/web-view-helpers";
 import { commandInteraction, componentInteraction } from "../helpers";
 import { completeRound, withStore } from "../polls/helpers";
 
@@ -307,5 +309,61 @@ describe("renderHikeLog", () => {
     expect(shown).not.toContain("D".repeat(LOG_DETAILS_CAP));
     expect(shown).toContain(`**${"L".repeat(MAX_LABEL_LENGTH)}**`);
     expect(buttons(components)).toHaveLength(2);
+  });
+});
+
+describe("the web view's hike log", () => {
+  const guildId = "200000000000004001";
+
+  async function page(n: number) {
+    const result = await env.GUILD_HIKE.get(
+      env.GUILD_HIKE.idFromName(guildId),
+    ).webView({ guildId, userId: STRANGER, page: n, pageSize: 10 });
+    if (result.kind !== "view") throw new Error(`no view: ${result.kind}`);
+    return result.view.log;
+  }
+
+  it("pages 12 hikes 10 at a time, newest first, with the total", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      discordFetch({
+        id: guildId,
+        ownerId: "400000000000000001",
+        members: { [STRANGER]: [] },
+      }),
+    );
+    await runInDurableObject(
+      env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(guildId)),
+      (_instance, state) => {
+        const store = new PollStore(state.storage);
+        seed(store, 12);
+        const [newest] = store.listHikes({ limit: 1, offset: 0 });
+        store.setRoundThread(newest?.roundId ?? 0, "600000000000000001");
+        store.setRoundEvent(newest?.roundId ?? 0, "600000000000000002");
+      },
+    );
+
+    const first = await page(1);
+    expect(first).toMatchObject({ page: 1, pageSize: 10, pages: 2, total: 12 });
+    expect(first.entries.map((e) => e.location.label)).toEqual(
+      Array.from({ length: 10 }, (_, i) => `Hike ${String(12 - i)}`),
+    );
+    expect(first.entries[0]).toEqual({
+      roundId: expect.any(Number) as number,
+      location: { label: "Hike 12", details: null, proposedBy: "u-proposer" },
+      date: { value: "2030-01-12 11:00", label: "Sat, 12 Jan 2030 · 11:00" },
+      threadUrl: `https://discord.com/channels/${guildId}/600000000000000001`,
+      eventUrl: `https://discord.com/events/${guildId}/600000000000000002`,
+      completedAt: expect.any(Number) as number,
+    });
+    expect(first.entries[1]).toMatchObject({ threadUrl: null, eventUrl: null });
+
+    const second = await page(2);
+    expect(second).toMatchObject({ page: 2, pages: 2, total: 12 });
+    expect(second.entries.map((e) => e.location.label)).toEqual([
+      "Hike 2",
+      "Hike 1",
+    ]);
+    expect((await page(9)).page).toBe(2);
+    expect((await page(0)).page).toBe(1);
   });
 });
