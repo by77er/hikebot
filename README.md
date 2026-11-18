@@ -41,7 +41,7 @@ without a manual step:
    five secrets (all but the two `CLOUDFLARE_*` ones) from the GitHub
    secrets, then runs
    `npm run register --if-present` to register the slash commands, and
-   finally requests `https://hiking.bitcru.sh/` until it answers
+   finally requests `https://hiking.bitcru.sh/healthz` until it answers
    `hikebot is running`, failing after about two minutes.
 
 The first deploy creates the Worker, its Durable Object and the DNS record
