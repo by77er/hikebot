@@ -1,0 +1,33 @@
+{
+  "name": "hikebot",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Discord bot that runs a hiking group's location and date votes, on Cloudflare Workers.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "wrangler types --check && tsc --noEmit && tsc --noEmit -p test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.8.4",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "discord-api-types": "^0.38.59",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^5.1.1",
+    "wrangler": "^4.164.0"
+  }
+}
