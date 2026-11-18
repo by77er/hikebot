@@ -1,17 +1,24 @@
-import { listDurableObjectIds } from "cloudflare:test";
+import {
+  createExecutionContext,
+  listDurableObjectIds,
+  runInDurableObject,
+  waitOnExecutionContext,
+} from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import {
   ComponentType,
   InteractionResponseType,
   MessageFlags,
 } from "discord-api-types/v10";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import * as entry from "../src";
-import { GUILD_ONLY_MESSAGE } from "../src/discord/responses";
+import { GUILD_ONLY_MESSAGE, ephemeralNotice } from "../src/discord/responses";
+import type { GuildHike } from "../src/guild/guild-hike";
 import { UNAVAILABLE_MESSAGE } from "../src/guild/router";
 import {
   callWorker,
   commandInteraction,
+  componentInteraction,
   createSigner,
   IncomingRequest,
   interactionRequest,
@@ -210,5 +217,85 @@ describe("POST /interactions dispatch", () => {
     const ids = await guildObjectIds();
     expect(ids).toContain(first);
     expect(ids).toContain(second);
+  });
+});
+
+describe("POST /interactions follow-ups", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Sends the interaction and waits for its follow-up; returns the logs. */
+  async function sendAndLog(interaction: object): Promise<string[]> {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ctx = createExecutionContext();
+    const response = await callWorker(
+      signer,
+      await signedRequest(signer, interaction),
+      ctx,
+    );
+    expect(await response.json()).toEqual(ephemeralNotice("working on it"));
+    await waitOnExecutionContext(ctx);
+    return errors.mock.calls.map((call) => call.join(" "));
+  }
+
+  it("logs a follow-up the guild object no longer has, once, by id and custom_id", async () => {
+    const guildId = "333333331";
+    await runInDurableObject(
+      env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(guildId)),
+      (instance: GuildHike) => {
+        instance.router.component("hb:lost:go", () => ({
+          response: ephemeralNotice("working on it"),
+          followUp: () => Promise.resolve(),
+        }));
+        // As if the object restarted between the answer and the follow-up.
+        const kept = (
+          instance as unknown as { followUps: Map<string, unknown> }
+        ).followUps;
+        kept.set = () => kept;
+      },
+    );
+    const interaction = componentInteraction("hb:lost:go:7", guildId);
+    const logs = await sendAndLog(interaction);
+    expect(logs).toEqual([
+      `follow-up for interaction ${interaction.id} (hb:lost:go:7) was lost: the guild object restarted before it ran`,
+    ]);
+    expect(logs.join("\n")).not.toContain(interaction.token);
+  });
+
+  it("logs a follow-up that failed, once, by id and command name", async () => {
+    const guildId = "333333332";
+    await runInDurableObject(
+      env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(guildId)),
+      (instance: GuildHike) => {
+        instance.router.command("broken", () => ({
+          response: ephemeralNotice("working on it"),
+          followUp: () =>
+            Promise.reject(new Error("Discord could not be reached")),
+        }));
+      },
+    );
+    const interaction = commandInteraction("broken", guildId);
+    const logs = await sendAndLog(interaction);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain(
+      `follow-up for interaction ${interaction.id} (/broken) failed:`,
+    );
+    expect(logs[0]).toContain("Discord could not be reached");
+    expect(logs[0]).not.toContain(interaction.token);
+  });
+
+  it("logs nothing for a follow-up that ran", async () => {
+    const guildId = "333333333";
+    await runInDurableObject(
+      env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(guildId)),
+      (instance: GuildHike) => {
+        instance.router.command("fine", () => ({
+          response: ephemeralNotice("working on it"),
+          followUp: () => Promise.resolve(),
+        }));
+      },
+    );
+    expect(await sendAndLog(commandInteraction("fine", guildId))).toEqual([]);
   });
 });

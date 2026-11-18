@@ -302,7 +302,7 @@ describe("hikeEventStatus and claimHikeEvent", () => {
     eventId,
   });
 
-  it("lets one claim through, refuses a second while it is fresh, and takes a lost one back", async () => {
+  it("lets one claim through, refuses a second while it is fresh, and takes back a lost one as unconfirmed", async () => {
     await runInDurableObject(stub("hike-event-claim"), (_i, state) => {
       const { storage } = state;
       expect(hikeEventStatus(storage, round(), NOW, LA).state).toBe("missing");
@@ -314,7 +314,7 @@ describe("hikeEventStatus and claimHikeEvent", () => {
       ).toBe(false);
       expect(
         hikeEventStatus(storage, round(), NOW + EVENT_CLAIM_MS, LA).state,
-      ).toBe("missing");
+      ).toBe("unconfirmed");
       expect(claimHikeEvent(storage, round(), NOW + EVENT_CLAIM_MS, LA)).toBe(
         true,
       );
@@ -481,11 +481,13 @@ function eventRequests(spy: { mock: { calls: Parameters<typeof fetch>[] } }) {
 
 async function closeDateVote(guildId: string, view: PollView) {
   await runInDurableObject(stub(guildId), async (_i, state) => {
-    await closePoll(
-      click(POLL_IDS.closeConfirm(view.id), guildId),
-      { env, storage: state.storage },
-      { date: DATE_POLL },
-      new PollStore(state.storage, { random: sequence(0) }),
+    await (
+      await closePoll(
+        click(POLL_IDS.closeConfirm(view.id), guildId),
+        { env, storage: state.storage },
+        { date: DATE_POLL },
+        new PollStore(state.storage, { random: sequence(0) }),
+      )
     ).followUp?.();
   });
 }

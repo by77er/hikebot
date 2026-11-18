@@ -29,6 +29,7 @@ import {
   actionButtons,
   renderAdminPanel,
   renderAdminSettings,
+  type PollAnnouncement,
 } from "../../src/features/admin-panel";
 import type { HikeEventStatus } from "../../src/features/hike-event-state";
 import type { HikeThreadStatus } from "../../src/features/hike-thread-state";
@@ -498,6 +499,14 @@ describe("renderAdminPanel", () => {
       expect(buttons).toContain(POLL_CONTROL_IDS.createHikeThread(finished.id));
     });
 
+    it("says a cut-off creation is not confirmed and offers Create hike thread", () => {
+      const { buttons, shown } = panel({ state: "unconfirmed" });
+      expect(shown).toContain(
+        "**Hike thread:** not confirmed: creating it was cut off, so it may or may not exist. Check the hike threads channel, and click Create hike thread only if it is missing.",
+      );
+      expect(buttons).toContain(POLL_CONTROL_IDS.createHikeThread(finished.id));
+    });
+
     it("offers no button while the thread is being created", () => {
       const { buttons, shown } = panel({ state: "creating" });
       expect(shown).toContain("**Hike thread:** being created.");
@@ -562,6 +571,16 @@ describe("renderAdminPanel", () => {
         );
       });
 
+      it("says a cut-off creation is not confirmed and offers Create hike event", () => {
+        const { buttons, shown } = withEvent({ state: "unconfirmed" });
+        expect(shown).toContain(
+          "**Hike event:** not confirmed: creating it was cut off, so it may or may not exist. Check the server's events, and click Create hike event only if it is missing.",
+        );
+        expect(buttons).toContain(
+          POLL_CONTROL_IDS.createHikeEvent(finished.id),
+        );
+      });
+
       it("offers no button while it is being created", () => {
         const { buttons, shown } = withEvent({ state: "creating" });
         expect(shown).toContain("**Hike event:** being created.");
@@ -596,6 +615,86 @@ describe("renderAdminPanel", () => {
           ADMIN_PANEL_IDS.refresh,
         ]);
         expectWithinLimits(renderAdminPanel(state, "x".repeat(300)));
+      });
+    });
+
+    describe("and its announcements", () => {
+      const thread: HikeThreadStatus = {
+        state: "created",
+        threadId: "900000000000000001",
+      };
+      const withAnnouncements = (announcements: PollAnnouncement[]) => {
+        const state = {
+          settings: COMPLETE,
+          round: null,
+          finished: { ...finished, threadId: thread.threadId },
+          thread,
+          announcements,
+        };
+        return {
+          buttons: actionButtons(state).map((b) => b.custom_id),
+          shown: text(asNodes(renderAdminPanel(state))),
+          view: renderAdminPanel(state, "x".repeat(300)),
+        };
+      };
+
+      it("shows why one failed and offers Announce for that vote", () => {
+        const reason = `Could not post the announcement in <#${NEWS}>: ${"r".repeat(400)}`;
+        const { buttons, shown, view } = withAnnouncements([
+          { pollId: 3, kind: "date", status: { state: "failed", reason } },
+        ]);
+        expect(shown).toContain(
+          `**Date vote announcement:** not posted. ${reason}`,
+        );
+        expect(buttons).toEqual([
+          POLL_CONTROL_IDS.startLocationVote,
+          POLL_CONTROL_IDS.announce(3),
+          ADMIN_PANEL_IDS.settings,
+          ADMIN_PANEL_IDS.refresh,
+        ]);
+        expectWithinLimits(view);
+      });
+
+      it("says a cut-off post is not confirmed and offers Announce", () => {
+        const { buttons, shown } = withAnnouncements([
+          { pollId: 1, kind: "location", status: { state: "unconfirmed" } },
+        ]);
+        expect(shown).toContain(
+          "**Location vote announcement:** not confirmed: posting it was cut off, so it may or may not have been posted. Check the announcements channel, and click Announce location vote only if it is missing.",
+        );
+        expect(buttons).toContain(POLL_CONTROL_IDS.announce(1));
+      });
+
+      it("offers no button while one is being posted", () => {
+        const { buttons, shown } = withAnnouncements([
+          { pollId: 3, kind: "date", status: { state: "posting" } },
+        ]);
+        expect(shown).toContain("**Date vote announcement:** being posted.");
+        expect(buttons).not.toContain(POLL_CONTROL_IDS.announce(3));
+      });
+
+      it("offers Announce during a round whose location announcement failed", () => {
+        const state = {
+          settings: COMPLETE,
+          round: {
+            ...votingRound(location),
+            status: "location_decided" as const,
+            locationOptionId: 2,
+          },
+          announcements: [
+            {
+              pollId: 1,
+              kind: "location" as const,
+              status: { state: "failed" as const, reason: "No channel." },
+            },
+          ],
+        };
+        expect(text(asNodes(renderAdminPanel(state)))).toContain(
+          "**Location vote announcement:** not posted. No channel.",
+        );
+        expect(actionButtons(state).map((b) => b.custom_id)).toContain(
+          POLL_CONTROL_IDS.announce(1),
+        );
       });
     });
   });
@@ -1057,6 +1156,10 @@ describe("the admin panel", () => {
       [
         POLL_CONTROL_IDS.createHikeEvent(1),
         (g) => click(POLL_CONTROL_IDS.createHikeEvent(1), g, STRANGER),
+      ],
+      [
+        POLL_CONTROL_IDS.announce(1),
+        (g) => click(POLL_CONTROL_IDS.announce(1), g, STRANGER),
       ],
       [ADMIN_PANEL_IDS.role, (g) => pickRole(g, STRANGER, ROLE)],
       ...[

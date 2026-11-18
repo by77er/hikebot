@@ -20,6 +20,7 @@ export type HikeThreadStatus =
   | { state: "created"; threadId: string }
   | { state: "creating" }
   | { state: "failed"; reason: string }
+  | { state: "unconfirmed" }
   | { state: "missing" };
 
 function key(roundId: number): string {
@@ -29,7 +30,9 @@ function key(roundId: number): string {
 /**
  * The thread's status for `round` at `now`. A creation that started more
  * than `THREAD_CLAIM_MS` ago is taken as lost (its follow-up never
- * finished), so the thread counts as missing again.
+ * finished, for example because the object restarted): Discord may or may
+ * not have created the thread, so it is unconfirmed, and may be created
+ * again from the panel.
  */
 export function hikeThreadStatus(
   storage: DurableObjectStorage,
@@ -44,7 +47,7 @@ export function hikeThreadStatus(
   if ("error" in attempt) return { state: "failed", reason: attempt.error };
   return now - attempt.creatingSince < THREAD_CLAIM_MS
     ? { state: "creating" }
-    : { state: "missing" };
+    : { state: "unconfirmed" };
 }
 
 /**

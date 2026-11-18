@@ -22,6 +22,7 @@ export type HikeEventStatus =
   | { state: "past" }
   | { state: "creating" }
   | { state: "failed"; reason: string }
+  | { state: "unconfirmed" }
   | { state: "missing" };
 
 function key(roundId: number): string {
@@ -43,7 +44,9 @@ export function roundStart(round: RoundView, timeZone: string): number {
  * The event's status for `round` at `now`. Without an event, a hike whose
  * start in `timeZone` is not after `now` gets none, whatever was tried. A
  * creation that started more than `EVENT_CLAIM_MS` ago is taken as lost
- * (its follow-up never finished), so the event counts as missing again.
+ * (its follow-up never finished, for example because the object
+ * restarted): Discord may or may not have created the event, so it is
+ * unconfirmed, and may be created again from the panel.
  */
 export function hikeEventStatus(
   storage: DurableObjectStorage,
@@ -60,7 +63,7 @@ export function hikeEventStatus(
   if ("error" in attempt) return { state: "failed", reason: attempt.error };
   return now - attempt.creatingSince < EVENT_CLAIM_MS
     ? { state: "creating" }
-    : { state: "missing" };
+    : { state: "unconfirmed" };
 }
 
 /**
@@ -75,7 +78,9 @@ export function claimHikeEvent(
   timeZone: string,
 ): boolean {
   const status = hikeEventStatus(storage, round, now, timeZone).state;
-  if (status !== "missing" && status !== "failed") return false;
+  if (status === "created" || status === "past" || status === "creating") {
+    return false;
+  }
   storage.kv.put<EventAttempt>(key(round.id), { creatingSince: now });
   return true;
 }

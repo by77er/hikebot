@@ -187,7 +187,14 @@ take longer than Discord's 3-second window.
 
 1. Write everything that must survive to `context.storage` before the
    handler returns. The follow-up runs after the response is sent and is
-   lost if the object restarts in between.
+   lost if the object restarts in between, or cut off if it restarts while
+   the follow-up runs; every deploy restarts the objects. For work that
+   must still happen then, record what is left to do in the same
+   transaction as the change, schedule a job a little later as "Add a
+   scheduled job" says, and have the follow-up and the job run the same
+   function, which takes no interaction and does only the parts still
+   recorded, as `closePoll`, `runCloseFlow` and the `poll:close-flow` job in
+   `src/features/poll-ui.ts` do.
 2. Return a deferred response and a `followUp` function that finishes the
    work and replaces the deferred response. From a component, return
    `deferredUpdate()` in place of `deferredReply(...)`:

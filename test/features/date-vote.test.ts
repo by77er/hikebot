@@ -714,7 +714,7 @@ describe("closing the date vote", () => {
       .mockImplementation(() => Promise.resolve(Response.json({ id: "1" })));
     await runInDurableObject(stub(guild), async (_i, state) => {
       const store = new PollStore(state.storage, { random: sequence(1) });
-      const result = closePoll(
+      const result = await closePoll(
         closeClick(view),
         { env, storage: state.storage },
         { date: DATE_POLL },
@@ -782,11 +782,13 @@ describe("closing the date vote", () => {
       .mockImplementation(() => Promise.resolve(Response.json({ id: "1" })));
     await runInDurableObject(stub(guild), async (_i, state) => {
       new GuildConfig(state.storage).setTimezone("Europe/Berlin");
-      await closePoll(
-        closeClick(view),
-        { env, storage: state.storage },
-        { date: DATE_POLL },
-        new PollStore(state.storage, { random: sequence(1) }),
+      await (
+        await closePoll(
+          closeClick(view),
+          { env, storage: state.storage },
+          { date: DATE_POLL },
+          new PollStore(state.storage, { random: sequence(1) }),
+        )
       ).followUp?.();
     });
     const sent = requests(fetchSpy);
@@ -816,7 +818,7 @@ describe("closing the date vote", () => {
           : Promise.reject(new TypeError("Network connection lost"));
       });
     await runInDurableObject(stub(guild), async (_i, state) => {
-      const result = closePoll(
+      const result = await closePoll(
         closeClick(view),
         { env, storage: state.storage },
         { date: DATE_POLL },
@@ -876,11 +878,13 @@ describe("closing the date vote", () => {
       ],
     };
     await runInDurableObject(stub(guild), async (_i, state) => {
-      await closePoll(
-        closeClick(view),
-        { env, storage: state.storage },
-        { date: wording },
-        new PollStore(state.storage, { random: sequence(0) }),
+      await (
+        await closePoll(
+          closeClick(view),
+          { env, storage: state.storage },
+          { date: wording },
+          new PollStore(state.storage, { random: sequence(0) }),
+        )
       ).followUp?.();
     });
     expect(order).toEqual(["thread after 1 calls"]);

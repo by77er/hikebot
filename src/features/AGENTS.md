@@ -102,18 +102,30 @@ step's name and work.
    };
    ```
 
+   Give it a `name` no other step of the kind has: the close records the
+   steps still to do by name (`pending-close:<poll id>`), and a step that
+   was cut off half-way by a restart is never run again. If the step
+   creates something on Discord, make it claim that in storage before the
+   call and give the admin a retry, as "Let an admin retry a close step
+   from the panel" says, so a cut-off step shows as not confirmed.
+
 2. Add it to the kind's wording, in the order the steps should run:
    `closeSteps: [postNote]`.
 3. Test it the way "runs the kind's close steps after the final edit and
    before the announcement" in `test/features/date-vote.test.ts` does: run
-   `closePoll(...).followUp` with `fetch` stubbed, then check the order of
-   the requests, the announcement's last lines and the panel's notes. Add
-   the step's message or link to the end-to-end scenario that closes that
-   vote (for the date vote, `test/e2e/full-round.test.ts`).
+   `(await closePoll(...)).followUp` with `fetch` stubbed, then check the
+   order of the requests, the announcement's last lines and the panel's
+   notes. Check that the close-flow job runs it when the follow-up was
+   lost, as "finishes the flow once when the follow-up never ran" in
+   `test/features/close-flow.test.ts` does: close through
+   `stub.handleInteraction`, `evictDurableObject`, then
+   `runDurableObjectAlarm` and count the requests. Add the step's message
+   or link to the end-to-end scenario that closes that vote (for the date
+   vote, `test/e2e/full-round.test.ts`).
 4. Run them:
 
    ```sh
-   npx vitest run test/features/date-vote.test.ts
+   npx vitest run test/features/date-vote.test.ts test/features/close-flow.test.ts
    npx vitest run --project e2e test/e2e/full-round.test.ts
    ```
 
@@ -125,20 +137,23 @@ model.
 
 1. Keep where the step stands per round in the object's synchronous
    key-value storage, under a key of its own such as `pin:<round id>`: when
-   an attempt started, or why it failed. Write a `claimPin(storage, round,
-now)` that returns false when the step's result is already on the round
-   or a claim younger than a minute exists, and otherwise stores
-   `{ creatingSince: now }` and returns true. Read and write it with
-   `storage.kv` in one synchronous step, with nothing awaited between the
-   check and the write. Take `now` from `store.now()`.
+   an attempt started, or why it failed. Write a `pinStatus(storage, round,
+now)` that says `"unconfirmed"` for a claim older than a minute (its run
+   was cut off, so Discord may or may not have the result), and a
+   `claimPin(storage, round, now)` that returns false when the step's
+   result is already on the round or a claim younger than a minute exists,
+   and otherwise stores `{ creatingSince: now }` and returns true. Read and
+   write it with `storage.kv` in one synchronous step, with nothing awaited
+   between the check and the write. Take `now` from `store.now()`.
 2. In the step and in the button's handler, claim before calling Discord.
    On success store the result on the round and delete the key; on failure
    store `{ error: reason }`. The step returns no `note` for a failure the
    panel shows by itself.
 3. Add the state to `AdminPanelState` in `loadAdminPanelState`, show the
-   reason under the last hike, and return the button from `actionButtons`
-   only while the round has no result and no fresh claim, as "Add an action
-   to the admin panel" in `src/guild/AGENTS.md` says.
+   reason under the last hike (for `"unconfirmed"`, that it may or may not
+   exist and to check before clicking), and return the button from
+   `actionButtons` only while the round has no result and no fresh claim,
+   as "Add an action to the admin panel" in `src/guild/AGENTS.md` says.
 4. In the handler (through `adminOnly`), check that the round in the
    `custom_id` is still `store.getLastRound()` and still lacks the result,
    claim, then answer `deferPanel(interaction)` and do the Discord call in
@@ -148,10 +163,15 @@ now)` that returns false when the step's result is already on the round
    clicks are answered, as "creates one thread when the button is clicked
    twice quickly" in `test/features/hike-thread.test.ts` does, and in an
    end-to-end scenario with two `owner.click` calls in one `Promise.all`.
-   Run them:
+6. Test a step cut off half-way, as "does not create a cut-off thread
+   again" in `test/features/close-flow.test.ts` does: close without the
+   follow-up, mark the step started and claimed a few minutes back with
+   `startPart` and `claimPin`, run the alarm, check that nothing was
+   created, that Refresh shows the step as not confirmed with the button,
+   and that the button creates it once. Run them:
 
    ```sh
-   npx vitest run test/features/hike-thread.test.ts
+   npx vitest run test/features/hike-thread.test.ts test/features/close-flow.test.ts
    npx vitest run --project e2e test/e2e/hike-thread.test.ts
    ```
 
