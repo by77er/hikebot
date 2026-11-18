@@ -15,8 +15,9 @@ import {
   textDisplay,
   update,
 } from "../discord/components";
-import { eventUrl } from "../discord/api";
+import { channelUrl, eventUrl } from "../discord/api";
 import type { CommandHandler, ComponentHandler, Router } from "../guild/router";
+import type { WebViewSource } from "../guild/web-view";
 import { PollStore, type HikeView } from "../polls/store";
 import { shorten } from "./poll-ui";
 
@@ -51,22 +52,24 @@ export interface HikeLogPage {
 }
 
 /**
- * Reads page `page` (1-based) of the log. A page past the end gives the
- * last page; a page before the first, or not a number, gives the first.
+ * Reads page `page` (1-based) of the log, `pageSize` hikes a page. A page
+ * past the end gives the last page; a page before the first, or not a
+ * number, gives the first.
  */
 export function loadHikeLog(
   storage: DurableObjectStorage,
   page: number,
+  pageSize = HIKES_PER_PAGE,
 ): HikeLogPage {
   const store = new PollStore(storage);
   const total = store.countHikes();
-  const pages = Math.max(1, Math.ceil(total / HIKES_PER_PAGE));
+  const pages = Math.max(1, Math.ceil(total / pageSize));
   const wanted = Number.isInteger(page) ? page : 1;
   const shown = Math.min(Math.max(wanted, 1), pages);
   return {
     hikes: store.listHikes({
-      limit: HIKES_PER_PAGE,
-      offset: (shown - 1) * HIKES_PER_PAGE,
+      limit: pageSize,
+      offset: (shown - 1) * pageSize,
     }),
     page: shown,
     pages,
@@ -165,6 +168,52 @@ const turnPage: ComponentHandler = async (interaction, context) => {
     ),
   };
 };
+
+/** One hike in the web view's log. */
+export interface WebHikeLogEntry {
+  roundId: number;
+  location: { label: string; details: string | null; proposedBy: string };
+  /** `value` is `YYYY-MM-DD HH:MM`; `label` as the bot shows it. */
+  date: { value: string; label: string };
+  threadUrl: string | null;
+  eventUrl: string | null;
+  /** When the date vote closed, in milliseconds since the epoch. */
+  completedAt: number;
+}
+
+/** The web view's page of the log, read as `loadHikeLog` reads it. */
+export interface WebHikeLogSection {
+  entries: WebHikeLogEntry[];
+  /** 1-based, within `1..pages`. */
+  page: number;
+  pageSize: number;
+  pages: number;
+  total: number;
+}
+
+/** The log page the web view asked for, newest hike first. */
+export function hikeLogSection(source: WebViewSource): WebHikeLogSection {
+  const { page, pageSize } = source.log;
+  const log = loadHikeLog(source.storage, page, pageSize);
+  return {
+    entries: log.hikes.map((hike) => ({
+      roundId: hike.roundId,
+      location: { ...hike.location },
+      date: { ...hike.date },
+      threadUrl:
+        hike.threadId === null
+          ? null
+          : channelUrl(source.guildId, hike.threadId),
+      eventUrl:
+        hike.eventId === null ? null : eventUrl(source.guildId, hike.eventId),
+      completedAt: hike.completedAt,
+    })),
+    page: log.page,
+    pageSize,
+    pages: log.pages,
+    total: log.total,
+  };
+}
 
 export function registerHikeLog(router: Router): void {
   router.component("hb:log:page", turnPage);

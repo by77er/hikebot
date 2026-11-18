@@ -30,6 +30,27 @@ export function eventUrl(guildId: string, eventId: string): string {
   return `https://discord.com/events/${guildId}/${eventId}`;
 }
 
+/**
+ * The link to a channel or thread, or to a message in it when `messageId` is
+ * given, which opens it in Discord. A link, not an API route.
+ */
+export function channelUrl(
+  guildId: string,
+  channelId: string,
+  messageId?: string,
+): string {
+  const path = `${guildId}/${channelId}`;
+  return `https://discord.com/channels/${messageId === undefined ? path : `${path}/${messageId}`}`;
+}
+
+/**
+ * The guild's icon on Discord's image CDN, from the `icon` hash `getGuild`
+ * returns. A link, not an API route.
+ */
+export function guildIconUrl(guildId: string, iconHash: string): string {
+  return `https://cdn.discordapp.com/icons/${guildId}/${iconHash}.png`;
+}
+
 const USER_AGENT = "DiscordBot (https://github.com/by77er/hikebot, 0.0.0)";
 
 /** Mentions in bot messages never notify anyone unless a caller says so. */
