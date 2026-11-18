@@ -249,8 +249,9 @@ export const RULES = {
   oauthGrantType: rule("oauth2-grant-type", AUTHORIZATION_CODE_GRANT),
   /**
    * "The client MUST NOT use the authorization code more than once" (RFC
-   * 6749, which Discord's OAuth2 implements); Discord answers
-   * `invalid_grant` to a code it did not issue or already exchanged.
+   * 6749, which Discord's OAuth2 implements). Discord's own pages do not
+   * state this; its token URL answers `invalid_grant` to a code it did not
+   * issue or already exchanged.
    */
   oauthCodeSingleUse: rule(
     "oauth2-code-used-once",
