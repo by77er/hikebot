@@ -43,11 +43,12 @@
    });
    ```
 
-   `SAMPLE` holds the sample's box, zooms and point from
-   `maps/sample/sample.json`.
+   To test another point, take its coordinates from
+   `maps/sample/sample.json` and keep it inside the sample's `bbox`.
 
-2. End-to-end scenarios need nothing extra: `useE2E()` seeds the Worker's
-   `MAPS` bucket with the same archive under `MAP_SAMPLE_KEY` and a manifest.
+2. In an end-to-end scenario, call `useE2E()` and read the archive at
+   `MAP_SAMPLE_KEY` from `test/e2e/harness/maps.ts` rather than putting map
+   data into the bucket yourself.
 3. Run the tests:
 
    ```sh

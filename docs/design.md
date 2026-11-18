@@ -955,8 +955,11 @@ in two modes:
   delete in the bucket (creating the bucket if missing), picks the newest
   build, dry-runs every extract (the region also one zoom either side), and
   fails over budget or when a higher region zoom up to 14 would fit. When
-  the sample archive is missing or stale it extracts it, and a second job
-  commits it to the pull request's branch.
+  the sample archive is missing, or its note no longer matches `sample` and
+  `samplePoint` in `maps/regions.json`, or the newest build's basemap major
+  version differs from the note's, it extracts the sample again (refusing
+  one over `sample.maxBytes`), and a second job commits it to the pull
+  request's branch.
 - **build**, on a push to `main` that changes `maps/regions.json` or the
   workflow, on the 2nd of each month and by hand: it removes every build
   other than the one the manifest names, extracts each archive from the

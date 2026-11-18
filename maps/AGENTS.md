@@ -82,11 +82,9 @@ Job logs are not readable from every machine; the run's annotations are.
 
 ## Refresh the sample archive
 
-The check run replaces `maps/sample/` when its note no longer matches
-`sample` and `samplePoint` in `maps/regions.json`, or when the newest build's
-basemap major version differs from the note's.
-
-1. To replace it anyway, delete the archive on a branch and push it in a
+1. If you changed `sample` or `samplePoint` in `maps/regions.json`, follow
+   "Change the mapped region" from step 3. Otherwise, to replace the sample
+   from the newest build, delete the archive on a branch and push it in a
    ready pull request:
 
    ```sh
