@@ -18,9 +18,9 @@ function expectPageHeaders(headers: Headers): void {
     "content-security-policy": CSP,
     "x-content-type-options": "nosniff",
     "referrer-policy": "same-origin",
-    "strict-transport-security": expect.stringMatching(/^max-age=\d+/),
     "cache-control": "no-store",
   });
+  expect(headers.get("strict-transport-security")).toMatch(/^max-age=\d+/);
 }
 
 describe("the landing page", () => {
