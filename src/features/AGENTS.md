@@ -129,8 +129,8 @@ model.
 now)` that returns false when the step's result is already on the round
    or a claim younger than a minute exists, and otherwise stores
    `{ creatingSince: now }` and returns true. Read and write it with
-   `storage.kv`, never `await storage.get`, so no other interaction runs
-   between the check and the write. Take `now` from `store.now()`.
+   `storage.kv` in one synchronous step, with nothing awaited between the
+   check and the write. Take `now` from `store.now()`.
 2. In the step and in the button's handler, claim before calling Discord.
    On success store the result on the round and delete the key; on failure
    store `{ error: reason }`. The step returns no `note` for a failure the
