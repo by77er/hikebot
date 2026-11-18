@@ -327,6 +327,7 @@ describe("renderAdminPanel", () => {
       },
     };
     expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
+      POLL_CONTROL_IDS.startDateVote,
       POLL_CONTROL_IDS.cancelRound(7),
       ADMIN_PANEL_IDS.settings,
       ADMIN_PANEL_IDS.refresh,
@@ -334,6 +335,68 @@ describe("renderAdminPanel", () => {
     expect(text(asNodes(renderAdminPanel(state)))).toContain(
       `**Location decided:** ${"L".repeat(78)}00 (0 votes), drawn at random from a tie.`,
     );
+  });
+
+  it("shows the decided location, the date vote's tallies, Close date vote and Cancel round while the date vote is open", () => {
+    const location: PollView = {
+      ...votingPoll(2),
+      status: "closed",
+      winnerOptionId: 2,
+    };
+    const dates = datePoll(25);
+    const state = {
+      settings: COMPLETE,
+      round: {
+        ...votingRound(location),
+        status: "date_voting" as const,
+        locationOptionId: 2,
+        datePoll: dates,
+      },
+    };
+    expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
+      POLL_CONTROL_IDS.closePoll(dates.id),
+      POLL_CONTROL_IDS.cancelRound(7),
+      ADMIN_PANEL_IDS.settings,
+      ADMIN_PANEL_IDS.refresh,
+    ]);
+    const view = renderAdminPanel(state, "x".repeat(300));
+    const shown = text(asNodes(view));
+    expect(shown).toContain(`**Location decided:** ${"L".repeat(78)}01`);
+    expect(shown).toContain(`**The date vote is open** in <#${TEXT}>.`);
+    expect(shown).toContain("1. Sat, 25 Dec 2027 · 09:00: 24 votes");
+    expect(
+      flatten(asNodes(view)).some(
+        (c) => (c as { label?: string }).label === "Close date vote",
+      ),
+    ).toBe(true);
+    expectWithinLimits(view);
+  });
+
+  it("sums up the last hike once its round is complete, and offers Start location vote", () => {
+    const location: PollView = {
+      ...votingPoll(2),
+      status: "closed",
+      winnerOptionId: 2,
+    };
+    const dates: PollView = { ...datePoll(3), status: "closed" };
+    const finished: RoundView = {
+      ...votingRound(location),
+      status: "complete",
+      locationOptionId: 2,
+      dateOptionId: 12,
+      datePoll: dates,
+    };
+    const state = { settings: COMPLETE, round: null, finished };
+    expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
+      POLL_CONTROL_IDS.startLocationVote,
+      ADMIN_PANEL_IDS.settings,
+      ADMIN_PANEL_IDS.refresh,
+    ]);
+    const shown = text(asNodes(renderAdminPanel(state)));
+    expect(shown).toContain(
+      `**Last hike:** **${"L".repeat(78)}01** on **Sun, 2 Dec 2027 · 09:00**.`,
+    );
+    expect(shown).toContain("No hike is being planned. Start a location vote.");
   });
 
   it("shows a notice above the settings", () => {
@@ -370,6 +433,25 @@ function votingPoll(n: number): PollView {
     })),
     voterCount: 30,
     viewerVotes: [],
+  };
+}
+
+/** An open date poll with `n` dates at the longest label, in date order. */
+function datePoll(n: number): PollView {
+  return {
+    ...votingPoll(0),
+    id: 4,
+    kind: "date",
+    options: Array.from({ length: n }, (_, i) => ({
+      id: i + 11,
+      pollId: 4,
+      label: `${["Sat", "Sun", "Mon"][i % 3] ?? ""}, ${String(i + 1)} Dec 2027 · 09:00`,
+      details: null,
+      dateValue: `2027-12-${String(i + 1).padStart(2, "0")} 09:00`,
+      proposedBy: OWNER,
+      createdAt: 0,
+      votes: i,
+    })),
   };
 }
 
@@ -602,6 +684,10 @@ describe("the admin panel", () => {
         (g) => click(ADMIN_PANEL_IDS.refresh, g, STRANGER),
       ],
       [ADMIN_PANEL_IDS.back, (g) => click(ADMIN_PANEL_IDS.back, g, STRANGER)],
+      [
+        POLL_CONTROL_IDS.startDateVote,
+        (g) => click(POLL_CONTROL_IDS.startDateVote, g, STRANGER),
+      ],
       [ADMIN_PANEL_IDS.role, (g) => pickRole(g, STRANGER, ROLE)],
       ...[
         ADMIN_PANEL_IDS.voteChannel,
