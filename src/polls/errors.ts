@@ -8,6 +8,8 @@ export type PollErrorCode =
   | "invalid_label"
   | "invalid_details"
   | "invalid_date"
+  | "date_in_past"
+  | "date_too_far"
   | "duplicate_option"
   | "too_many_options"
   | "too_few_options"

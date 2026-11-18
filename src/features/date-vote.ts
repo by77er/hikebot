@@ -1,27 +1,46 @@
 /**
  * The date vote: once the location is decided, an admin starts it from the
- * panel with the candidate dates, and the shared poll UI (`poll-ui.ts`)
- * does the voting, refreshing and closing. Members cannot propose dates.
+ * panel with the candidate dates, prefilled with the Saturdays and Sundays
+ * of the next two weekends at the default time. While it runs, members
+ * propose more dates with **Propose a date**, from today to
+ * `MAX_PROPOSAL_DAYS_AHEAD` days ahead in the guild's time zone. The shared
+ * poll UI (`poll-ui.ts`) does the voting, refreshing and closing.
  */
 import {
+  ButtonStyle,
   TextInputStyle,
+  type APIInteractionResponse,
   type APIModalSubmitInteraction,
 } from "discord-api-types/v10";
 import { discordApi } from "../discord/api";
 import {
+  button,
   customId,
   label,
   messageBody,
   modal,
+  parseCustomId,
   textInput,
   textInputValue,
 } from "../discord/components";
 import { ephemeralNotice } from "../discord/responses";
-import { setupComplete } from "../guild/config";
+import { GuildConfig, setupComplete } from "../guild/config";
 import { adminOnly } from "../guild/permissions";
-import type { ComponentHandler, ModalHandler, Router } from "../guild/router";
-import { DEFAULT_HIKE_TIME, parseDateOption, todayIn } from "../polls/dates";
-import { isPollError } from "../polls/errors";
+import {
+  UNAVAILABLE_MESSAGE,
+  type ComponentHandler,
+  type ModalHandler,
+  type Router,
+} from "../guild/router";
+import {
+  DEFAULT_HIKE_TIME,
+  MAX_PROPOSAL_DAYS_AHEAD,
+  addDays,
+  defaultDateCandidates,
+  parseDateOption,
+  todayIn,
+} from "../polls/dates";
+import { isPollError, type PollError } from "../polls/errors";
 import {
   MAX_OPTIONS,
   MIN_DATE_OPTIONS,
@@ -37,16 +56,20 @@ import {
 } from "./admin-panel";
 import { createHikeThreadStep, whenLine } from "./hike-thread";
 import {
+  VOTE_CLOSED_MESSAGE,
   deferPanel,
   errorText,
   finishPanel,
   renderPollMessage,
+  scheduleRefresh,
   type PollWording,
 } from "./poll-ui";
 
 export const DATE_IDS = {
   start: POLL_CONTROL_IDS.startDateVote,
   dates: customId("date", "dates"),
+  propose: (pollId: number) => customId("date", "propose", String(pollId)),
+  day: customId("date", "day"),
 } as const;
 
 /** The longest candidate list the modal takes, in characters. */
@@ -83,7 +106,13 @@ export const DATE_POLL: PollWording = {
   name: "date vote",
   showProposer: false,
   order: "date",
-  extraButtons: () => [],
+  extraButtons: (poll) => [
+    button({
+      custom_id: DATE_IDS.propose(poll.id),
+      label: "Propose a date",
+      style: ButtonStyle.Secondary,
+    }),
+  ],
   announcement: "Hike planned",
   announcementLines: (poll, round, timeZone) => {
     const location = decidedLocation(round);
@@ -173,33 +202,41 @@ function setupMissing(missing: string[]): string {
 
 const NOT_DECIDED = "The date vote starts once the location is decided.";
 
-/** Start date vote: opens the modal for the candidate dates. */
+/**
+ * The Start date vote modal, its field prefilled with the default
+ * candidates for `today` (`YYYY-MM-DD`), one per line.
+ */
+export function startModal(today: string): APIInteractionResponse {
+  return modal(DATE_IDS.start, "Start date vote", [
+    label(
+      "Candidate dates (one per line)",
+      textInput({
+        custom_id: DATE_IDS.dates,
+        style: TextInputStyle.Paragraph,
+        required: true,
+        max_length: MAX_DATES_INPUT,
+        placeholder: `2026-12-05 (starts at ${DEFAULT_HIKE_TIME}) or 2026-12-05 09:00`,
+        value: defaultDateCandidates(today).join("\n"),
+      }),
+      `${String(MIN_DATE_OPTIONS)} to ${String(MAX_OPTIONS)} dates, as YYYY-MM-DD or YYYY-MM-DD HH:MM (24-hour); the time defaults to ${DEFAULT_HIKE_TIME}.`,
+    ),
+  ]);
+}
+
+/**
+ * Start date vote: opens the modal for the candidate dates, prefilled with
+ * the next two weekends after today in the guild's time zone.
+ */
 const openStartModal: ComponentHandler = adminOnly(
   (_interaction, context, settings) => {
     if (!setupComplete(settings)) {
       return adminPanelUpdate(context, setupMissing(missingSettings(settings)));
     }
-    if (
-      new PollStore(context.storage).getActiveRound()?.status !==
-      "location_decided"
-    ) {
+    const store = new PollStore(context.storage);
+    if (store.getActiveRound()?.status !== "location_decided") {
       return adminPanelUpdate(context, NOT_DECIDED);
     }
-    return {
-      response: modal(DATE_IDS.start, "Start date vote", [
-        label(
-          "Candidate dates (one per line)",
-          textInput({
-            custom_id: DATE_IDS.dates,
-            style: TextInputStyle.Paragraph,
-            required: true,
-            max_length: MAX_DATES_INPUT,
-            placeholder: `2026-12-05 (starts at ${DEFAULT_HIKE_TIME}) or 2026-12-05 09:00`,
-          }),
-          `${String(MIN_DATE_OPTIONS)} to ${String(MAX_OPTIONS)} dates, as YYYY-MM-DD or YYYY-MM-DD HH:MM (24-hour); the time defaults to ${DEFAULT_HIKE_TIME}.`,
-        ),
-      ]),
-    };
+    return { response: startModal(todayIn(settings.timezone, store.now())) };
   },
 );
 
@@ -271,9 +308,112 @@ const startDateVote: ModalHandler = adminOnly(
   },
 );
 
-/** Registers the date vote's start controls. */
+const FULL = `This vote already has ${String(MAX_OPTIONS)} dates, the most it can hold. Vote for one of them instead.`;
+
+/**
+ * The Propose a date modal for the poll; its help text names the last day
+ * a member may propose, `MAX_PROPOSAL_DAYS_AHEAD` days after `today`.
+ */
+export function proposeModal(
+  pollId: number,
+  today: string,
+): APIInteractionResponse {
+  const last = addDays(today, MAX_PROPOSAL_DAYS_AHEAD);
+  return modal(DATE_IDS.propose(pollId), "Propose a date", [
+    label(
+      "Date",
+      textInput({
+        custom_id: DATE_IDS.day,
+        required: true,
+        max_length: 16,
+        placeholder: `${today} or ${today} 09:00`,
+      }),
+      `${today} to ${last}, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time defaults to ${DEFAULT_HIKE_TIME}.`,
+    ),
+  ]);
+}
+
+function pollIdArg(customIdValue: string): number | null {
+  const id = Number(parseCustomId(customIdValue)?.arg);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+/** Propose a date: the modal, unless the poll is closed or full. */
+const openPropose: ComponentHandler = (interaction, context) => {
+  const pollId = pollIdArg(interaction.data.custom_id);
+  const store = new PollStore(context.storage);
+  const poll = pollId === null ? null : store.getPoll(pollId);
+  if (!poll || poll.kind !== "date") {
+    return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
+  }
+  if (poll.status !== "open") {
+    return { response: ephemeralNotice(VOTE_CLOSED_MESSAGE) };
+  }
+  if (poll.options.length >= MAX_OPTIONS) {
+    return { response: ephemeralNotice(FULL) };
+  }
+  const timeZone = new GuildConfig(context.storage).get().timezone;
+  return {
+    response: proposeModal(poll.id, todayIn(timeZone, store.now())),
+  };
+};
+
+/** The answer to a refused proposal of the date typed as `typed`. */
+function proposalRefusal(error: PollError, typed: string): string {
+  switch (error.code) {
+    case "poll_closed":
+      return VOTE_CLOSED_MESSAGE;
+    case "poll_not_found":
+    case "invalid_state":
+      return UNAVAILABLE_MESSAGE;
+    case "invalid_date":
+      return `\`${quoted(typed)}\` is not a date. Write it as \`YYYY-MM-DD\` or \`YYYY-MM-DD HH:MM\` (24-hour), for example \`2026-12-05\` or \`2026-12-05 09:00\`.`;
+    case "duplicate_option":
+      return `**${parseDateOption(typed)?.label ?? typed}** is already on the vote. Vote for it instead, or propose another time that day.`;
+    case "too_many_options":
+      return FULL;
+    default:
+      return error.message;
+  }
+}
+
+/**
+ * The Propose a date modal: adds the date with the member as proposer,
+ * answers ephemerally and refreshes the poll message.
+ */
+const saveDateProposal: ModalHandler = async (interaction, context) => {
+  const pollId = pollIdArg(interaction.data.custom_id);
+  if (pollId === null) {
+    return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
+  }
+  const store = new PollStore(context.storage);
+  const typed = (textInputValue(interaction.data, DATE_IDS.day) ?? "").trim();
+  try {
+    const option = store.proposeDate(
+      pollId,
+      interaction.member?.user.id ?? interaction.user?.id ?? "",
+      typed,
+      new GuildConfig(context.storage).get().timezone,
+    );
+    await scheduleRefresh(context.storage, pollId, store.now());
+    return {
+      response: ephemeralNotice(
+        `Added **${option.label}** to the date vote. Use **Vote** to vote for it.`,
+      ),
+    };
+  } catch (error) {
+    if (isPollError(error)) {
+      return { response: ephemeralNotice(proposalRefusal(error, typed)) };
+    }
+    throw error;
+  }
+};
+
+/** Registers the date vote's start and propose controls. */
 export function registerDateVote(router: Router): Router {
   router.component(DATE_IDS.start, openStartModal);
   router.modal(DATE_IDS.start, startDateVote);
+  router.component("hb:date:propose", openPropose);
+  router.modal("hb:date:propose", saveDateProposal);
   return router;
 }
