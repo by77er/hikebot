@@ -8,8 +8,9 @@ and which headers they carry.
 
 1. Write the page as a component in `src/web/pages/<page>.tsx` that renders
    its content inside `Layout`. Put every value into the markup as a JSX
-   expression (`{trail.name}`, `href={url}`), so it is escaped; style it with
-   classes from the stylesheet ("Add a static asset"):
+   expression (`{trail.name}`, `href={url}`), so it is escaped; build it
+   from the design system's layout classes and components, as "Build a
+   page from the design system" says:
 
    ```tsx
    /** The list of trails at `/trails`. */
@@ -222,9 +223,8 @@ in `docs/design.md` says which POSTs are refused.
 
    A file the design system's stylesheet uses goes under
    `public/assets/cairn/` and is referred to by a relative `url()`, so it
-   is served under the stylesheet's versioned path. Styles are never a new
-   stylesheet: they go in the design system, as "Add a component to the
-   design system" says.
+   is served under the stylesheet's versioned path. For styles, follow
+   "Add a component to the design system" instead of adding a stylesheet.
 
 2. Start the dev server as "Run the bot locally" in the root `AGENTS.md`
    says and request the file in its place in that procedure. It answers
@@ -313,8 +313,8 @@ in `docs/design.md` says which POSTs are refused.
 ## Add a token
 
 1. Check the token tables in `docs/design-system.md` first: use an
-   existing role if one fits. A token names a role, never a hue or a value
-   (`--color-warning`, not `--color-amber`).
+   existing role if one fits. Name a new token after its role, as the
+   others are named (`--color-warning` rather than `--color-amber`).
 2. Add it to `public/assets/cairn/tokens.css`, in its group in `:root`. A
    colour also gets its dark value in the `prefers-color-scheme: dark`
    block, in the same order:
@@ -353,10 +353,10 @@ in `docs/design.md` says which POSTs are refused.
 
 ## Add a component to the design system
 
-A component is four files of its own, one per job, and one line in each
-of three lists, so that tasks adding different components at the same time
-do not edit the same lines. Keep every list in alphabetical order, one item
-per line. Here the component is `pill`; use your component's name.
+Give the component four files of its own, one per job, and one line in
+each of three lists, in alphabetical order, one item per line, so that
+tasks adding different components at the same time edit different lines.
+Here the component is `pill`; use your component's name.
 
 1. Write the markup as a typed Preact component in
    `src/web/components/pill.tsx`, with a comment at the top saying what it
@@ -437,12 +437,12 @@ per line. Here the component is `pill`; use your component's name.
 
 7. Take the screenshots and review the style guide and every page that
    uses the component, as "Take the screenshots" and "Review your own UI
-   change as a designer" say. A screenshot is cut off past 16,384 pixels,
-   so check that the style guide's phone screenshot is shorter than that;
-   `file` prints its width and height:
+   change as a designer" say. Chromium repeats the top of a page past
+   16,384 pixels, so check that the style guide's phone screenshot is
+   shorter than that; this prints its width and height:
 
    ```sh
-   file docs/screenshots/styleguide--phone--light.png
+   node -e 'const b = require("fs").readFileSync(process.argv[1]); console.log(b.readUInt32BE(16), b.readUInt32BE(20))' docs/screenshots/styleguide--phone--light.png
    ```
 
    If it is taller, give your component a page of its own at
@@ -688,23 +688,32 @@ before marking the pull request ready.
    never seen it:
    - **Purpose and hierarchy.** Within a few seconds it is clear what the
      page is, what state the hike is in, and what the visitor can do next.
-     There is one primary action, and it looks like one.
+     There is one primary action, and it looks like one. ("Principles" and
+     "Designing a new page" in `docs/design-system.md`.)
    - **Consistency.** Headings, buttons, forms, spacing, colours and wording
-     look and behave like the existing pages and components.
+     look and behave like the existing pages and components, built from
+     Cairn's tokens and components. ("Tokens", "Components" and "Layout
+     rules" in `docs/design-system.md`; compare with `/styleguide`.)
    - **Every state.** Empty, error, success and disabled states, very long
      text (a 100-character location name) and many items (25 options) each
      look right. Add a page entry with a seed for each state that differs.
    - **Phone layout.** Nothing scrolls sideways at 390px, and every tap
-     target is at least 44px high and wide.
+     target is at least 44px high and wide. ("Layout rules" in
+     `docs/design-system.md`.)
    - **Accessibility.** Text contrast is at least 4.5:1 (3:1 for large
      text); focus is visible and moves in a sensible order; every control
      has a label; headings go in order without skipping a level; everything
      works from the keyboard alone; nothing is conveyed by colour alone;
-     motion stops under `prefers-reduced-motion`.
+     motion stops under `prefers-reduced-motion`. ("Accessibility rules" and
+     "Allowed pairings" in `docs/design-system.md`.)
    - **Wording.** Plain words, and the same words the bot uses in Discord
-     for the same things.
+     for the same things. ("Content rules" in `docs/design-system.md`.)
    - **Dark scheme.** Every colour, border, image and focus ring still
-     works on the dark background.
+     works on the dark background. ("Colour" in `docs/design-system.md`.)
+   - **Visual direction.** Hiking-themed through restraint: the blaze only
+     as a marker, contour lines only in the header or an empty state, no
+     photos, emoji, decorative gradients or shadows outside overlays.
+     ("Visual direction" in `docs/design-system.md`.)
 
    A screenshot does not show focus, keyboard order or motion: check those
    in a browser against the dev server ("Run the bot locally" in the root
