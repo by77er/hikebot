@@ -1,8 +1,10 @@
 # Working in test
 
-Put the tests for `src/<dir>/<file>.ts` in `test/<dir>/<file>.test.ts`. Every
-test runs inside the Workers runtime, so imports from `cloudflare:test` and
-`cloudflare:workers` work in any test file.
+Put the tests for `src/<dir>/<file>.ts` in `test/<dir>/<file>.test.ts`. These
+unit tests run inside the Workers runtime, so imports from `cloudflare:test`
+and `cloudflare:workers` work in them. End-to-end scenarios go in `test/e2e/`
+and run in Node against the Worker in local workerd; the end-to-end
+procedures below cover them.
 
 ## Run one test file
 
@@ -175,3 +177,154 @@ Run `npm test` for the whole suite before opening a pull request.
    "Test an operation against Durable Object storage" in
    `src/polls/AGENTS.md` describes.
 6. Run the file: `npx vitest run test/<dir>/<file>.test.ts`.
+
+## Run the end-to-end suite
+
+1. Run the suite. It starts the Worker from `wrangler.jsonc` in local workerd
+   once per test file, with a fake Discord API, so it needs no `.dev.vars`,
+   no credentials and no network beyond localhost. `npm test` runs it after
+   the unit tests.
+
+   ```sh
+   npm run test:e2e
+   ```
+
+2. To run one file, or only the tests whose name matches a pattern:
+
+   ```sh
+   npx vitest run --project e2e test/e2e/probe.test.ts
+   npx vitest run --project e2e test/e2e/probe.test.ts -t "429"
+   ```
+
+3. When a scenario fails, read the Worker's log timeline printed after the
+   failure. A request the fake Discord API refused fails the test with its
+   method, route, status and the rule it broke, with a link to the Discord
+   docs page that states the rule.
+4. Check that no `workerd` process is left:
+
+   ```sh
+   pgrep -x workerd || echo "no workerd left"
+   ```
+
+   If it prints a process id, stop it with `pkill -x workerd`. A run that was
+   killed with `SIGKILL` leaves its `workerd` behind; otherwise find the test
+   file whose `afterAll` did not run.
+
+## Write an end-to-end scenario
+
+1. Create `test/e2e/<feature>.test.ts` and start the Worker for the file with
+   `useE2E()` at the top level. Give each test its own guild id, so it gets a
+   fresh `GuildHike`. Import from `./harness/` and `discord-api-types/v10`
+   only; ESLint refuses imports from `src/`, so write the text you expect as
+   literals. Leave out `{ probe: true }`, which runs the probe Worker for the
+   harness self-tests in `test/e2e/probe.test.ts`.
+
+   ```ts
+   import { ChannelType } from "discord-api-types/v10";
+   import { expect, it } from "vitest";
+   import {
+     findComponent,
+     Member,
+     messageText,
+     waitForMessage,
+   } from "./harness/helpers";
+   import { subcommand, type Actor } from "./harness/interactions";
+   import { useE2E } from "./harness/worker";
+
+   const e2e = useE2E();
+
+   const admin: Actor = {
+     guildId: "200000000000000101",
+     channelId: "300000000000000101",
+     userId: "400000000000000101",
+     roles: ["500000000000000101"],
+   };
+   ```
+
+2. Set up what Discord holds before anyone acts: the guild and its owner,
+   channels and their types, and any failure or rate limit the scenario
+   needs:
+
+   ```ts
+   it("posts the location vote in the voting channel", async () => {
+     e2e.discord.addGuild({ id: admin.guildId ?? "", ownerId: admin.userId });
+     e2e.discord.addChannel({ id: admin.channelId, guildId: admin.guildId ?? "" });
+     e2e.discord.addChannel({
+       id: "300000000000000102",
+       guildId: admin.guildId ?? "",
+       type: ChannelType.GuildForum,
+     });
+     // e2e.discord.failChannel("300000000000000102", "missing-permissions");
+     // e2e.discord.rateLimitOnce("POST", "/channels/300000000000000101/messages", 0.5);
+   ```
+
+3. Act as a member. `Member` sends signed interactions and acts only on
+   controls the bot rendered: `click` and `select` read the message as the
+   fake stores it, `lastReply()` is the reply to the member's last
+   interaction, and `submitModal` fills in the modal the Worker answered
+   with. Every answer must arrive within 3 seconds and be one Discord would
+   accept, or the test fails:
+
+   ```ts
+   const member = new Member(e2e.client, admin);
+   const panel = await member.run("hike", [subcommand("admin")]);
+   const form = await member.click(member.lastReply(), "hb:round:start");
+   await member.submitModal(form, { "hb:round:location": "Ridge" });
+   ```
+
+4. Wait for background work (follow-up jobs, alarm edits) through what it
+   produces, with `waitForMessage`, `waitForOriginalResponse` or
+   `e2e.discord.nextRequest`. Each polls the fake until the condition holds
+   and fails with what it found when its timeout passes:
+
+   ```ts
+   const vote = await waitForMessage(e2e.discord, admin.channelId, (m) =>
+     messageText(m).includes("Location vote"),
+   );
+   ```
+
+5. Assert on what members see: the message text and its controls.
+
+   ```ts
+     expect(messageText(vote)).toContain("Ridge");
+     expect(findComponent(vote.components, "hb:poll:vote:1")).toBeDefined();
+     expect(panel.type).toBe(4);
+   });
+   ```
+
+6. Run the file and check that no `workerd` process is left:
+
+   ```sh
+   npx vitest run --project e2e test/e2e/<feature>.test.ts
+   pgrep -x workerd || echo "no workerd left"
+   ```
+
+## Teach the fake Discord API a new route or limit
+
+1. For a new route, add the REST method to `DiscordApi` first, then add the
+   route to `route()` in `test/e2e/harness/fake-discord.ts`, before its final
+   `notFound`: webhook routes in the `webhook` branch (they take no bot
+   token), bot routes after the `Authorization` check. Start a channel route
+   with `this.channelGate(channelId)` so configured failures apply, check the
+   body with a function from `validate.ts` and answer `invalid(violations)`
+   when it breaks a rule, keep what the route creates in the fake's maps, and
+   add a reader method (like `threads()`) for tests.
+2. For a new limit, find the sentence that states it on Discord's docs
+   (`https://docs.discord.com/developers/...`). Add a rule to `RULES` in
+   `test/e2e/harness/validate.ts` with an id that names the limit and the
+   page URL as `docs`, and quote the sentence in its comment. Check it where
+   that payload is validated with `c.fail(RULES.<rule>, path, detail)` or by
+   pushing a `Violation`.
+3. Add a case to `test/e2e/fake-discord.test.ts`: a payload at the limit is
+   accepted and one past it is refused with `expectRefused(reply,
+RULES.<rule>)` (or `refuses(RULES.<rule>, response)` for an interaction
+   response). The "rule coverage" test fails until every rule has a case.
+   For a new route, call it with `call(method, path, body)` and check what
+   the fake stored.
+4. Run the fake's self-tests, then the whole suite, since a stricter fake can
+   fail scenarios whose payloads Discord would also refuse:
+
+   ```sh
+   npx vitest run --project e2e test/e2e/fake-discord.test.ts
+   npm run test:e2e
+   ```

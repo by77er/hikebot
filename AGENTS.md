@@ -104,7 +104,8 @@ To exercise interactions, write a test that sends a signed interaction, as
 1. Add the name to `secrets.required` in `wrangler.jsonc`.
 2. Add a line with a dummy value to `.dev.vars.example`, and the same line to
    your `.dev.vars`.
-3. Add a dummy value to `miniflare.bindings` in `vitest.config.ts`.
+3. Add a dummy value to `miniflare.bindings` in `vitest.config.ts`, and to
+   the `secrets` that `useE2E` passes in `test/e2e/harness/worker.ts`.
 4. Add a row for it to the secrets table in `README.md`, saying where to find
    its value.
 5. Follow "Change wrangler.jsonc" from step 2, then run `npm test`.

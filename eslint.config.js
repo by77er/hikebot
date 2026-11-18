@@ -25,4 +25,24 @@ export default defineConfig(
     files: ["*.js"],
     extends: [tseslint.configs.disableTypeChecked],
   },
+  {
+    // End-to-end tests drive the Worker only over HTTP; the probe Worker is
+    // Worker code and builds on src/.
+    files: ["test/e2e/**/*.ts"],
+    ignores: ["test/e2e/probe/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/src", "**/src/**"],
+              message:
+                "End-to-end tests reach the Worker only through signed HTTP requests; build what you need in test/e2e/harness/ instead of importing from src/.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
