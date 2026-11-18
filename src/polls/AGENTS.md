@@ -76,8 +76,8 @@
 
 ## Add a column or table for polls
 
-1. Append a new migration to `migrations` in `src/guild/schema.ts` with the
-   next number (`0002_...`), using `ALTER TABLE` or `CREATE TABLE`.
+1. Append a migration that runs `ALTER TABLE` or `CREATE TABLE`, following
+   "Add a SQLite migration" in `src/guild/AGENTS.md`.
 2. Add the column to the matching row type and read model in
    `src/polls/store.ts`.
 3. Extend the "create the poll tables" test in `test/guild/schema.test.ts`

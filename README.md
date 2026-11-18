@@ -7,22 +7,16 @@ thread is created for the hike.
 hikebot runs on Cloudflare Workers with one Durable Object per Discord server
 holding that server's state. It receives Discord interactions over HTTP only,
 with no gateway connection. See [`docs/design.md`](docs/design.md) for the
-design and [`AGENTS.md`](AGENTS.md) for contributor rules.
+design and [`AGENTS.md`](AGENTS.md) for how to work on the code.
 
 ## Local development
 
-Requires Node.js 22.13 or later.
+Requires Node.js 22.13 or later. To set up a checkout, run the bot locally,
+run the tests and check a change, follow [`AGENTS.md`](AGENTS.md); each
+directory with procedures of its own has an `AGENTS.md` too.
 
-```sh
-npm ci
-cp .dev.vars.example .dev.vars   # then fill in your Discord application's values
-npm run dev                      # wrangler dev on http://localhost:8787
-npm test                         # Vitest in the Workers runtime
-```
-
-`.dev.vars` is git-ignored; never commit it. Other scripts: `npm run lint`,
-`npm run typecheck`, `npm run format` / `npm run format:check`, and
-`npm run cf-typegen` after editing `wrangler.jsonc`.
+Put your Discord application's values in `.dev.vars`; it is git-ignored, so
+they are never committed.
 
 To receive real interactions locally, expose the dev server with a tunnel
 (for example `cloudflared tunnel --url http://localhost:8787`) and use the

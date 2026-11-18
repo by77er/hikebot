@@ -61,7 +61,9 @@
 - Reply only the user sees: `ephemeralReply([...])`.
 - Replace the message a button or select was on: `update([...])`.
 - Open a modal: `modal(customId("location", "propose"), "Title", [label("Name", textInput({ custom_id: customId("location", "name") }))])`.
-- Work that takes more than one REST call or longer than 3 seconds:
+- Work that takes more than one REST call or longer than 3 seconds (the
+  whole procedure is "Give a handler a follow-up job" in
+  `src/guild/AGENTS.md`):
   1. Return `{ response: deferredReply({ ephemeral: true }), followUp }`
      (or `deferredUpdate()` for a component).
   2. In `followUp`, call
