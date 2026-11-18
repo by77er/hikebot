@@ -6,9 +6,9 @@ The example adds a kind named `route` in `src/features/route-vote.ts`; use
 your kind's name and file. A new kind needs the poll core changed first:
 `PollKind` in `src/polls/store.ts` and the `kind` check of the `polls`
 table, through a migration as "Add a column or table for polls" in
-`src/polls/AGENTS.md` says. The location
-vote (`src/features/location-vote.ts`) and the date vote
-(`src/features/date-vote.ts`) are complete examples.
+`src/polls/AGENTS.md` says. Model the kind on the location vote
+(`src/features/location-vote.ts`) or the date vote
+(`src/features/date-vote.ts`).
 
 1. Export a `PollWording` for the kind, with its own buttons after Vote in
    `extraButtons` (return `[]` for none), `showProposer: false` when the
@@ -36,9 +36,9 @@ vote (`src/features/location-vote.ts`) and the date vote
    };
    ```
 
-   `title` gets the poll's round (or null) and `announcementLines` the
-   closed poll and its round, for wording that names what the round decided
-   earlier, as `DATE_POLL` names the location.
+   To name what the round decided earlier, read it from the round that
+   `title` and `announcementLines` receive, as `DATE_POLL` does for the
+   location.
 
 2. Add it to `POLL_KINDS` in `src/features/index.ts`:
 
@@ -68,10 +68,8 @@ vote (`src/features/location-vote.ts`) and the date vote
 
 ## Add a step to the close flow
 
-A close step runs when a poll of its kind closes, after the poll message is
-final and before the announcement, and can add lines (such as a link) to the
-announcement. The example adds a step that posts a note in the voting
-channel; use your step's name and work.
+The example adds a step that posts a note in the voting channel; use your
+step's name and work.
 
 1. In the kind's file (`src/features/date-vote.ts` for the date vote),
    write the step. `run` gets the closed poll, its round and the guild id,
