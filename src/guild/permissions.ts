@@ -5,12 +5,12 @@ import type {
   APIModalSubmitInteraction,
 } from "discord-api-types/v10";
 import { DiscordApiError, discordApi, type DiscordApi } from "../discord/api";
-import { ephemeralNotice } from "../discord/responses";
+import { ephemeralNotice, GUILD_ONLY_MESSAGE } from "../discord/responses";
 import { snowflakeTime } from "../discord/snowflake";
 import { GuildConfig, type GuildSettings } from "./config";
 import type { HandlerContext, HandlerResult } from "./router";
 
-/** How long a cached guild owner id is trusted before a denial. */
+/** How long a cached guild owner id is trusted before it is fetched again. */
 export const OWNER_CACHE_MS = 60 * 60 * 1000;
 
 export const ADMIN_ONLY_MESSAGE =
@@ -31,19 +31,24 @@ export type AdminCheck =
 /**
  * Decides whether the member who sent `interaction` may use the admin panel:
  * the guild owner, or a member with the configured admin role. The owner id
- * comes from `getGuild` and is cached in the guild's settings; a cached id
- * older than {@link OWNER_CACHE_MS} (measured with the interaction's own
- * timestamp) is fetched again once before a denial. Makes at most one
- * Discord REST call.
+ * comes from `getGuild` and is cached in the guild's settings. A cached id is
+ * trusted for {@link OWNER_CACHE_MS}, measured with the interaction's own
+ * timestamp; after that it is fetched again before it decides anything, so
+ * after an ownership transfer the new owner gets in and the former owner is
+ * refused. Makes at most one Discord REST call.
  */
 export async function checkAdmin(
   interaction: AdminInteraction,
   context: HandlerContext,
   api: DiscordApi = discordApi(context.env),
 ): Promise<AdminCheck> {
+  const guildId = interaction.guild_id;
+  const userId = interaction.member?.user.id;
+  if (guildId === undefined || userId === undefined) {
+    return { allowed: false, response: ephemeralNotice(GUILD_ONLY_MESSAGE) };
+  }
   const config = new GuildConfig(context.storage);
   let settings = config.get();
-  const userId = interaction.member?.user.id;
   const roles = interaction.member?.roles ?? [];
   if (settings.adminRoleId !== null && roles.includes(settings.adminRoleId)) {
     return { allowed: true, settings };
@@ -54,16 +59,16 @@ export async function checkAdmin(
     settings.ownerId === null ||
     settings.ownerFetchedAt === null ||
     now - settings.ownerFetchedAt >= OWNER_CACHE_MS;
-  if (userId !== undefined && settings.ownerId !== userId && stale) {
+  if (stale) {
     try {
-      const guild = await api.getGuild(interaction.guild_id ?? "");
+      const guild = await api.getGuild(guildId);
       settings = config.setOwner(guild.owner_id, now);
     } catch (error) {
       return { allowed: false, response: ownerLookupFailed(error) };
     }
   }
 
-  if (userId !== undefined && settings.ownerId === userId) {
+  if (settings.ownerId === userId) {
     return { allowed: true, settings };
   }
   return {
