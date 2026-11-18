@@ -288,7 +288,7 @@ function round(poll: PollView | null) {
 }
 
 describe("the date poll message", () => {
-  it("names the decided location and lists the dates in date order with their votes, and only Vote", () => {
+  it("names the decided location and lists the dates in date order with their votes, with Vote and Propose a date", () => {
     const poll = datePoll();
     const view = renderPollMessage(poll, DATE_POLL, round(poll));
     const shown = text(view);
@@ -302,7 +302,7 @@ describe("the date poll message", () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(shown).toContain("3 members have voted.");
     expect(shown).not.toContain("Proposed by");
-    expect(ids(view)).toEqual([POLL_IDS.vote(2)]);
+    expect(ids(view)).toEqual([POLL_IDS.vote(2), "hb:date:propose:2"]);
   });
 
   it("stays within Discord's limits with 25 dates, open and closed", () => {
@@ -593,6 +593,7 @@ describe("starting the date vote", () => {
     );
     expect(ids(message.components)).toEqual([
       expect.stringMatching(/^hb:poll:vote:\d+$/),
+      expect.stringMatching(/^hb:date:propose:\d+$/),
     ]);
     const round = await activeRound(guild);
     expect(round?.status).toBe("date_voting");

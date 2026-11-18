@@ -136,7 +136,7 @@ describe("the date vote", () => {
     ].map((line) => text.indexOf(line));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(buttonLabels(poll)).toEqual(["Vote"]);
+    expect(buttonLabels(poll)).toEqual(["Vote", "Propose a date"]);
 
     await play.vote(ana, poll, [
       "Sat, 8 Jun 2030 · 11:00",

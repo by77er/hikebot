@@ -83,7 +83,7 @@ describe("a whole hike round", () => {
     expect(dateText.indexOf("Sat, 15 Jun 2030 · 11:00")).toBeLessThan(
       dateText.indexOf("Sun, 16 Jun 2030 · 11:00"),
     );
-    expect(buttonLabels(datePoll)).toEqual(["Vote"]);
+    expect(buttonLabels(datePoll)).toEqual(["Vote", "Propose a date"]);
     await play.vote(ana, datePoll, ["Sat, 15 Jun 2030 · 11:00"]);
     await play.vote(ben, datePoll, [
       "Sat, 15 Jun 2030 · 11:00",
