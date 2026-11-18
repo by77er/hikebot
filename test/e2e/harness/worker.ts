@@ -1,7 +1,8 @@
 /**
  * Starts the Worker under test in local workerd with Wrangler's
  * `createTestHarness`, next to a fake Discord API, once per test file. Each
- * start gets fresh in-memory Durable Object storage, a newly generated
+ * start gets fresh in-memory Durable Object storage, a `MAPS` bucket holding
+ * the sample map archive and its manifest (`./maps.ts`), a newly generated
  * signing key pair, a dummy bot token, application id, OAuth client secret
  * and SIGNING_SECRET, PUBLIC_URL set to an example origin, and
  * DISCORD_API_BASE pointing at the fake. These go in as the harness's
@@ -21,6 +22,7 @@ import {
 } from "wrangler";
 import { FakeDiscord } from "./fake-discord";
 import { createSigner, InteractionClient, type Signer } from "./interactions";
+import { seedMaps, type MapsBucket } from "./maps";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const CONFIG_PATH = "wrangler.jsonc";
@@ -111,6 +113,8 @@ export function useE2E(options: E2EOptions = {}): E2E {
     const harness = createTestHarness({ root, workers: [worker] });
     running.harness = harness;
     const { url } = await harness.listen();
+    const env = await harness.getWorker<{ MAPS?: MapsBucket }>().getEnv();
+    if (env.MAPS) await seedMaps(env.MAPS);
     started = {
       url,
       discord,
@@ -180,6 +184,7 @@ interface ProbeSource {
   durable_objects: object;
   migrations: object[];
   assets?: { directory?: string; binding?: string };
+  r2_buckets?: object[];
   vars: Record<string, string>;
   secrets?: object;
 }
@@ -213,6 +218,7 @@ async function writeProbeConfig(
       ...config.assets,
       directory: resolve(dirname(configPath), config.assets.directory ?? "."),
     },
+    r2_buckets: config.r2_buckets,
     vars: config.vars,
     secrets: config.secrets,
   };
