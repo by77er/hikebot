@@ -83,6 +83,28 @@ describe("GET /", () => {
     expect(html).toContain('href="https://github.com/by77er/hikebot"');
   });
 
+  it("has one primary action, to the project, and the steps in the bot's words", async () => {
+    const html = await (await get("/")).text();
+    const primaries = [
+      ...html.matchAll(/class="button button--primary[^"]*"[^>]*>/g),
+    ];
+    expect(primaries.map(([tag]) => tag)).toEqual([
+      'class="button button--primary" href="https://github.com/by77er/hikebot">',
+    ]);
+    const page = await outline(html);
+    expect(page.text).toContain("See the project");
+    expect(page.text).toContain("Plan the next hike together");
+    for (const step of [
+      "How it works",
+      "Propose a location",
+      "Vote",
+      "Go hiking",
+    ]) {
+      expect(page.text).toContain(step);
+    }
+    expect(html).toContain('<article class="card"');
+  });
+
   it("answers HEAD with the headers and no body", async () => {
     const response = await get("/", "HEAD");
     expect(response.status).toBe(200);
@@ -95,9 +117,15 @@ describe("GET /", () => {
     expect(response.status).toBe(405);
     expect(response.headers.get("Allow")).toBe("GET, HEAD");
     expect(pageHeaders(response)).toEqual(EXPECTED_PAGE_HEADERS);
-    expect((await outline(await response.text())).title).toBe(
-      "Method not allowed · hikebot",
+    const html = await response.text();
+    const page = await outline(html);
+    expect(page.title).toBe("Method not allowed · hikebot");
+    expect(page.text).toContain("Error 405");
+    expect(page.text).toContain(
+      "This page does not accept that kind of request.",
     );
+    expect(page.text).toContain("Go to the home page");
+    expect(html).toContain('<a class="button button--primary" href="/">');
   });
 });
 
@@ -133,6 +161,22 @@ describe("unknown paths", () => {
       );
     },
   );
+
+  it("says the error in words and offers one way back home", async () => {
+    const html = await (await get("/nope")).text();
+    const page = await outline(html);
+    expect(page.text).toContain("Error 404");
+    expect(page.text).toContain("Page not found");
+    expect(page.text).toContain(
+      "There is no page at this address. The link may be wrong, or the page may have moved.",
+    );
+    expect(page.text).toContain("Go to the home page");
+    const primaries = [
+      ...html.matchAll(/<a class="button button--primary" href="([^"]*)">/g),
+    ];
+    expect(primaries.map(([, href]) => href)).toEqual(["/"]);
+    expect(html.match(/<h1>/g)).toHaveLength(1);
+  });
 });
 
 describe("static assets", () => {

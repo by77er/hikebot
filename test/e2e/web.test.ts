@@ -84,6 +84,10 @@ describe("unknown paths", () => {
       expect(page.status).toBe(404);
       expectPageHeaders(page.headers);
       expect(page.body).toContain("<title>Page not found · hikebot</title>");
+      expect(page.body).toContain("Error 404");
+      expect(page.body).toContain(
+        '<a class="button button--primary" href="/">',
+      );
       expect(page.body).toContain('<main id="main"');
     },
   );
