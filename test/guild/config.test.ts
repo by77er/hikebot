@@ -76,6 +76,30 @@ describe("GuildConfig", () => {
     expect(settings.timezone).toBe("Europe/Berlin");
   });
 
+  it("starts with the schedule off on Wednesdays at 09:00 with a 2-day date vote, and changes it", async () => {
+    await runInDurableObject(stubFor("config-cadence"), (_instance, state) => {
+      const config = new GuildConfig(state.storage);
+      expect(config.get().cadence).toEqual({
+        enabled: false,
+        weekday: 3,
+        time: "09:00",
+        dateVoteDays: 2,
+      });
+      expect(config.setCadence({ enabled: true, weekday: 6 })).toEqual({
+        ...empty,
+        cadence: { enabled: true, weekday: 6, time: "09:00", dateVoteDays: 2 },
+      });
+      config.setCadence({ time: "18:30", dateVoteDays: 3 });
+      config.setCadence({ enabled: false });
+      expect(config.get().cadence).toEqual({
+        enabled: false,
+        weekday: 6,
+        time: "18:30",
+        dateVoteDays: 3,
+      });
+    });
+  });
+
   it("caches the owner id with its fetch time", async () => {
     await runInDurableObject(stubFor("config-owner"), (_instance, state) => {
       const config = new GuildConfig(state.storage);

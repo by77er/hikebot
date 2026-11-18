@@ -31,6 +31,7 @@ import {
   renderAdminSettings,
   type PollAnnouncement,
 } from "../../src/features/admin-panel";
+import { CADENCE_JOB } from "../../src/features/cadence-state";
 import type { HikeDayStatus } from "../../src/features/hike-day-state";
 import type { HikeEventStatus } from "../../src/features/hike-event-state";
 import type { HikeThreadStatus } from "../../src/features/hike-thread-state";
@@ -44,6 +45,8 @@ import {
   ADMIN_ONLY_MESSAGE,
   ADMIN_ONLY_NO_ROLE_MESSAGE,
 } from "../../src/guild/permissions";
+import { UNAVAILABLE_MESSAGE } from "../../src/guild/router";
+import { scheduledJobs } from "../../src/guild/schedule";
 import {
   callWorker,
   commandInteraction,
@@ -1040,6 +1043,69 @@ describe("renderAdminSettings", () => {
     expectWithinLimits(view);
   });
 
+  it("shows the Schedule, off, with its weekday and length selects and Turn schedule on", () => {
+    const view = renderAdminSettings({ settings: COMPLETE, round: null });
+    const nodes = asNodes(view);
+    expect(text(nodes)).toContain("**Schedule**\nWhen it is on, hikebot runs");
+    expect(text(nodes)).toContain("**Schedule:** off");
+    const day = find(nodes, ADMIN_PANEL_IDS.cadenceDay) as {
+      options: { label: string; value: string; default: boolean }[];
+    };
+    expect(day.options.map((o) => o.label)).toEqual([
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ]);
+    expect(day.options.filter((o) => o.default)).toEqual([
+      { label: "Wednesday", value: "3", default: true },
+    ]);
+    const days = find(nodes, ADMIN_PANEL_IDS.cadenceDays) as {
+      options: { label: string; value: string; default: boolean }[];
+    };
+    expect(days.options).toEqual([
+      { label: "Date vote open 1 day", value: "1", default: false },
+      { label: "Date vote open 2 days", value: "2", default: true },
+      { label: "Date vote open 3 days", value: "3", default: false },
+    ]);
+    expect(find(nodes, ADMIN_PANEL_IDS.cadence)).toMatchObject({
+      label: "Turn schedule on",
+    });
+    expect(find(nodes, ADMIN_PANEL_IDS.cadenceTime)).toMatchObject({
+      label: "Set schedule time",
+    });
+    expectWithinLimits(view);
+  });
+
+  it("offers Turn schedule off while it is on, and stays within limits with a notice", () => {
+    const view = renderAdminSettings(
+      {
+        settings: {
+          ...COMPLETE,
+          cadence: { ...DEFAULT_CADENCE, enabled: true, weekday: 6 },
+        },
+        round: null,
+        now: Date.UTC(2030, 0, 1),
+        nextScheduled: {
+          at: Date.UTC(2030, 0, 5, 17),
+          what: "Opens a location vote",
+        },
+      },
+      "The schedule is on.",
+    );
+    const nodes = asNodes(view);
+    expect(find(nodes, ADMIN_PANEL_IDS.cadence)).toMatchObject({
+      label: "Turn schedule off",
+    });
+    expect(text(nodes)).toContain(
+      "**Schedule:** on · Saturdays at 09:00 (America/Los_Angeles) · date vote 2 days\n**Next:** Opens a location vote <t:1893862800:F> (<t:1893862800:R>).",
+    );
+    expectWithinLimits(view);
+  });
+
   it("shows each current value as the select's default", () => {
     const view = renderAdminSettings(
       { settings: COMPLETE, round: null },
@@ -1328,6 +1394,194 @@ describe("the admin panel", () => {
     expect(text(reply.data.components)).toContain("hikebot admin");
   });
 
+  describe("the schedule", () => {
+    // Monday 31 December 2029, noon in Los Angeles: years ahead, so no
+    // alarm set here fires by itself.
+    const MONDAY = Date.UTC(2029, 11, 31, 20);
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(MONDAY);
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function cadenceRun(guildId: string): Promise<number | undefined> {
+      return runInDurableObject(
+        env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(guildId)),
+        async (_instance, state) =>
+          (await scheduledJobs(state.storage)).get(CADENCE_JOB),
+      );
+    }
+
+    async function setChannels(guild: string): Promise<void> {
+      await send(pickChannel(ADMIN_PANEL_IDS.voteChannel, guild, OWNER, TEXT));
+      await send(
+        pickChannel(ADMIN_PANEL_IDS.announceChannel, guild, OWNER, NEWS),
+      );
+      await send(
+        pickChannel(ADMIN_PANEL_IDS.forumChannel, guild, OWNER, FORUM, {
+          [FORUM]: { id: FORUM, type: ChannelType.GuildForum },
+        }),
+      );
+    }
+
+    function pick(
+      customId: string,
+      guildId: string,
+      value: string,
+    ): APIMessageComponentInteraction {
+      const interaction = click(customId, guildId, OWNER);
+      Object.assign(interaction.data, {
+        component_type: ComponentType.StringSelect,
+        values: [value],
+      });
+      return interaction;
+    }
+
+    function submitTime(guildId: string, value: string) {
+      const interaction = modalInteraction(
+        ADMIN_PANEL_IDS.cadenceTime,
+        guildId,
+      );
+      Object.assign(interaction, {
+        member: member(OWNER),
+        message: { id: "800000000000000001", components: [] },
+      });
+      Object.assign(interaction.data, {
+        components: [
+          {
+            type: ComponentType.Label,
+            component: {
+              type: ComponentType.TextInput,
+              custom_id: ADMIN_PANEL_FIELDS.cadenceTime,
+              value,
+            },
+          },
+        ],
+      });
+      return interaction;
+    }
+
+    it("refuses to turn on until the three channels are set, naming those missing", async () => {
+      const guild = "panel-cadence-refused";
+      await send(pickChannel(ADMIN_PANEL_IDS.voteChannel, guild, OWNER, TEXT));
+      const view = message(
+        await send(click(ADMIN_PANEL_IDS.cadence, guild, OWNER)),
+      );
+      expect(view.type).toBe(InteractionResponseType.UpdateMessage);
+      expect(text(view.data.components)).toContain(
+        "The schedule needs the announcements channel and hike threads channel. Set them above, then turn it on.",
+      );
+      expect((await settingsOf(guild)).cadence.enabled).toBe(false);
+      expect(await cadenceRun(guild)).toBeUndefined();
+    });
+
+    it("turns on, scheduling the job for the next Wednesday at 09:00, and off, dropping it", async () => {
+      const guild = "panel-cadence-toggle";
+      await setChannels(guild);
+      let view = message(
+        await send(click(ADMIN_PANEL_IDS.cadence, guild, OWNER)),
+      );
+      expect(text(view.data.components)).toContain("The schedule is on.");
+      expect(text(view.data.components)).toContain(
+        "**Schedule:** on · Wednesdays at 09:00 (America/Los_Angeles) · date vote 2 days\n**Next:** Opens a location vote <t:1893603600:F>",
+      );
+      expect((await settingsOf(guild)).cadence.enabled).toBe(true);
+      // Wednesday 2 January 2030, 09:00 in Los Angeles.
+      expect(await cadenceRun(guild)).toBe(Date.UTC(2030, 0, 2, 17));
+
+      const status = message(
+        await send(click(ADMIN_PANEL_IDS.back, guild, OWNER)),
+      );
+      expect(text(status.data.components)).toContain(
+        "**Next:** Opens a location vote <t:1893603600:F> (<t:1893603600:R>).",
+      );
+
+      view = message(await send(click(ADMIN_PANEL_IDS.cadence, guild, OWNER)));
+      expect(text(view.data.components)).toContain(
+        "The schedule is off. Open votes stay open until an admin closes them.",
+      );
+      expect(text(view.data.components)).toContain("**Schedule:** off");
+      expect(await cadenceRun(guild)).toBeUndefined();
+    });
+
+    it("saves the weekday, the date vote's length and the time, moving the next run", async () => {
+      const guild = "panel-cadence-change";
+      await setChannels(guild);
+      await send(click(ADMIN_PANEL_IDS.cadence, guild, OWNER));
+
+      let view = message(
+        await send(pick(ADMIN_PANEL_IDS.cadenceDay, guild, "5")),
+      );
+      expect(text(view.data.components)).toContain(
+        "The schedule's day is Friday.",
+      );
+      // Friday 4 January 2030, 09:00 in Los Angeles.
+      expect(await cadenceRun(guild)).toBe(Date.UTC(2030, 0, 4, 17));
+
+      view = message(await send(pick(ADMIN_PANEL_IDS.cadenceDays, guild, "3")));
+      expect(text(view.data.components)).toContain(
+        "On the schedule, the date vote stays open 3 days.",
+      );
+
+      const form = (await send(
+        click(ADMIN_PANEL_IDS.cadenceTime, guild, OWNER),
+      )) as { type: InteractionResponseType; data: { components: Node[] } };
+      expect(form.type).toBe(InteractionResponseType.Modal);
+      expect(
+        find(form.data.components, ADMIN_PANEL_FIELDS.cadenceTime),
+      ).toMatchObject({
+        value: "09:00",
+      });
+      view = message(await send(submitTime(guild, " 7:30 ")));
+      expect(text(view.data.components)).toContain(
+        "The schedule's time is 07:30 (America/Los_Angeles).",
+      );
+      expect(await cadenceRun(guild)).toBe(Date.UTC(2030, 0, 4, 15, 30));
+      expect((await settingsOf(guild)).cadence).toEqual({
+        enabled: true,
+        weekday: 5,
+        time: "07:30",
+        dateVoteDays: 3,
+      });
+
+      for (const typed of ["25:00", "7.30", ""]) {
+        const refused = message(await send(submitTime(guild, typed)));
+        expect(refused.data.flags).toBe(
+          MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+        );
+        expect(text(refused.data.components)).toContain(
+          "is not a time, so the schedule's time is still 07:30. Enter it as HH:MM, 24-hour, for example 09:00 or 18:30.",
+        );
+      }
+      expect(await cadenceRun(guild)).toBe(Date.UTC(2030, 0, 4, 15, 30));
+    });
+
+    it("refuses a weekday or length out of range", async () => {
+      const guild = "panel-cadence-range";
+      for (const [id, value] of [
+        [ADMIN_PANEL_IDS.cadenceDay, "7"],
+        [ADMIN_PANEL_IDS.cadenceDays, "4"],
+        [ADMIN_PANEL_IDS.cadenceDays, "0"],
+      ] as const) {
+        const reply = message(await send(pick(id, guild, value)));
+        expect(text(reply.data.components)).toBe(UNAVAILABLE_MESSAGE);
+      }
+      expect((await settingsOf(guild)).cadence).toEqual(DEFAULT_CADENCE);
+    });
+
+    it("moves the next run when the time zone changes", async () => {
+      const guild = "panel-cadence-zone";
+      await setChannels(guild);
+      await send(click(ADMIN_PANEL_IDS.cadence, guild, OWNER));
+      await send(submitTimezone(guild, OWNER, "Europe/Berlin"));
+      // Wednesday 2 January 2030, 09:00 in Berlin.
+      expect(await cadenceRun(guild)).toBe(Date.UTC(2030, 0, 2, 8));
+    });
+  });
+
   describe("refuses a non-admin replaying", () => {
     const replays: [
       string,
@@ -1346,6 +1600,17 @@ describe("the admin panel", () => {
         ADMIN_PANEL_IDS.timezone,
         (g) => click(ADMIN_PANEL_IDS.timezone, g, STRANGER),
       ],
+      ...[
+        ADMIN_PANEL_IDS.cadence,
+        ADMIN_PANEL_IDS.cadenceDay,
+        ADMIN_PANEL_IDS.cadenceDays,
+        ADMIN_PANEL_IDS.cadenceTime,
+      ].map(
+        (id): [string, (guild: string) => APIMessageComponentInteraction] => [
+          id,
+          (g) => click(id, g, STRANGER),
+        ],
+      ),
       [
         POLL_CONTROL_IDS.startDateVote,
         (g) => click(POLL_CONTROL_IDS.startDateVote, g, STRANGER),

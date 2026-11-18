@@ -7,7 +7,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GuildHike } from "../../src/guild/guild-hike";
 import type { JobHandler } from "../../src/guild/router";
-import { schedule, scheduledJobs } from "../../src/guild/schedule";
+import { schedule, scheduledJobs, unschedule } from "../../src/guild/schedule";
 
 /** Far enough ahead that the alarm only runs a job because it is the earliest. */
 const T = 2_000_000_000_000;
@@ -169,6 +169,27 @@ describe("scheduled jobs", () => {
       alarm: T + 60_000,
       jobs: { "test:second": T + 60_000 },
     });
+  });
+
+  it("are dropped by unschedule, which keeps the alarm at the earliest left or clears it", async () => {
+    const guild = "schedule-unschedule";
+    await scheduleIn(guild, "test:first", T);
+    await scheduleIn(guild, "test:second", T + 1000);
+    await runInDurableObject(stub(guild), (_i, state) =>
+      unschedule(state.storage, "test:first"),
+    );
+    expect(await stateOf(guild)).toEqual({
+      alarm: T + 1000,
+      jobs: { "test:second": T + 1000 },
+    });
+    // A job scheduled again after unschedule gets its new, later time.
+    await scheduleIn(guild, "test:second", T);
+    await runInDurableObject(stub(guild), async (_i, state) => {
+      await unschedule(state.storage, "test:second");
+      await unschedule(state.storage, "test:none");
+    });
+    expect(await stateOf(guild)).toEqual({ alarm: null, jobs: {} });
+    expect(await runDurableObjectAlarm(stub(guild))).toBe(false);
   });
 
   it("log a job that throws by its name and still run the others", async () => {
