@@ -315,10 +315,10 @@ describe("renderHikeLog", () => {
 describe("the web view's hike log", () => {
   const guildId = "200000000000004001";
 
-  async function page(n: number) {
+  async function page(n: number, pageSize = 10) {
     const result = await env.GUILD_HIKE.get(
       env.GUILD_HIKE.idFromName(guildId),
-    ).webView({ guildId, userId: STRANGER, page: n, pageSize: 10 });
+    ).webView({ guildId, userId: STRANGER, page: n, pageSize });
     if (result.kind !== "view") throw new Error(`no view: ${result.kind}`);
     return result.view.log;
   }
@@ -365,5 +365,16 @@ describe("the web view's hike log", () => {
     ]);
     expect((await page(9)).page).toBe(2);
     expect((await page(0)).page).toBe(1);
+
+    const fives = await page(2, 5);
+    expect(fives).toMatchObject({ page: 2, pageSize: 5, pages: 3, total: 12 });
+    expect(fives.entries.map((e) => e.location.label)).toEqual([
+      "Hike 7",
+      "Hike 6",
+      "Hike 5",
+      "Hike 4",
+      "Hike 3",
+    ]);
+    expect((await page(9, 5)).page).toBe(3);
   });
 });

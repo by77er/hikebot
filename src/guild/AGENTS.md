@@ -324,10 +324,8 @@ must survive a restart of the object. It runs from the object's alarm.
 
 ## Add a field to the web view
 
-The web view is what `GuildHike.webView` returns to a server's page:
-`WebView` in `src/guild/web-view.ts`, one section per function, each built
-from the same `WebViewSource`. The example adds the trail's distance to the
-planned hike; use your field, section and test file.
+The example adds the trail's distance to the planned hike; use your field,
+section and test file.
 
 1. Find the function that builds the section, and the file it is in:
 
