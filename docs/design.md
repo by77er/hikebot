@@ -1575,7 +1575,9 @@ Coming? Say so in <#thread>, so the group knows who to expect.
 ```
 
 The start is written in the server's time zone and as Discord timestamps,
-which each member sees in their own zone. The details, the thread, the
+which each member sees in their own zone. When the location has a map pin,
+its place line with both map links follows the details, and the message
+ends with `-# © OpenStreetMap contributors` (see "Locating hikes"). The details, the thread, the
 event and the invitation (which needs the thread) are left out when the
 hike has none. The body is the list `HIKE_DAY_SECTIONS`: each section is a
 function from the hike (`HikeDay`: location, date, start, thread, event,
@@ -1694,8 +1696,8 @@ with `-# © OpenStreetMap contributors` (see "Poll message" for how it stays
 within Discord's limits). For the decided location, the place line with
 both links (`📍 <place> · [OpenStreetMap](https://www.openstreetmap.org/?mlat=<lat>&mlon=<lon>#map=13/<lat>/<lon>) · [Google Maps](https://www.google.com/maps/search/?api=1&query=<lat>,<lon>)`)
 is in the location vote's announcement, the hike announcement (under
-"**Where:**"), the hike thread's first message and, as plain URLs, the
-event's description, each with the attribution. Neither map link needs a
+"**Where:**"), the hike thread's first message, the hike-day announcement
+and, as plain URLs, the event's description, each with the attribution. Neither map link needs a
 key. Coordinates are written with at most five decimals.
 
 **Set map pin** fixes a wrong or missing match for the decided location of

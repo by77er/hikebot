@@ -5,6 +5,7 @@ import {
   runInDurableObject,
   waitOnExecutionContext,
 } from "cloudflare:test";
+import { googleLink, osmLink } from "../../src/geo/links";
 import { env } from "cloudflare:workers";
 import {
   InteractionResponseType,
@@ -317,6 +318,7 @@ const option = (over: Partial<OptionView>): OptionView => ({
   proposedBy: OWNER,
   createdAt: 0,
   votes: 0,
+  place: null,
   ...over,
 });
 
@@ -363,6 +365,32 @@ describe("the announcement", () => {
       `**Starts:** 11:00 (America/Los_Angeles), <t:${start}:t> in your time zone, <t:${start}:R>`,
       "**Calendar:** https://hikebot.example/calendar/200000000000000001/sig.ics",
     ]);
+  });
+
+  it("shows where the location is with both map links and the attribution when it has a pin", () => {
+    const point = { lat: 47.4875, lon: -121.7234 };
+    const lines = text(
+      renderHikeDay({
+        ...DAY,
+        location: {
+          ...DAY.location,
+          place: {
+            status: "found",
+            point,
+            name: "Lake Loop, King County",
+            attempts: 1,
+          },
+        },
+      }),
+    ).split("\n");
+    expect(lines).toContain(
+      `📍 Lake Loop, King County · [OpenStreetMap](${osmLink(point)}) · [Google Maps](${googleLink(point)})`,
+    );
+    expect(lines.indexOf("Meet at the north trailhead.")).toBe(
+      lines.findIndex((line) => line.startsWith("📍")) - 1,
+    );
+    expect(lines[lines.length - 1]).toBe("-# © OpenStreetMap contributors");
+    expect(text(renderHikeDay(DAY))).not.toContain("OpenStreetMap");
   });
 
   it("takes a new section by adding it to the list", () => {

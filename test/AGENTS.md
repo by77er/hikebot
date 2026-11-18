@@ -653,12 +653,9 @@ Run `npm test` for the whole suite before opening a pull request.
 
 ## Answer place lookups in an end-to-end scenario
 
-The Worker under test looks place names up on the fake geocoder,
-`e2e.geocoder` (`test/e2e/harness/fake-nominatim.ts`), which answers no
-result (`[]`) for a name it was not given.
-
-1. Before the location is proposed, give the fake the place, or make it
-   fail or hold its answers:
+1. Before the location is proposed, give the fake geocoder `e2e.geocoder`
+   (`test/e2e/harness/fake-nominatim.ts`) the place with `addPlace`, or
+   make it fail or hold its answers. A name you did not add gets no result:
 
    ```ts
    e2e.geocoder.addPlace("Mount Si", {
@@ -670,13 +667,12 @@ result (`[]`) for a name it was not given.
    // const release = e2e.geocoder.hold(); ... release();
    ```
 
-   The fake is shared by the file's tests: lift a failure or release a
-   hold in a `finally`.
+   Lift a failure or release a hold in a `finally`, so the file's other
+   tests get answers.
 
-2. Wait for what the lookup changes on the poll message. Lookups start two
-   seconds after a proposal and run 1.1 seconds apart, so give `eventually`
-   a longer timeout; to wait for the request itself, use
-   `e2e.geocoder.nextRequest(match, timeoutMs)`:
+2. Wait for what the lookup changes on the poll message, with `eventually`
+   and a timeout of 15 seconds, since lookups wait for their turn; to wait
+   for the request itself, use `e2e.geocoder.nextRequest(match, timeoutMs)`:
 
    ```ts
    await eventually(

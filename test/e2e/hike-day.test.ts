@@ -54,13 +54,25 @@ function noonZone(): { zone: string; today: string; weekday: string } {
  * Plays a round in `g` up to an open date vote that 23:00 today wins, in a
  * zone where it is about noon now, and returns the panel and the zone.
  */
-async function upToTodaysDateVote(g: TestGuild) {
+async function upToTodaysDateVote(
+  g: TestGuild,
+  location = "Lake Loop",
+  placeShown?: string,
+) {
   const [ana] = g.members as [Member];
   const { zone, today, weekday } = noonZone();
   const panel = await play.setUpPanel(g);
   await play.setTimezone(g, panel, zone, zone);
-  const where = await play.startLocationVote(g, panel, "Lake Loop");
-  await play.vote(ana, where, ["Lake Loop"]);
+  const where = await play.startLocationVote(g, panel, location);
+  if (placeShown !== undefined) {
+    await eventually(
+      () => {
+        expect(messageText(play.shown(where))).toContain(placeShown);
+      },
+      { timeout: 15_000 },
+    );
+  }
+  await play.vote(ana, where, [location]);
   await play.closeVote(g.owner, panel, "location vote");
   const when = await play.startDateVote(
     g,
@@ -125,6 +137,33 @@ describe("the hike-day announcement", () => {
       );
     });
     expect(hikeDays(g)).toHaveLength(1);
+  });
+
+  it("shows where the hike is, with both map links and the attribution, once the location was found", async () => {
+    const g = play.guild(7);
+    e2e.geocoder.addPlace("Rattlesnake Ledge", {
+      lat: 47.4347,
+      lon: -121.7686,
+      displayName: "Rattlesnake Ledge, King County, Washington, United States",
+    });
+    const { panel } = await upToTodaysDateVote(
+      g,
+      "Rattlesnake Ledge",
+      "📍 Rattlesnake Ledge, King County, Washington",
+    );
+    await play.closeVote(g.owner, panel, "date vote");
+
+    const announcement = await waitForMessage(
+      e2e.discord,
+      g.channels.news,
+      (m) => messageText(m).includes("## Hike today: Rattlesnake Ledge"),
+      { timeout: 20_000 },
+    );
+    const lines = messageText(announcement).split("\n");
+    expect(lines).toContain(
+      "📍 Rattlesnake Ledge, King County, Washington · [OpenStreetMap](https://www.openstreetmap.org/?mlat=47.4347&mlon=-121.7686#map=13/47.4347/-121.7686) · [Google Maps](https://www.google.com/maps/search/?api=1&query=47.4347,-121.7686)",
+    );
+    expect(lines[lines.length - 1]).toBe("-# © OpenStreetMap contributors");
   });
 
   it("is posted once from the panel after Discord refused it, even when the retry is clicked twice", async () => {

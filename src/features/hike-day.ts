@@ -2,7 +2,7 @@
  * The hike-day announcement: on the morning of a planned hike, the
  * `hike:day-of` job posts one message in the announcements channel that
  * points to everything about it: where and when, the location's details,
- * the hike thread, the Discord event and the calendar address. The date
+ * its map links when it has a pin, the hike thread, the Discord event and the calendar address. The date
  * vote's close step plans it and schedules the job; the job posts each
  * announcement that is due and schedules itself for the next one. It is
  * posted at most once per round: a cut-off or failed post shows on the
@@ -21,6 +21,7 @@ import {
   parseCustomId,
   textDisplay,
 } from "../discord/components";
+import { OSM_ATTRIBUTION, placeLine } from "../geo/links";
 import { GuildConfig } from "../guild/config";
 import { adminOnly } from "../guild/permissions";
 import type {
@@ -96,6 +97,10 @@ export const HIKE_DAY_SECTIONS: readonly HikeDaySection[] = [
     ];
   },
   ({ location }) => (location.details ? [location.details] : []),
+  ({ location }) =>
+    location.place?.point
+      ? [placeLine(location.place.point, location.place.name)]
+      : [],
   ({ threadId }) =>
     threadId === null ? [] : [`**Hike thread:** <#${threadId}>`],
   ({ guildId, eventId }) =>
@@ -107,6 +112,7 @@ export const HIKE_DAY_SECTIONS: readonly HikeDaySection[] = [
     threadId === null
       ? []
       : [`Coming? Say so in <#${threadId}>, so the group knows who to expect.`],
+  ({ location }) => (location.place?.point ? [OSM_ATTRIBUTION] : []),
 ];
 
 /** The announcement, made of `sections` in order. */

@@ -722,6 +722,7 @@ describe("renderAdminPanel", () => {
         expect(buttons).toEqual([
           POLL_CONTROL_IDS.startLocationVote,
           POLL_CONTROL_IDS.postHikeDay(finished.id),
+          POLL_CONTROL_IDS.setMapPin(7),
           ADMIN_PANEL_IDS.settings,
           ADMIN_PANEL_IDS.refresh,
         ]);
@@ -772,6 +773,7 @@ describe("renderAdminPanel", () => {
           POLL_CONTROL_IDS.createHikeThread(finished.id),
           POLL_CONTROL_IDS.createHikeEvent(finished.id),
           POLL_CONTROL_IDS.postHikeDay(finished.id),
+          POLL_CONTROL_IDS.setMapPin(7),
           ADMIN_PANEL_IDS.settings,
           ADMIN_PANEL_IDS.refresh,
         ]);
