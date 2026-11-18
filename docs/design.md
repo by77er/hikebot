@@ -296,7 +296,8 @@ succeeded a second time. A job that wants another go schedules itself again.
 Everything done to a round (start the location vote, close a vote, start
 and withdraw the date vote, cancel the round, post a vote message that was
 never posted, and the panel's retries: create the hike thread, create the
-hike event, post an announcement) is one function in
+hike event, post an announcement, post the hike-day announcement) is one
+function in
 `src/features/round-actions.ts`. Three kinds of caller share them: the
 admin panel's Discord handlers, the web pages, and the bot acting on its own
 schedule. None of the functions takes an interaction, so each rule and each
@@ -1450,8 +1451,8 @@ time the panel says it is due but will not be posted until a channel is
 picked under Settings; when its time came without one, the panel shows
 "not posted" with that reason and **Post hike-day announcement**.
 
-**Post hike-day announcement** (`hb:hike-day:post:<round id>`) retries for
-the round in its `custom_id`, only while that round is the last one,
+**Post hike-day announcement** (`hb:hike-day:post:<round id>`, the round
+action `retryHikeDay`) retries for the round in its `custom_id`, only while that round is the last one,
 `complete`, its announcement failed or is not confirmed, and its hike is
 not over; otherwise it redraws the panel saying why it did nothing (already
 posted, being posted, not due, the hike is over, or that hike is no longer

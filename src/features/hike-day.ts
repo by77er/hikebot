@@ -7,7 +7,7 @@
  * announcement that is due and schedules itself for the next one. It is
  * posted at most once per round: a cut-off or failed post shows on the
  * admin panel with **Post hike-day announcement**
- * (`hb:hike-day:post:<round id>`).
+ * (`hb:hike-day:post:<round id>`, `retryHikeDay` in `round-actions.ts`).
  */
 import type {
   APIMessageComponentInteraction,
@@ -32,17 +32,23 @@ import type {
 import { schedule } from "../guild/schedule";
 import { DEFAULT_HIKE_TIME, hikeStart } from "../polls/dates";
 import { PollStore, type OptionView, type RoundView } from "../polls/store";
-import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
+import { POLL_CONTROL_IDS } from "./admin-panel";
 import {
   claimHikeDay,
   clearHikeDay,
   hikeDayHours,
   hikeDayRecords,
-  hikeDayStatus,
   planHikeDay,
   recordHikeDayFailure,
 } from "./hike-day-state";
-import { deferPanel, errorText, finishPanel, type CloseStep } from "./poll-ui";
+import {
+  actorOf,
+  answerPanel,
+  errorText,
+  roundContext,
+  type CloseStep,
+} from "./poll-ui";
+import { retryHikeDay } from "./round-actions";
 
 /** The job that posts the hike-day announcements that are due. */
 export const HIKE_DAY_JOB = "hike:day-of";
@@ -153,7 +159,8 @@ export function hikeDayOf(
 }
 
 /** What posting the announcement came to. */
-type Posted = { ok: true; channelId: string } | { ok: false; reason: string };
+export type Posted =
+  { ok: true; channelId: string } | { ok: false; reason: string };
 
 const RETRY = "click Post hike-day announcement";
 
@@ -163,7 +170,7 @@ const RETRY = "click Post hike-day announcement";
  * on the round; on failure records why, for the panel. The caller has
  * claimed it with `claimHikeDay`.
  */
-async function postHikeDay(
+export async function postHikeDay(
   roundId: number,
   guildId: string,
   context: HandlerContext,
@@ -274,72 +281,23 @@ export const planHikeDayStep: CloseStep = {
 };
 
 /**
- * Post hike-day announcement: posts the last round's announcement after it
- * failed or was cut off, while its hike is not over. The claim is taken
- * before the answer, so a second click while the first is running is told
- * so, and a click after it was posted posts nothing.
+ * Post hike-day announcement: posts the last round's announcement again
+ * with `retryHikeDay`, which claims it before the answer.
  */
-const retryHikeDay: ComponentHandler = adminOnly(
-  (interaction: APIMessageComponentInteraction, context, settings) => {
-    const arg = parseCustomId(interaction.data.custom_id)?.arg;
-    const guildId = interaction.guild_id ?? "";
-    const store = new PollStore(context.storage);
-    const round = store.getLastRound();
-    if (
-      round === null ||
-      String(round.id) !== arg ||
-      round.status !== "complete"
-    ) {
-      return adminPanelUpdate(
-        context,
-        "That hike is no longer the last one, so its hike-day announcement is not posted from here.",
-      );
-    }
-    const now = store.now();
-    const status = hikeDayStatus(context.storage, round, now);
-    if (status.state === "posted") {
-      return adminPanelUpdate(
-        context,
-        `The hike-day announcement is already posted in <#${status.channelId}>.`,
-      );
-    }
-    if (!(hikeDayHours(round, settings.timezone).end > now)) {
-      return adminPanelUpdate(
-        context,
-        "The hike is over, so its hike-day announcement is not posted.",
-      );
-    }
-    if (status.state === "none" || status.state === "planned") {
-      return adminPanelUpdate(
-        context,
-        "The hike-day announcement is not due, so it was not posted.",
-      );
-    }
-    if (!claimHikeDay(context.storage, round, guildId, now)) {
-      return adminPanelUpdate(
-        context,
-        "The hike-day announcement is being posted.",
-      );
-    }
-    return {
-      response: deferPanel(interaction),
-      followUp: async () => {
-        const posted = await postHikeDay(round.id, guildId, context);
-        await finishPanel(
-          context,
-          interaction,
-          posted.ok
-            ? `The hike-day announcement is posted in <#${posted.channelId}>.`
-            : posted.reason,
-        );
-      },
-    };
-  },
+const postAgain: ComponentHandler = adminOnly(
+  (interaction: APIMessageComponentInteraction, context) =>
+    answerPanel(
+      interaction,
+      context,
+      retryHikeDay(roundContext(interaction, context), actorOf(interaction), {
+        roundId: Number(parseCustomId(interaction.data.custom_id)?.arg),
+      }),
+    ),
 );
 
 /** Registers the job and the Post hike-day announcement button. */
 export function registerHikeDay(router: Router): Router {
   router.job(HIKE_DAY_JOB, postDueHikeDays);
-  router.component("hb:hike-day:post", retryHikeDay);
+  router.component("hb:hike-day:post", postAgain);
   return router;
 }
