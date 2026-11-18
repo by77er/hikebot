@@ -4,7 +4,14 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default defineConfig(
-  { ignores: ["node_modules", ".wrangler", "worker-configuration.d.ts"] },
+  {
+    ignores: [
+      "node_modules",
+      ".wrangler",
+      "worker-configuration.d.ts",
+      "types/lib-dom",
+    ],
+  },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   {

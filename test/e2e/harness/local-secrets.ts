@@ -32,10 +32,10 @@ type DiscordEnv = Record<keyof typeof OTHER_SECRETS, string>;
 
 /**
  * Registers hooks that make a checkout in a temporary directory, with the
- * repository's `wrangler.jsonc`, links to its `src/` and `node_modules/`,
- * and `secretsFile` holding OTHER_SECRETS, and that set the same values in
- * the environment. Returns the directory, for `useE2E({ root })`; call it
- * before `useE2E`, so its hooks run first.
+ * repository's `wrangler.jsonc`, links to its `src/`, `public/` and
+ * `node_modules/`, and `secretsFile` holding OTHER_SECRETS, and that set the
+ * same values in the environment. Returns the directory, for
+ * `useE2E({ root })`; call it before `useE2E`, so its hooks run first.
  */
 export function useCheckoutWithOtherSecrets(secretsFile: string): () => string {
   let dir: string | undefined;
@@ -43,6 +43,7 @@ export function useCheckoutWithOtherSecrets(secretsFile: string): () => string {
     dir = mkdtempSync(join(tmpdir(), "hikebot-e2e-checkout-"));
     cpSync(join(ROOT, "wrangler.jsonc"), join(dir, "wrangler.jsonc"));
     symlinkSync(join(ROOT, "src"), join(dir, "src"));
+    symlinkSync(join(ROOT, "public"), join(dir, "public"));
     symlinkSync(join(ROOT, "node_modules"), join(dir, "node_modules"));
     writeFileSync(
       join(dir, secretsFile),

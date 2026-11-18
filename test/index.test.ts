@@ -54,28 +54,55 @@ describe("entry module", () => {
 });
 
 describe("routes", () => {
-  it("serves GET / from the deployed entry module", async () => {
-    const response = await exports.default.fetch("https://hikebot.example/");
+  it("serves GET /healthz from the deployed entry module", async () => {
+    const response = await exports.default.fetch(
+      "https://hikebot.example/healthz",
+    );
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("hikebot is running\n");
   });
 
-  it("answers GET / with a plain-text health line", async () => {
+  it("answers GET /healthz with a plain-text health line", async () => {
     const response = await callWorker(
       signer,
-      new IncomingRequest("https://hikebot.example/"),
+      new IncomingRequest("https://hikebot.example/healthz"),
     );
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toMatch(/^text\/plain/);
     expect(await response.text()).toBe("hikebot is running\n");
   });
 
-  it("returns 404 for unknown paths", async () => {
+  it("answers GET / with the landing page", async () => {
+    const response = await exports.default.fetch("https://hikebot.example/");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe(
+      "text/html; charset=utf-8",
+    );
+    expect(await response.text()).toMatch(/^<!doctype html>/);
+  });
+
+  it("serves the stylesheet through the Worker's fetch", async () => {
+    const response = await exports.default.fetch(
+      "https://hikebot.example/assets/app.css",
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe(
+      "text/css; charset=utf-8",
+    );
+    expect(response.headers.get("Cache-Control")).toBe("public, max-age=300");
+    await response.arrayBuffer();
+  });
+
+  it("returns the HTML 404 page for unknown paths", async () => {
     const response = await callWorker(
       signer,
       new IncomingRequest("https://hikebot.example/nope"),
     );
     expect(response.status).toBe(404);
+    expect(response.headers.get("Content-Type")).toBe(
+      "text/html; charset=utf-8",
+    );
+    await response.arrayBuffer();
   });
 
   it("returns 405 for non-POST requests to /interactions", async () => {

@@ -53,7 +53,7 @@ the repository root unless a step says otherwise.
    Each new shell needs the `export PATH` line again.
 
 2. Install the dependencies and create the local secrets file. The example
-   values are enough for the tests and for `GET /`:
+   values are enough for the tests and for the web pages:
 
    ```sh
    npm ci
@@ -91,7 +91,7 @@ requests, then stop it and check that no `workerd` process is left:
 ```sh
 timeout 300 npm run dev > /tmp/hikebot-dev.log 2>&1 &
 DEV_PID=$!
-for i in $(seq 60); do curl -fs http://localhost:8787/ && break; sleep 1; done
+for i in $(seq 60); do curl -fs http://localhost:8787/healthz && break; sleep 1; done
 # make your requests to http://localhost:8787 here
 kill "$DEV_PID"; wait "$DEV_PID"
 for i in $(seq 10); do pgrep -x workerd > /dev/null || break; sleep 1; done
@@ -99,7 +99,9 @@ pkill -x workerd; pgrep -lx workerd || echo "dev server stopped"
 ```
 
 The loop prints `hikebot is running` once the server answers. If it prints
-nothing, read `/tmp/hikebot-dev.log`. On macOS install GNU coreutils
+nothing, read `/tmp/hikebot-dev.log`. Open `http://localhost:8787/` in a
+browser for the landing page; `src/web/AGENTS.md` says how to check a page
+from the command line. On macOS install GNU coreutils
 (`brew install coreutils`) and use `gtimeout` in place of `timeout`.
 
 To exercise interactions, write a test that sends a signed interaction, as
@@ -233,11 +235,14 @@ them by hand, for example for your own test application:
    ```
 
 3. Check that production answers with the health line,
-   `hikebot is running`:
+   `hikebot is running`, and serves the landing page:
 
    ```sh
-   curl -fsS https://hiking.bitcru.sh/
+   curl -fsS https://hiking.bitcru.sh/healthz
+   curl -fsS -o /dev/null -w '%{http_code} %{content_type}\n' https://hiking.bitcru.sh/
    ```
+
+   The second command prints `200 text/html; charset=utf-8`.
 
 ## Roll production back
 
@@ -298,7 +303,7 @@ them by hand, for example for your own test application:
    stream:
 
    ```sh
-   curl -fsS https://hiking.bitcru.sh/
+   curl -fsS https://hiking.bitcru.sh/healthz
    ```
 
 ## Rotate a secret

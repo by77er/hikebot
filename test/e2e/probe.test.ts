@@ -18,6 +18,7 @@ import {
   itGetsTheHarnessSecrets,
   useCheckoutWithOtherSecrets,
 } from "./harness/local-secrets";
+import { PageClient } from "./harness/web";
 import { BOT_TOKEN, useE2E } from "./harness/worker";
 
 const e2e = useE2E({ probe: true });
@@ -162,3 +163,12 @@ describe.each([".dev.vars", ".env"])(
     itGetsTheHarnessSecrets(useE2E({ probe: true, root }));
   },
 );
+
+describe("the probe Worker's static assets", () => {
+  it("serves the checkout's public/ like the real Worker", async () => {
+    const css = await new PageClient(e2e.url).get("/assets/app.css");
+    expect(css.status).toBe(200);
+    expect(css.headers.get("content-type")).toBe("text/css; charset=utf-8");
+    expect(css.headers.get("cache-control")).toBe("public, max-age=300");
+  });
+});

@@ -36,16 +36,24 @@ Production is deployed by the `Deploy` workflow
 on a push to `main`, it deploys exactly that commit if it is still the tip of
 `main`, setting the five Worker secrets from GitHub Actions secrets with
 `wrangler deploy --secrets-file`, then runs `npm run register --if-present`
-and checks that `GET /` answers with the health line.
+and checks that `GET /healthz` answers with the health line.
 
 ## Request flow
 
-The Worker (`src/index.ts`) routes:
+A request for a file under `public/` (such as `/assets/app.css`) is
+answered by Workers Static Assets before the Worker runs; see "Web pages".
+The Worker (`src/index.ts`) handles the rest:
 
-- `GET /` (or `HEAD`): a plain-text health line, `hikebot is running`.
 - `POST /interactions`: the Discord interactions endpoint, below. Any other
   method gets 405 with `Allow: POST`.
-- Anything else: 404.
+- Anything else goes to the web router (`src/web/routes.tsx`):
+  - `GET /` (or `HEAD`): the landing page.
+  - `GET /healthz` (or `HEAD`): a plain-text health line,
+    `hikebot is running`.
+  - `GET /assets/*`: the file from `public/` through the `ASSETS` binding,
+    for a request that reaches the Worker.
+  - A known path with another method: an HTML 405 page with `Allow`.
+  - Any other path: an HTML 404 page.
 
 For `POST /interactions` the Worker:
 
@@ -65,6 +73,43 @@ For `POST /interactions` the Worker:
 The main module may export only the default handler and classes (workerd
 refuses to start otherwise); shared constants live in other modules. A test
 enforces this.
+
+## Web pages
+
+The Worker serves web pages from the same origin as the interactions
+endpoint. They are rendered on the server: each page is a Preact component
+(TSX under `src/web/`) rendered to a string with `preact-render-to-string`
+for every request. There is no client-side framework, no hydration and no
+bundling step besides Wrangler's, so every page works with JavaScript off.
+Pages build HTML only through JSX, which escapes text and attribute values,
+so a name or title from Discord or a form cannot inject markup.
+
+- **Routing.** `WebRouter` (`src/web/router.ts`) maps a method and an exact
+  path, or a path prefix ending in `/*`, to a handler. A `GET` route also
+  answers `HEAD` without a body. An unknown path gets the 404 page and a
+  known path with another method the 405 page with `Allow`.
+- **One response function.** Every HTML response comes from `htmlResponse`
+  (`src/web/response.ts`), which renders the page after `<!doctype html>`
+  and sets `Content-Type: text/html; charset=utf-8`,
+  `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: same-origin`, `Strict-Transport-Security` and this
+  Content-Security-Policy:
+  `default-src 'none'; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self' data: https://cdn.discordapp.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`.
+  Pages therefore carry no inline script or style, and load nothing from
+  another host except images from Discord's CDN (avatars, server icons).
+- **Page shell.** `Layout` (`src/web/layout.tsx`) is the document every page
+  renders into: `lang`, the viewport meta, the `<title>`, the stylesheet, a
+  skip link to `<main id="main">`, and the `<header>`, `<main>` and
+  `<footer>` landmarks.
+- **Static files.** `public/` is the Workers Static Assets directory
+  declared under `assets` in `wrangler.jsonc`, so `public/assets/app.css` is
+  served at `/assets/app.css`, with an ETag. `public/_headers` gives
+  everything under `/assets/` `Cache-Control: public, max-age=300`: browsers
+  reuse a file for five minutes and then revalidate, so a deploy that changes
+  one reaches every browser within five minutes. `public/.assetsignore`
+  keeps the directory's `AGENTS.md` and `UNDERCURRENT.md` from being served.
+  The stylesheet is a neutral baseline (system fonts, a readable line
+  length).
 
 ## GuildHike and the handler registry
 
@@ -238,13 +283,14 @@ overlap period with two keys.
   storage, a signing key pair generated for the file as
   `DISCORD_PUBLIC_KEY`, a dummy bot token and application id, and
   `DISCORD_API_BASE` pointing at a fake Discord API on a free local port.
-  Tests reach the Worker only as Discord does, with signed
-  `POST /interactions` requests, and import nothing from `src/` (ESLint
-  enforces this). The suite needs no network beyond localhost, no
+  Tests reach the Worker only over HTTP, as Discord does with signed
+  `POST /interactions` requests and as a browser does for the web pages,
+  and import nothing from `src/` (ESLint enforces this). The Worker serves
+  `public/` as in production. The suite needs no network beyond localhost, no
   credentials and no writable home directory; it stops workerd and the fake
   after each file, also when a test fails or times out.
 
-The e2e harness (`test/e2e/harness/`) has four parts:
+The e2e harness (`test/e2e/harness/`) has five parts:
 
 - An interaction client that builds realistic slash command, button,
   string/role/channel select and modal submit (fields inside Labels)
@@ -286,16 +332,21 @@ The e2e harness (`test/e2e/harness/`) has four parts:
   timeout. `RoundPlayer` (`test/e2e/harness/rounds.ts`) plays the steps of a
   round with them: a guild with its channels, the panel set up, starting,
   voting in, closing and cancelling the location and date votes.
+- A page client (`test/e2e/harness/web.ts`) that requests a path the way a
+  browser does and returns the status, headers and body as they came: it
+  does not follow redirects, and it keeps the cookies the Worker sets and
+  sends them back.
 
 Harness self-tests check every rule of the fake against a payload at the
-limit and one past it, and the client against a stand-in server. Those that
-need the bot to call Discord before a feature does run a probe Worker
-(`test/e2e/probe/worker.ts`, never deployed): the real Worker and the real
-`GuildHike` with one extra `/e2e-probe` command on its router, whose
-follow-ups call the fake through the real `DiscordApi`. They show that each
-guild's state stays in its own object, that the REST client retries a 429
-and surfaces 403 and 404 failures as `DiscordApiError`, and that the
-signature check, guild routing and follow-up path work in workerd.
+limit and one past it, and the interaction and page clients against a
+stand-in server. Those that need the bot to call Discord before a feature
+does run a probe Worker (`test/e2e/probe/worker.ts`, never deployed): the
+real Worker and the real `GuildHike` with one extra `/e2e-probe` command on
+its router, whose follow-ups call the fake through the real `DiscordApi`,
+and the same static assets. They show that each guild's state stays in its
+own object, that the REST client retries a 429 and surfaces 403 and 404
+failures as `DiscordApiError`, and that the signature check, guild routing
+and follow-up path work in workerd.
 
 ## Commands
 

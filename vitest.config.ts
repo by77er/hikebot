@@ -34,7 +34,7 @@ export default defineConfig({
         ],
         test: {
           name: "unit",
-          include: ["test/**/*.test.ts"],
+          include: ["test/**/*.test.{ts,tsx}"],
           exclude: ["test/e2e/**"],
           deps: {
             // discord-api-types is CommonJS; pre-bundle it so its enums load

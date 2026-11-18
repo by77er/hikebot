@@ -5,25 +5,18 @@ import {
 } from "discord-api-types/v10";
 import { ephemeralNotice, GUILD_ONLY_MESSAGE } from "./discord/responses";
 import { verifyDiscordSignature } from "./discord/verify";
+import { webRouter } from "./web/routes";
 
 export { GuildHike } from "./guild/guild-hike";
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const { pathname } = new URL(request.url);
-    if (pathname === "/") {
-      if (request.method !== "GET" && request.method !== "HEAD") {
-        return methodNotAllowed("GET, HEAD");
-      }
-      return new Response("hikebot is running\n", {
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
-      });
-    }
     if (pathname === "/interactions") {
       if (request.method !== "POST") return methodNotAllowed("POST");
       return handleInteractionRequest(request, env, ctx);
     }
-    return new Response("Not found\n", { status: 404 });
+    return webRouter.handle(request, env, ctx);
   },
 } satisfies ExportedHandler<Env>;
 

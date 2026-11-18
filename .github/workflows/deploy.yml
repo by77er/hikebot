@@ -28,7 +28,7 @@ jobs:
       contents: read
     env:
       DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-      HEALTH_URL: https://hiking.bitcru.sh/
+      HEALTH_URL: https://hiking.bitcru.sh/healthz
       HEALTH_LINE: hikebot is running
     steps:
       - name: Check the secrets are set
