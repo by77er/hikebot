@@ -221,6 +221,9 @@ To exercise interactions, write a test that sends a signed interaction, as
    gh pr create --base main --title "Revert \"<bad commit's title>\"" --body "Production was rolled back to <version-id>; this reverts <bad sha>."
    ```
 
+   It is opened ready for review, so its checks start at once: follow "Get a
+   pull request checked" from step 4 to merge it.
+
 5. Once the revert has merged and its `Undercurrent` run on `main` has
    passed, turn `Deploy` back on and deploy `main`:
 
@@ -291,6 +294,9 @@ shellcheck`):
 
 ## Check your change before opening a pull request
 
+The pull request's checks run only once it is ready for review, so run these
+on every change you push to a draft, and again before marking it ready.
+
 1. Format, then run Undercurrent against the base branch:
 
    ```sh
@@ -314,6 +320,76 @@ shellcheck`):
    ```
 
 4. Follow "Record what you learned" below.
+
+## Get a pull request checked
+
+The `Undercurrent` checks `commands`, `semantic` and `review` run only for a
+pull request that is ready for review. On a draft their jobs are skipped
+without starting a runner, and `gh pr checks` lists them under the text of
+their name expression, for example
+`github.event.pull_request.draft && 'commands (draft, not run)' || 'commands'`,
+never under `commands`, `semantic` or `review`.
+
+1. Open the pull request as a draft and push to it while you work. Nothing
+   runs; check each change as "Check your change before opening a pull
+   request" says:
+
+   ```sh
+   git push -u origin HEAD
+   gh pr create --draft --base main --title "<title>" --body "<description>"
+   ```
+
+2. Finish the description:
+
+   ```sh
+   gh pr edit <n> --body "<description>"
+   ```
+
+3. Mark the pull request ready. This starts a run of the three checks on its
+   head commit:
+
+   ```sh
+   gh pr ready <n>
+   ```
+
+4. Find the run that started after you marked it ready (the newest
+   `in_progress` one) and wait for it:
+
+   ```sh
+   gh run list --branch <branch> --event pull_request --limit 3
+   gh run watch <run-id> --exit-status
+   ```
+
+5. Read the checks of the head commit:
+
+   ```sh
+   gh pr checks <n>
+   ```
+
+   `commands`, `semantic`, `review` and `nest-projects/review` must each say
+   `pass`. `skipping` means the job did not run and is never a pass; `fail`
+   on a check whose run you cancelled with `gh pr ready <n> --undo` means the
+   same. If one of the four is missing, pending or not `pass`, do not merge:
+   read a failed run with `gh run view <run-id> --log-failed`.
+
+6. If more work is needed, turn the pull request back into a draft. This
+   cancels a run in progress; push your changes, then continue at step 2:
+
+   ```sh
+   gh pr ready <n> --undo
+   ```
+
+   A push to a pull request that is ready starts a new run and cancels the
+   one in progress; wait for the new one from step 4.
+
+7. Merge once the four checks of the run started after marking ready have
+   passed. Auto-merge waits for them; if GitHub refuses it, merge by hand
+   only after step 5 shows four `pass` lines:
+
+   ```sh
+   gh pr merge <n> --auto --squash
+   gh pr merge <n> --squash
+   ```
 
 ## Record what you learned
 
@@ -406,6 +482,9 @@ together with any other file, so rules go in a pull request of their own.
    gh pr create --base main --title "<rule title>" --body "Rules learned in #<first pull request>."
    gh pr edit <first pull request> --body "<its description, plus: Rules: #<rules pull request>>"
    ```
+
+   The rules pull request is opened ready for review, so its checks start at
+   once: follow "Get a pull request checked" from step 4 to merge it.
 
 ### A change to what the bot does: docs/design.md
 
