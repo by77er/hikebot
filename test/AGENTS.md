@@ -460,6 +460,17 @@ Run `npm test` for the whole suite before opening a pull request.
    await play.closeVote(g.owner, panel, "date vote");
    ```
 
+   When the scenario needs finished hikes rather than the votes themselves,
+   play each round in one call; the second location and date lose:
+
+   ```ts
+   await play.playHike(g, panel, {
+     location: "Ridge",
+     dates: ["2030-06-08", "2030-06-15"],
+     date: "Sat, 15 Jun 2030",
+   });
+   ```
+
    Write candidate dates years ahead of today. To test refused input, call
    `play.submitDates(g, panel, text)` and check the reply with
    `expectEphemeral(g.owner, "<text>")`.
