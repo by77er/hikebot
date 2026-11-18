@@ -16,16 +16,9 @@ declare module "vitest" {
 }
 
 /** maps/sample/sample.json: where the sample archive came from and covers. */
-export const SAMPLE = note as {
-  build: string;
-  basemapVersion: string;
-  schemaVersion: string;
-  license: string;
-  attribution: string;
-  bbox: BBox;
-  minzoom: number;
-  maxzoom: number;
-  point: { lon: number; lat: number };
+export const SAMPLE: Omit<typeof note, "bbox"> & { bbox: BBox } = {
+  ...note,
+  bbox: note.bbox as BBox,
 };
 
 export function sampleBytes(): Uint8Array {
