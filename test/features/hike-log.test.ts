@@ -36,7 +36,7 @@ afterEach(() => {
 });
 
 interface Node {
-  type: number;
+  type: ComponentType;
   content?: string;
   custom_id?: string;
   label?: string;
@@ -82,7 +82,7 @@ function messageOf(response: APIInteractionResponse) {
     type: response.type,
     flags: Number(data.flags),
     allowed_mentions: data.allowed_mentions,
-    components: (data.components ?? []) as APIMessageTopLevelComponent[],
+    components: data.components ?? [],
   };
 }
 
