@@ -88,4 +88,17 @@ describe("Router", () => {
       /hb:<feature>/,
     );
   });
+
+  it("finds jobs by name and refuses duplicate or badly formed job names", () => {
+    const refresh = () => Promise.resolve();
+    const router = new Router().job("poll:refresh", refresh);
+    expect(router.jobHandler("poll:refresh")).toBe(refresh);
+    expect(router.jobHandler("poll:other")).toBeUndefined();
+    expect(() => router.job("poll:refresh", refresh)).toThrow(
+      /already registered/,
+    );
+    for (const name of ["refresh", "hb:poll:refresh", "Poll:refresh"]) {
+      expect(() => router.job(name, refresh)).toThrow(/<feature>:<action>/);
+    }
+  });
 });
