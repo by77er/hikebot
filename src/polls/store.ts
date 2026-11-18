@@ -389,6 +389,18 @@ function refuseResting(
  * operation that writes more than one row runs in one `transactionSync`, so
  * a failure leaves nothing behind.
  */
+/**
+ * Which days a member may propose, from `first` to `last`, ending a
+ * refusal; with a `window`, those are the round's (`CADENCE_WINDOW_DAYS`
+ * after the date vote closes), and they may all have passed.
+ */
+function proposeDays(first: string, last: string, window: boolean): string {
+  if (!window) return `Propose a day from ${first} to ${last}.`;
+  return first <= last
+    ? `Propose a day from ${first} to ${last}: the ${String(CADENCE_WINDOW_DAYS)} days after the date vote closes.`
+    : `This round's dates, up to ${last}, have passed.`;
+}
+
 export class PollStore {
   private readonly sql: SqlStorage;
   /** The store's clock, for callers that schedule work relative to it. */
@@ -471,8 +483,9 @@ export class PollStore {
    * `line` is `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`; its day must lie between
    * today and `MAX_PROPOSAL_DAYS_AHEAD` days after today in `timeZone`,
    * both included, judged at `this.now()`; with a `window` (`YYYY-MM-DD`
-   * days, both included), inside it instead. Refuses a date and time
-   * already on the poll and a full poll; votes already cast are kept.
+   * days, both included), inside it instead, and never before today.
+   * Refuses a date and time already on the poll and a full poll; votes
+   * already cast are kept.
    */
   proposeDate(
     pollId: number,
@@ -489,19 +502,23 @@ export class PollStore {
       const valid = validateDate(line, userId);
       const day = (valid.dateValue ?? "").slice(0, 10);
       const today = todayIn(timeZone, this.now());
-      const last = addDays(today, MAX_PROPOSAL_DAYS_AHEAD);
-      if (window !== undefined) {
-        if (day < window.first || day > window.last) {
-          throw new PollError(
-            "date_outside_window",
-            `${valid.label} is outside this round's dates. Propose a day from ${window.first} to ${window.last}: the ${String(CADENCE_WINDOW_DAYS)} days after the date vote closes.`,
-          );
-        }
-      } else if (day < today) {
+      // A window that started before today takes days from today on.
+      const first =
+        window === undefined || window.first < today ? today : window.first;
+      const last = window?.last ?? addDays(today, MAX_PROPOSAL_DAYS_AHEAD);
+      if (day < today) {
         throw new PollError(
           "date_in_past",
-          `${valid.label} is in the past: today is ${today} in ${timeZone}. Propose a day from ${today} to ${last}.`,
+          `${valid.label} is in the past: today is ${today} in ${timeZone}. ${proposeDays(first, last, window !== undefined)}`,
         );
+      }
+      if (window !== undefined) {
+        if (day < first || day > last) {
+          throw new PollError(
+            "date_outside_window",
+            `${valid.label} is outside this round's dates. ${proposeDays(first, last, true)}`,
+          );
+        }
       } else if (day > last) {
         throw new PollError(
           "date_too_far",

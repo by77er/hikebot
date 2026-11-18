@@ -259,15 +259,18 @@ const FULL = `This vote already has ${String(MAX_OPTIONS)} dates, the most it ca
 
 /**
  * The Propose a date modal for the poll; its help text names the days a
- * member may propose: `window` when given (a cadence round's), otherwise
- * from `today` to `MAX_PROPOSAL_DAYS_AHEAD` days after it.
+ * member may propose: `window` when given (a cadence round's), from today
+ * at the earliest, otherwise from `today` to `MAX_PROPOSAL_DAYS_AHEAD` days
+ * after it.
  */
 export function proposeModal(
   pollId: number,
   today: string,
   window?: { first: string; last: string },
 ): APIInteractionResponse {
-  const first = window?.first ?? today;
+  // A window that started before today takes days from today on.
+  const first =
+    window === undefined || window.first < today ? today : window.first;
   const last = window?.last ?? addDays(today, MAX_PROPOSAL_DAYS_AHEAD);
   return modal(DATE_IDS.propose(pollId), "Propose a date", [
     label(

@@ -1257,6 +1257,33 @@ describe("proposing a date", () => {
     expect(await options(guild, pollId)).toHaveLength(5);
   });
 
+  it("names the window from today once a held vote's window has begun", async () => {
+    const guild = "date-propose-cadence-held";
+    const pollId = await openDatePoll(guild);
+    // Opened a week earlier, on Wednesday 11 November: it was to close on
+    // the 13th, so its window is 14 to 27 November, and today is the 18th.
+    await runInDurableObject(stub(guild), (_i, state) => {
+      new GuildConfig(state.storage).setCadence({ enabled: true });
+      state.storage.sql.exec(
+        "UPDATE polls SET opened_at = opened_at - ? WHERE id = ?",
+        7 * 86_400_000,
+        pollId,
+      );
+    });
+    const modal = await send(proposeClick(guild, pollId));
+    expect(modal.data.components).toMatchObject([
+      {
+        description:
+          "2026-11-18 to 2026-11-27, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time defaults to 11:00.",
+      },
+    ]);
+    const reply = await send(proposeSubmit(guild, pollId, "2026-11-16"));
+    expect(text(reply.data.components)).toBe(
+      "Mon, 16 Nov 2026 · 11:00 is in the past: today is 2026-11-18 in America/Los_Angeles. Propose a day from 2026-11-18 to 2026-11-27: the 14 days after the date vote closes.",
+    );
+    expect(await options(guild, pollId)).toHaveLength(2);
+  });
+
   it("judges today in the guild's zone", async () => {
     const guild = "date-propose-zone";
     const pollId = await openDatePoll(guild);

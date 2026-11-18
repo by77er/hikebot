@@ -1113,9 +1113,12 @@ days away. Propose a day from <today> to <last>, or ask an admin to plan
 further ahead.") are refused; today and the 31st day are accepted. While
 the weekly schedule is on, the window is the round's instead (see
 "Cadence"): the 14 days after the day the date vote is planned to close,
-both named in the help text, and a day outside it gets "…is outside this
-round's dates. Propose a day from <first> to <last>: the 14 days after the
-date vote closes." Text that
+from today at the latest (a vote held past its close keeps its window, whose
+first days pass), both named in the help text. A day before today is still
+"in the past", and a day outside the window gets "…is outside this round's
+dates. Propose a day from <first> to <last>: the 14 days after the date
+vote closes." (or, once the whole window has passed, "This round's dates,
+up to <last>, have passed."). Text that
 is not a date gets the accepted formats; the same date and time as an
 option gets "**X** is already on the vote. Vote for it instead, or propose
 another time that day." (the same day at another time is another option);

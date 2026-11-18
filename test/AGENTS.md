@@ -301,6 +301,40 @@ cadence instant to the next; use your job's name and times.
    npx vitest run test/features/cadence.test.ts
    ```
 
+## Test a scheduled job end to end
+
+The Worker's clock cannot be moved in an end-to-end scenario, so age the
+stored data instead and let the object's real alarm run the job a minute
+or two from now. The example is the weekly schedule's job in
+`test/e2e/cadence.test.ts`; use your job's state and settings.
+
+1. Set up the state through the panel as a member would, then move its
+   times back through the harness's access to the object's SQLite storage,
+   as `RoundPlayer.backdateVotes(g, days)` in `test/e2e/harness/rounds.ts`
+   does:
+
+   ```ts
+   await play.startLocationVote(g, panel, "Ridge Trail");
+   await play.backdateVotes(g, 7);
+   ```
+
+2. Set the job's time to a whole minute at least 75 seconds ahead, from
+   the panel, so it is due after the setting is saved:
+
+   ```ts
+   const at = Math.ceil((Date.now() + 75_000) / 60_000) * 60_000;
+   ```
+
+3. Wait for what the job posts with `waitForMessage` and a timeout that
+   covers the wait (`{ timeout: 200_000 }`), give the test a timeout of
+   its own (`it(name, run, 240_000)`), and put the guilds of one scenario on
+   the same minute so they share the wait.
+4. Run the file:
+
+   ```sh
+   npx vitest run --project e2e test/e2e/cadence.test.ts
+   ```
+
 ## Run the end-to-end suite
 
 1. Run the suite, with or without a `.dev.vars` in the checkout. It needs no

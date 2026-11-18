@@ -576,6 +576,42 @@ describe("proposeDate", () => {
     );
   });
 
+  it("refuses a day already past in a window that started before today", async () => {
+    await withStore(
+      (store) => {
+        const poll = openDatePoll(store);
+        const message = (
+          line: string,
+          window: { first: string; last: string },
+        ) => {
+          try {
+            store.proposeDate(poll.id, "u-member", line, LA, window);
+          } catch (error) {
+            return isPollError(error) ? `${error.code}: ${error.message}` : "";
+          }
+          return "accepted";
+        };
+        // Today is 2026-11-18 in Los Angeles; the window began on the 10th.
+        const started = { first: "2026-11-10", last: "2026-11-23" };
+        expect(message("2026-11-12", started)).toBe(
+          "date_in_past: Thu, 12 Nov 2026 · 11:00 is in the past: today is 2026-11-18 in America/Los_Angeles. Propose a day from 2026-11-18 to 2026-11-23: the 14 days after the date vote closes.",
+        );
+        expect(message("2026-11-24", started)).toBe(
+          "date_outside_window: Tue, 24 Nov 2026 · 11:00 is outside this round's dates. Propose a day from 2026-11-18 to 2026-11-23: the 14 days after the date vote closes.",
+        );
+        expect(message("2026-11-18 18:00", started)).toBe("accepted");
+        // A window that has passed entirely takes no day.
+        const passed = { first: "2026-11-01", last: "2026-11-14" };
+        expect(message("2026-11-19", passed)).toBe(
+          "date_outside_window: Thu, 19 Nov 2026 · 11:00 is outside this round's dates. This round's dates, up to 2026-11-14, have passed.",
+        );
+        expect(message("2026-11-13", passed)).toMatch(/^date_in_past: /);
+        expect(store.getPoll(poll.id)?.options.length).toBe(3);
+      },
+      { now: () => NOW },
+    );
+  });
+
   it("refuses a date that is not one, the same date and time, and a full poll, changing nothing", async () => {
     await withStore(
       (store) => {
