@@ -144,6 +144,20 @@ describe("DiscordApi routes", () => {
       auth: true,
     },
     {
+      name: "getGuildMember",
+      call: (api) => api.getGuildMember("40", "60"),
+      method: "GET",
+      url: `${base}/guilds/40/members/60`,
+      auth: true,
+    },
+    {
+      name: "getGuildChannels",
+      call: (api) => api.getGuildChannels("40"),
+      method: "GET",
+      url: `${base}/guilds/40/channels`,
+      auth: true,
+    },
+    {
       name: "editOriginalInteractionResponse",
       call: (api) => api.editOriginalInteractionResponse("50", "tok", message),
       method: "PATCH",
@@ -192,6 +206,16 @@ describe("DiscordApi routes", () => {
     expect((await api.getGuild("40")).owner_id).toBe("7");
     expect(sent[0]?.body).toBeUndefined();
     expect(sent[0]?.headers.get("Content-Type")).toBeNull();
+  });
+
+  it("getGuildMember surfaces Unknown Member as a 404 DiscordApiError", async () => {
+    const { api } = client([
+      Response.json({ message: "Unknown Member", code: 10007 }, { status: 404 }),
+    ]);
+    const error = await failure(api.getGuildMember("40", "60"));
+    expect(error.status).toBe(404);
+    expect(error.code).toBe(10007);
+    expect(error.route).toBe("/guilds/40/members/60");
   });
 
   it("sends JSON bodies", async () => {

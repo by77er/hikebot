@@ -1,6 +1,8 @@
 import type {
   APIAllowedMentions,
   RESTError,
+  RESTGetAPIGuildChannelsResult,
+  RESTGetAPIGuildMemberResult,
   RESTGetAPIGuildResult,
   RESTPatchAPIChannelMessageJSONBody,
   RESTPatchAPIChannelMessageResult,
@@ -169,6 +171,30 @@ export class DiscordApi {
     return this.call({
       method: "GET",
       path: `/guilds/${guildId}`,
+      auth: true,
+    });
+  }
+
+  /**
+   * The guild's member `userId`, with their role ids. Discord answers 404
+   * (code 10007, Unknown Member) when the user is not a member.
+   */
+  getGuildMember(
+    guildId: string,
+    userId: string,
+  ): Promise<RESTGetAPIGuildMemberResult> {
+    return this.call({
+      method: "GET",
+      path: `/guilds/${guildId}/members/${userId}`,
+      auth: true,
+    });
+  }
+
+  /** The guild's channels, without threads. */
+  getGuildChannels(guildId: string): Promise<RESTGetAPIGuildChannelsResult> {
+    return this.call({
+      method: "GET",
+      path: `/guilds/${guildId}/channels`,
       auth: true,
     });
   }
