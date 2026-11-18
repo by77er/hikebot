@@ -375,7 +375,9 @@ ones are appended. `0001_polls` creates the poll tables described under
 "Polls". `0002_guild_settings` creates `guild_settings`, described under
 "Guild settings", and `0003_guild_timezone` adds its time zone.
 `0004_round_event` adds `rounds.event_id`, the hike's Discord scheduled
-event (see "Hike event").
+event (see "Hike event"). `0005_round_day_of` adds
+`rounds.day_of_channel_id` and `rounds.day_of_message_id`, where the
+hike-day announcement was posted (see "Day of the hike").
 
 ## Signing
 
@@ -637,8 +639,15 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   "The hike's start time has passed, so no event was created."; while the
   round has no event, none is being created and its start is ahead, the
   panel offers **Create hike event** (`hb:event:create:<round id>`) after
-  Create hike thread; see "Hike event". The thread and the event can also
-  be "not confirmed" when their creation was cut off. Under the round (the
+  Create hike thread; see "Hike event". Then, while its hike is not over,
+  where its hike-day announcement stands (`hikeDay`): when and where it
+  will be posted (or that it will not, while no announcements channel is
+  set), "posted in <#channel>", "being posted", or "not posted" with the
+  reason; one that failed or is not confirmed gets **Post hike-day
+  announcement** (`hb:hike-day:post:<round id>`) after Create hike event;
+  see "Day of the hike". The thread, the event and the hike-day
+  announcement can also be "not confirmed" when their creation was cut
+  off. Under the round (the
   active one or the last completed one), each announcement of its votes
   that is being posted, failed or is not confirmed has a line, and one that
   failed or is not confirmed gets **Announce location vote** or **Announce
@@ -694,7 +703,8 @@ All tables live in the guild's `GuildHike` SQLite database.
   `complete` / `cancelled`), enforced by the code and by a partial unique
   index. Also `location_option_id` and `date_option_id` (the winners),
   `thread_id` (the hike's forum thread), `event_id` (the hike's Discord
-  scheduled event), `started_by` / `started_at`, and
+  scheduled event), `day_of_channel_id` / `day_of_message_id` (the
+  hike-day announcement, once posted), `started_by` / `started_at`, and
   `ended_by` / `ended_at` (set on complete or cancel).
 - `polls`: belongs to a round; `kind` is `location` or `date` (one of each per
   round at most); `status` is `open` or `closed`. `channel_id` /
@@ -1083,7 +1093,7 @@ flow (`runCloseFlow(pollId, context, wordings)` in
    panel. The date vote's steps create the hike's forum thread (see "Hike
    thread"), then its scheduled event (see "Hike event"), which links the
    thread, both before the announcement so that the announcement can link
-   them. A step that throws is named in the panel ("Could not <name>:
+   them, then plan the hike-day announcement (see "Day of the hike"). A step that throws is named in the panel ("Could not <name>:
    <error>") and the flow goes on.
 3. Post the announcement: the kind's heading and opening lines, the winner
    and its votes, its details, the tie note, the link to the poll message,
@@ -1118,7 +1128,7 @@ panel. No announcement is posted.
 
 Every admin control (the start buttons and modals of both votes, close,
 cancel and their confirmations, Create hike thread, Create hike event,
-Announce, Post vote message, Set time zone and its modal) is registered through
+Post hike-day announcement, Announce, Post vote message, Set time zone and its modal) is registered through
 `adminOnly`, so a member who replays its `custom_id` is refused.
 
 ### Durable close
@@ -1373,6 +1383,83 @@ confirmed (see "Durable close"), and the button comes back.
 
 The bot needs the Create Events permission in the server; `README.md` lists
 it among the invite's permissions.
+
+## Day of the hike
+
+On the morning of a planned hike, the bot posts one announcement in the
+announcements channel that points to everything about it
+(`src/features/hike-day.ts`).
+
+**When.** At 07:00 in the server's time zone on the hike's day
+(`HIKE_DAY_TIME`), or two hours before the start (`HIKE_DAY_LEAD_HOURS`) if
+that is earlier: 07:00 for an 11:00 hike, 06:00 for an 08:00 one
+(`hikeDayTime`, through `hikeStart`, so it follows the zone's daylight
+saving changes). The date vote's last close step, "plan the hike-day
+announcement", records the plan and schedules the `hike:day-of` job for that
+time. A hike decided on its own day after that time is announced right
+away, five seconds after the close (`HIKE_DAY_AFTER_CLOSE_MS`) so that the
+"Hike planned" announcement goes first, as long as the hike has not started;
+a hike decided after its start gets no hike-day announcement.
+
+**The job.** `hike:day-of` goes through every planned announcement, by the
+server's time zone when it runs. It forgets one whose round is not a
+completed hike (it was cancelled), was already announced, or whose hike's
+end (`HIKE_DURATION_HOURS` after the start) has passed. It posts each one
+whose time has come, and leaves one that was tried before (being posted,
+cut off or failed) to the panel. It then schedules itself for the earliest
+announcement still ahead, so after it posts one hike's announcement it waits
+for the next planned hike. Scheduling keeps the earlier time, so a second
+hike decided before the first takes place does not delay the first's.
+
+**What it says.** Components V2, one container with one text display,
+pinging no one (`allowed_mentions` with an empty `parse`, as every
+message):
+
+```text
+## Hike today: Lake Loop
+**Starts:** 11:00 (America/Los_Angeles), <t:1812823200:t> in your time zone, <t:1812823200:R>
+Meet at the north trailhead.
+**Hike thread:** <#thread>
+**Discord event:** https://discord.com/events/<guild>/<event>
+**Calendar:** https://hiking.bitcru.sh/calendar/<guild>/<signature>.ics
+Coming? Say so in <#thread>, so the group knows who to expect.
+```
+
+The start is written in the server's time zone and as Discord timestamps,
+which each member sees in their own zone. The details, the thread, the
+event and the invitation (which needs the thread) are left out when the
+hike has none. The body is the list `HIKE_DAY_SECTIONS`: each section is a
+function from the hike (`HikeDay`: location, date, start, thread, event,
+calendar address, guild and time zone) to its lines, none to leave it out,
+so a new part such as map links or the forecast for the hike's hours is one
+more entry in that list.
+
+**At most once.** Where the announcement stands is kept in `storage.kv`
+under `hike-day:<round id>` (`src/features/hike-day-state.ts`): planned,
+with the guild id it is for; being posted, since when; or the reason the
+last attempt failed. The job and the panel's retry both claim the post
+there before calling Discord, synchronously. Once it is posted the channel
+and message ids are stored on the round (`setRoundDayOf`) and the key is
+removed. A claim older than a minute (`HIKE_DAY_CLAIM_MS`) is unconfirmed:
+the post may or may not have reached Discord (the object restarted between
+the claim and Discord's answer), so the job never posts it again, and the
+panel shows it as not confirmed with **Post hike-day announcement**.
+
+**No announcements channel.** Nothing is posted. Before the announcement's
+time the panel says it is due but will not be posted until a channel is
+picked under Settings; when its time came without one, the panel shows
+"not posted" with that reason and **Post hike-day announcement**.
+
+**Post hike-day announcement** (`hb:hike-day:post:<round id>`) retries for
+the round in its `custom_id`, only while that round is the last one,
+`complete`, its announcement failed or is not confirmed, and its hike is
+not over; otherwise it redraws the panel saying why it did nothing (already
+posted, being posted, not due, the hike is over, or that hike is no longer
+the last one). It claims the post before answering with a deferred update,
+so a second click while the first is running is told "The hike-day
+announcement is being posted." and posts nothing; the follow-up posts it
+and redraws the panel. The panel shows the hike-day announcement of the
+last round only while no round is active, like the thread and the event.
 
 ## Map data
 
