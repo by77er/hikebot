@@ -122,4 +122,3 @@ function byPrefix<H>(
   }
   return best?.handler;
 }
-// ci probe: temporary, reverted before merge

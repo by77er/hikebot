@@ -138,4 +138,3 @@ export function modalInteraction(
     data: { custom_id: customId, components: [] },
   } as unknown as APIModalSubmitInteraction;
 }
-// ci probe: temporary, reverted before merge
