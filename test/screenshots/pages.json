@@ -23,6 +23,10 @@
     {
       "route": "/healthz",
       "reason": "The plain-text health line for deploy checks and monitoring, not a page."
+    },
+    {
+      "route": "/calendar/*",
+      "reason": "The iCal feed of a server's hikes (text/calendar) for calendar apps, not a page a browser shows."
     }
   ]
 }
