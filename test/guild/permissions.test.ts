@@ -14,6 +14,7 @@ import {
   ADMIN_ONLY_NO_ROLE_MESSAGE,
   adminOnly,
   checkAdmin,
+  decideAdmin,
   OWNER_CACHE_MS,
 } from "../../src/guild/permissions";
 import type { HandlerContext } from "../../src/guild/router";
@@ -289,6 +290,128 @@ describe("adminOnly", () => {
       );
       expect(result).toEqual({ response: ephemeralNotice(ADMIN_ONLY_MESSAGE) });
       expect(handler).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("decideAdmin, as the web read calls it", () => {
+  const member = (guildId: string, userId: string, roleIds: string[] = []) => ({
+    guildId,
+    userId,
+    roleIds,
+  });
+
+  it("decides the owner is an admin, fetching and caching the owner", async () => {
+    await inGuild("perm-web-owner", async (context, config) => {
+      const { api, fetch } = guildApi(OWNER);
+      const decision = await decideAdmin(
+        context.storage,
+        api,
+        member("perm-web-owner", OWNER),
+        T0,
+      );
+      expect(decision).toMatchObject({ ok: true, isAdmin: true });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(config.get()).toMatchObject({
+        ownerId: OWNER,
+        ownerFetchedAt: T0,
+      });
+    });
+  });
+
+  it("decides a holder of the admin role is an admin without asking Discord", async () => {
+    await inGuild("perm-web-role", async (context, config) => {
+      config.set("adminRoleId", ADMIN_ROLE);
+      const { api, fetch } = guildApi();
+      const decision = await decideAdmin(
+        context.storage,
+        api,
+        member("perm-web-role", ROLE_MEMBER, [OTHER_ROLE, ADMIN_ROLE]),
+        T0,
+      );
+      expect(decision).toMatchObject({ ok: true, isAdmin: true });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+  });
+
+  it("decides a member who is neither is not an admin", async () => {
+    await inGuild("perm-web-neither", async (context, config) => {
+      config.set("adminRoleId", ADMIN_ROLE);
+      config.setOwner(OWNER, T0);
+      const { api, fetch } = guildApi();
+      const decision = await decideAdmin(
+        context.storage,
+        api,
+        member("perm-web-neither", STRANGER, [OTHER_ROLE]),
+        T0 + 1,
+      );
+      expect(decision).toMatchObject({ ok: true, isAdmin: false });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+  });
+
+  it("decides only the owner is an admin while no admin role is set", async () => {
+    await inGuild("perm-web-no-role", async (context, config) => {
+      config.setOwner(OWNER, T0);
+      const { api } = guildApi();
+      const stranger = await decideAdmin(
+        context.storage,
+        api,
+        member("perm-web-no-role", STRANGER, [ADMIN_ROLE]),
+        T0 + 1,
+      );
+      const owner = await decideAdmin(
+        context.storage,
+        api,
+        member("perm-web-no-role", OWNER),
+        T0 + 1,
+      );
+      expect(stranger).toMatchObject({ ok: true, isAdmin: false });
+      expect(owner).toMatchObject({ ok: true, isAdmin: true });
+    });
+  });
+
+  it("fetches a stale owner again before deciding", async () => {
+    await inGuild("perm-web-stale", async (context, config) => {
+      config.setOwner(OWNER, T0);
+      const { api, fetch } = guildApi(NEW_OWNER);
+      const time = T0 + OWNER_CACHE_MS;
+      const former = await decideAdmin(
+        context.storage,
+        api,
+        member("perm-web-stale", OWNER),
+        time,
+      );
+      const current = await decideAdmin(
+        context.storage,
+        api,
+        member("perm-web-stale", NEW_OWNER),
+        time,
+      );
+      expect(former).toMatchObject({ ok: true, isAdmin: false });
+      expect(current).toMatchObject({ ok: true, isAdmin: true });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(config.get()).toMatchObject({
+        ownerId: NEW_OWNER,
+        ownerFetchedAt: time,
+      });
+    });
+  });
+
+  it("decides nothing when the owner lookup fails", async () => {
+    await inGuild("perm-web-fails", async (context) => {
+      const failure = Response.json(
+        { message: "Missing Access", code: 50001 },
+        { status: 403 },
+      );
+      const { api } = guildApi(failure);
+      const decision = await decideAdmin(
+        context.storage,
+        api,
+        member("perm-web-fails", OWNER),
+        T0,
+      );
+      expect(decision.ok).toBe(false);
     });
   });
 });
