@@ -1,12 +1,17 @@
 import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { sessionCookie } from "../../src/web/auth/session";
 import { webRouter } from "../../src/web/routes";
 import { EXPECTED_PAGE_HEADERS, outline, pageHeaders } from "./helpers";
 
-function get(path: string, method = "GET"): Promise<Response> {
+function get(
+  path: string,
+  method = "GET",
+  headers: Record<string, string> = {},
+): Promise<Response> {
   return webRouter.handle(
-    new Request(`https://hikebot.example${path}`, { method }),
+    new Request(`https://hikebot.example${path}`, { method, headers }),
     env,
     createExecutionContext(),
   );
@@ -38,6 +43,29 @@ describe("GET /", () => {
     expect(page.text).toContain("Skip to main content");
     expect(page.text).toContain("Discord bot");
     expect(page.elements).toContain("h1");
+  });
+
+  it("offers sign-in with Discord and says what hikebot learns", async () => {
+    const html = await (await get("/")).text();
+    expect(html).toContain('<a href="/login">Sign in with Discord</a>');
+    expect((await outline(html)).text.replace(/\s+/g, " ")).toContain(
+      "Signing in tells hikebot your Discord name and avatar, and which of your servers hikebot is in.",
+    );
+  });
+
+  it("sends someone signed in to /servers", async () => {
+    const cookie = await sessionCookie(env, {
+      userId: "400000000000000001",
+      name: "Ana",
+      avatar: null,
+      guilds: [],
+      issuedAt: Date.now(),
+    });
+    const response = await get("/", "GET", {
+      Cookie: cookie.split(";")[0] ?? "",
+    });
+    expect(response.status).toBe(303);
+    expect(response.headers.get("Location")).toBe("/servers");
   });
 
   it("links the project", async () => {
