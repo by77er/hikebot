@@ -7,6 +7,8 @@ import { ephemeralNotice, GUILD_ONLY_MESSAGE } from "./discord/responses";
 import { verifyDiscordSignature } from "./discord/verify";
 import { webRouter } from "./web/routes";
 
+import type { GuildHike } from "./guild/guild-hike";
+
 export { GuildHike } from "./guild/guild-hike";
 
 export default {
@@ -60,9 +62,45 @@ async function handleInteractionRequest(
   );
   const outcome = await stub.handleInteraction(interaction);
   if (outcome.followUp) {
-    ctx.waitUntil(stub.runFollowUp(interaction.id));
+    ctx.waitUntil(runFollowUp(stub, interaction));
   }
   return Response.json(outcome.response);
+}
+
+/**
+ * Runs the interaction's follow-up job in its guild's object, and logs it
+ * once when the job was lost (the object restarted since it answered) or
+ * failed, with the interaction's id and what it was, never its token.
+ */
+async function runFollowUp(
+  stub: DurableObjectStub<GuildHike>,
+  interaction: APIInteraction,
+): Promise<void> {
+  const what = interactionName(interaction);
+  try {
+    if (!(await stub.runFollowUp(interaction.id))) {
+      console.error(
+        `follow-up for interaction ${interaction.id} (${what}) was lost: the guild object restarted before it ran`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      `follow-up for interaction ${interaction.id} (${what}) failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+/** The command's name or the component's or modal's `custom_id`. */
+function interactionName(interaction: APIInteraction): string {
+  switch (interaction.type) {
+    case InteractionType.ApplicationCommand:
+      return `/${interaction.data.name}`;
+    case InteractionType.MessageComponent:
+    case InteractionType.ModalSubmit:
+      return interaction.data.custom_id;
+    default:
+      return `type ${String(interaction.type)}`;
+  }
 }
 
 function methodNotAllowed(allow: string): Response {

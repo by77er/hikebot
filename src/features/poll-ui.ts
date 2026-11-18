@@ -3,7 +3,9 @@
  * button and its ephemeral multi-select, the debounced refresh of the poll
  * message as a scheduled job (`src/guild/schedule.ts`), and the admin's close and
  * cancel flows. A poll kind (`location-vote.ts`, `date-vote.ts`) supplies
- * its wording, extra buttons and close steps as a `PollWording`.
+ * its wording, extra buttons and close steps as a `PollWording`. The close
+ * flow's remaining work is kept in storage (`close-flow-state.ts`), so the
+ * `poll:close-flow` job finishes it when the follow-up was lost.
  */
 import {
   ButtonStyle,
@@ -57,6 +59,25 @@ import {
   adminPanelBody,
   adminPanelUpdate,
 } from "./admin-panel";
+import {
+  announcementContent,
+  announcementStatus,
+  claimAnnouncement,
+  recordAnnouncementFailure,
+  recordAnnouncementPosted,
+  type AnnouncementContent,
+} from "./announcement-state";
+import {
+  ANNOUNCE_PART,
+  FINALIZE_PART,
+  dropPendingClose,
+  finishPart,
+  partState,
+  pendingClose,
+  pendingCloses,
+  recordPendingClose,
+  startPart,
+} from "./close-flow-state";
 
 /** What a poll kind says and adds; the shared code does the rest. */
 export interface PollWording {
@@ -115,10 +136,17 @@ export interface ClosedPoll {
 /**
  * One step of the close flow that runs before the announcement, such as
  * creating the hike's forum thread. A step that throws is named in the
- * panel with the error; the announcement is still posted.
+ * panel with the error; the announcement is still posted. A step runs at
+ * most once per close: one cut off half-way is not run again, so a step
+ * that creates something on Discord claims it in storage and lets the
+ * admin retry it from the panel.
  */
 export interface CloseStep {
-  /** What the step does, for the panel when it fails: "create the hike thread". */
+  /**
+   * What the step does, for the panel when it fails: "create the hike
+   * thread". It names the step in the stored close work, so it is unique
+   * among the kind's steps.
+   */
   name: string;
   run: (
     closed: ClosedPoll,
@@ -149,6 +177,12 @@ const REFRESH_KEY_PREFIX = "poll-refresh:";
 
 /** The scheduled job that refreshes the marked poll messages. */
 export const REFRESH_JOB = "poll:refresh";
+
+/** The scheduled job that finishes close flows their follow-up did not. */
+export const CLOSE_FLOW_JOB = "poll:close-flow";
+
+/** How long after a close the job looks for close work left undone. */
+export const CLOSE_FLOW_DELAY_MS = 30_000;
 
 export const POLL_IDS = {
   vote: (pollId: number) => customId("poll", "vote", String(pollId)),
@@ -604,26 +638,36 @@ function noOptionsToClose(wording: PollWording): string {
 }
 
 /**
- * Closes the poll through the poll core (the result is stored before the
- * response), then in the follow-up runs the close flow: the final edit of
- * the poll message, the kind's close steps, the announcement and the panel
- * redraw, naming any step that failed and why.
+ * Closes the poll through the poll core and records its close work in the
+ * same transaction (the result and what is left to do are stored before
+ * the response), schedules the close-flow job as a backstop, then in the
+ * follow-up runs the close flow and redraws the panel with the result and
+ * a line per step that failed or had something to say.
  */
-export function closePoll(
+export async function closePoll(
   interaction: APIMessageComponentInteraction,
   context: HandlerContext,
   wordings: PollWordings,
   store: PollStore = new PollStore(context.storage),
-): HandlerResult {
+): Promise<HandlerResult> {
+  const { storage } = context;
   const pollId = numericArg(interaction);
   const before = pollId === null ? null : store.getPoll(pollId);
   const wording = before && wordings[before.kind];
   if (pollId === null || !before || !wording) {
     return adminPanelUpdate(context, "That vote is no longer open.");
   }
-  let poll: PollView;
   try {
-    poll = store.closePoll(pollId, userIdOf(interaction));
+    storage.transactionSync(() => {
+      store.closePoll(pollId, userIdOf(interaction));
+      recordPendingClose(
+        storage,
+        pollId,
+        interaction.guild_id ?? "",
+        new GuildConfig(storage).get().timezone,
+        wording.closeSteps.map((step) => step.name),
+      );
+    });
   } catch (error) {
     if (isPollError(error, "no_options")) {
       return adminPanelUpdate(context, noOptionsToClose(wording));
@@ -633,70 +677,252 @@ export function closePoll(
     }
     throw error;
   }
-  const closed: ClosedPoll = {
-    poll,
-    round: store.getRound(poll.roundId),
-    guildId: interaction.guild_id ?? "",
-    timeZone: new GuildConfig(context.storage).get().timezone,
-  };
+  await schedule(storage, CLOSE_FLOW_JOB, store.now() + CLOSE_FLOW_DELAY_MS);
   return {
     response: deferPanel(interaction),
     followUp: async () => {
-      const notes = await runCloseFlow(closed, wording, context);
-      await finishPanel(context, interaction, notes.join("\n"));
+      const run = await runCloseFlow(pollId, context, wordings);
+      await finishPanel(context, interaction, run.notes.join("\n"));
     },
   };
 }
 
+/** What one run of a poll's close flow came to. */
+export interface CloseFlowRun {
+  /**
+   * The panel's notes: the result, then one line per part of this run that
+   * failed or had something to say.
+   */
+  notes: string[];
+  /** True if it stopped at a part another run of this object is doing. */
+  waiting: boolean;
+}
+
 /**
- * The close flow after the result is stored, in order: the final edit of
- * the poll message, the kind's `closeSteps` (each may add lines to the
- * announcement), then the announcement. Returns the panel's notes: the
- * result, then one line per step that failed or had something to say.
+ * Runs what is left of the closed poll's close flow, as stored when it
+ * closed, in order: the final edit of the poll message, the kind's
+ * `closeSteps` (each may add lines to the announcement), then the
+ * announcement. Each part is started in storage before it runs and removed
+ * when it finished. It stops at a part another run is doing. A part cut
+ * off half-way (by a restart of the object, or older than its claim) is
+ * not run again, so nothing is created on Discord twice, except the final
+ * edit, which is safe to repeat; a cut-off step or announcement shows on
+ * the admin panel as not confirmed. Needs no interaction, so the follow-up
+ * and the close-flow job both run it.
  */
 export async function runCloseFlow(
-  closed: ClosedPoll,
-  wording: PollWording,
+  pollId: number,
   context: HandlerContext,
-): Promise<string[]> {
-  const { poll } = closed;
-  const winner = poll.options.find((o) => o.id === poll.winnerOptionId);
-  const notes = [
-    `The ${wording.name} is closed: **${winner?.label ?? "?"}** won with ${votes(winner?.votes ?? 0)}${poll.tieBroken ? ", drawn at random from a tie" : ""}.`,
-  ];
-  const note = await finalizePollMessage(closed, wording, context);
-  if (note !== null) notes.push(note);
-
-  const extra: string[] = [];
-  for (const step of wording.closeSteps) {
+  wordings: PollWordings,
+): Promise<CloseFlowRun> {
+  const { storage } = context;
+  const store = new PollStore(storage);
+  const first = store.getPoll(pollId);
+  const wording = first && wordings[first.kind];
+  if (!first || !wording || first.status !== "closed") {
+    dropPendingClose(storage, pollId);
+    return { notes: [], waiting: false };
+  }
+  const notes = [resultNote(first, wording)];
+  for (;;) {
+    const record = pendingClose(storage, pollId);
+    const part = record?.parts[0];
+    if (record === null || part === undefined) {
+      return { notes, waiting: false };
+    }
+    const now = store.now();
+    const state = partState(storage, pollId, part, now).state;
+    if (state === "running") return { notes, waiting: true };
+    if (state === "cut-off" && part.name !== FINALIZE_PART) {
+      console.error(
+        `the close flow of poll ${String(pollId)} was cut off while it would ${part.name}; not doing it again`,
+      );
+      finishPart(storage, pollId, part.name);
+      continue;
+    }
+    const poll = store.getPoll(pollId) ?? first;
+    const closed: ClosedPoll = {
+      poll,
+      round: store.getRound(poll.roundId),
+      guildId: record.guildId,
+      timeZone: record.timeZone,
+    };
+    if (part.name === ANNOUNCE_PART) {
+      const content = {
+        guildId: record.guildId,
+        timeZone: record.timeZone,
+        extra: record.announce,
+      };
+      // Both claims in one synchronous step.
+      const claimed =
+        startPart(storage, pollId, part.name, now) &&
+        claimAnnouncement(storage, pollId, content, now);
+      if (claimed) await postAnnouncement(closed, wording, content, context);
+      finishPart(storage, pollId, part.name);
+      continue;
+    }
+    if (!startPart(storage, pollId, part.name, now)) {
+      return { notes, waiting: true };
+    }
+    if (part.name === FINALIZE_PART) {
+      const note = await finalizePollMessage(closed, wording, context);
+      if (note !== null) notes.push(note);
+      finishPart(storage, pollId, part.name);
+      continue;
+    }
+    const step = wording.closeSteps.find((s) => s.name === part.name);
     try {
-      const result = await step.run(closed, context);
-      extra.push(...(result.announce ?? []));
+      const result: CloseStepResult = step
+        ? await step.run(closed, context)
+        : {};
       if (result.note !== undefined) notes.push(result.note);
+      finishPart(storage, pollId, part.name, result.announce);
     } catch (error) {
-      notes.push(`Could not ${step.name}: ${errorText(error)}.`);
+      notes.push(`Could not ${part.name}: ${errorText(error)}.`);
+      finishPart(storage, pollId, part.name);
     }
   }
+}
 
-  const announceChannelId = new GuildConfig(context.storage).get()
-    .announceChannelId;
-  if (announceChannelId === null) {
-    notes.push(
-      "No announcements channel is set, so the result was not announced.",
+/** The panel's first line after a close: the winner and its votes. */
+function resultNote(poll: PollView, wording: PollWording): string {
+  const winner = poll.options.find((o) => o.id === poll.winnerOptionId);
+  return `The ${wording.name} is closed: **${winner?.label ?? "?"}** won with ${votes(winner?.votes ?? 0)}${poll.tieBroken ? ", drawn at random from a tie" : ""}.`;
+}
+
+/**
+ * The close-flow job: runs what is left of every closed poll's close flow,
+ * for a follow-up that was lost or cut off by a restart of the object.
+ * While a part is still being done by a live run, it schedules itself
+ * again; once every flow is done it schedules nothing.
+ */
+async function finishCloseFlows(
+  context: HandlerContext,
+  wordings: PollWordings,
+): Promise<void> {
+  const store = new PollStore(context.storage);
+  let waiting = false;
+  for (const record of pendingCloses(context.storage)) {
+    const run = await runCloseFlow(record.pollId, context, wordings);
+    waiting ||= run.waiting;
+  }
+  if (waiting) {
+    await schedule(
+      context.storage,
+      CLOSE_FLOW_JOB,
+      store.now() + CLOSE_FLOW_DELAY_MS,
     );
-  } else {
-    try {
-      await discordApi(context.env).createMessage(
-        announceChannelId,
-        messageBody(renderAnnouncement(closed, wording, extra)),
-      );
-    } catch (error) {
-      notes.push(
-        `Could not post the announcement in <#${announceChannelId}>: ${errorText(error)}.`,
+  }
+}
+
+/** What posting the announcement came to. */
+type Posted = { ok: true; channelId: string } | { ok: false; reason: string };
+
+/**
+ * Posts the closed poll's announcement, made from `content`, in the
+ * announcements channel and records its message id; on failure records
+ * why, for the panel. The caller has claimed it with `claimAnnouncement`.
+ */
+async function postAnnouncement(
+  { poll, round }: Pick<ClosedPoll, "poll" | "round">,
+  wording: PollWording,
+  content: AnnouncementContent,
+  context: HandlerContext,
+): Promise<Posted> {
+  const retry = `click ${announceLabel(wording)}`;
+  const channelId = new GuildConfig(context.storage).get().announceChannelId;
+  if (channelId === null) {
+    const reason = `No announcements channel is set, so the result was not announced. Pick one under Settings, then ${retry}.`;
+    recordAnnouncementFailure(context.storage, poll.id, reason);
+    return { ok: false, reason };
+  }
+  try {
+    const message = await discordApi(context.env).createMessage(
+      channelId,
+      messageBody(
+        renderAnnouncement(
+          {
+            poll,
+            round,
+            guildId: content.guildId,
+            timeZone: content.timeZone,
+          },
+          wording,
+          content.extra,
+        ),
+      ),
+    );
+    recordAnnouncementPosted(context.storage, poll.id, message.id);
+    return { ok: true, channelId };
+  } catch (error) {
+    const reason = `Could not post the announcement in <#${channelId}>: ${errorText(error)}. Check that the bot can post there, then ${retry}.`;
+    recordAnnouncementFailure(context.storage, poll.id, reason);
+    return { ok: false, reason };
+  }
+}
+
+/** The panel's button that posts a poll's announcement again. */
+function announceLabel(wording: Pick<PollWording, "name">): string {
+  return `Announce ${wording.name}`;
+}
+
+/**
+ * Announce <vote>: posts the announcement of a poll of the last round again
+ * after it failed or was cut off, made as the close flow made it. The claim
+ * is taken before the answer, so a second click while the first is running
+ * is told so, and a click after it was posted posts nothing.
+ */
+function retryAnnouncement(wordings: PollWordings): ComponentHandler {
+  return adminOnly((interaction, context) => {
+    const { storage } = context;
+    const pollId = numericArg(interaction);
+    const store = new PollStore(storage);
+    const poll = pollId === null ? null : store.getPoll(pollId);
+    const wording = poll && wordings[poll.kind];
+    const content = poll && announcementContent(storage, poll.id);
+    if (
+      !poll ||
+      !wording ||
+      !content ||
+      poll.roundId !== store.getLastRound()?.id
+    ) {
+      return adminPanelUpdate(
+        context,
+        "That vote is no longer in the last round, so its announcement is not posted from here.",
       );
     }
-  }
-  return notes;
+    const now = store.now();
+    if (announcementStatus(storage, poll.id, now).state === "posted") {
+      return adminPanelUpdate(
+        context,
+        `The ${wording.name}'s announcement is already posted.`,
+      );
+    }
+    if (!claimAnnouncement(storage, poll.id, content, now)) {
+      return adminPanelUpdate(
+        context,
+        `The ${wording.name}'s announcement is being posted.`,
+      );
+    }
+    return {
+      response: deferPanel(interaction),
+      followUp: async () => {
+        const posted = await postAnnouncement(
+          { poll, round: store.getRound(poll.roundId) },
+          wording,
+          content,
+          context,
+        );
+        await finishPanel(
+          context,
+          interaction,
+          posted.ok
+            ? `The ${wording.name}'s result is announced in <#${posted.channelId}>.`
+            : posted.reason,
+        );
+      },
+    };
+  });
 }
 
 /** Edits the poll message to its final state; a note if that failed. */
@@ -882,6 +1108,8 @@ export function registerPollUi(router: Router, wordings: PollWordings): Router {
   );
   router.component("hb:round:cancel", askCancel);
   router.component("hb:round:cancel-confirm", cancelRound(wordings));
+  router.component("hb:poll:announce", retryAnnouncement(wordings));
   router.job(REFRESH_JOB, (context) => refreshPollMessages(context, wordings));
+  router.job(CLOSE_FLOW_JOB, (context) => finishCloseFlows(context, wordings));
   return router;
 }

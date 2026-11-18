@@ -288,7 +288,7 @@ describe("hikeThreadStatus and claimHikeThread", () => {
     threadId,
   });
 
-  it("lets one claim through, refuses a second while it is fresh, and takes a lost one back", async () => {
+  it("lets one claim through, refuses a second while it is fresh, and takes back a lost one as unconfirmed", async () => {
     await runInDurableObject(stub("hike-thread-claim"), (_i, state) => {
       const { storage } = state;
       expect(hikeThreadStatus(storage, complete(), 1000).state).toBe("missing");
@@ -302,7 +302,7 @@ describe("hikeThreadStatus and claimHikeThread", () => {
       ).toBe(false);
       expect(
         hikeThreadStatus(storage, complete(), 1000 + THREAD_CLAIM_MS).state,
-      ).toBe("missing");
+      ).toBe("unconfirmed");
       expect(claimHikeThread(storage, complete(), 1000 + THREAD_CLAIM_MS)).toBe(
         true,
       );
@@ -432,11 +432,13 @@ const forbidden = () =>
 
 async function closeDateVote(guildId: string, view: PollView) {
   await runInDurableObject(stub(guildId), async (_i, state) => {
-    await closePoll(
-      click(POLL_IDS.closeConfirm(view.id)),
-      { env, storage: state.storage },
-      { date: DATE_POLL },
-      new PollStore(state.storage, { random: sequence(0) }),
+    await (
+      await closePoll(
+        click(POLL_IDS.closeConfirm(view.id)),
+        { env, storage: state.storage },
+        { date: DATE_POLL },
+        new PollStore(state.storage, { random: sequence(0) }),
+      )
     ).followUp?.();
   });
 }

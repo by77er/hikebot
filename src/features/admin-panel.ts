@@ -51,6 +51,10 @@ import type {
   Router,
 } from "../guild/router";
 import { UNAVAILABLE_MESSAGE } from "../guild/router";
+import {
+  announcementStatus,
+  type AnnouncementStatus,
+} from "./announcement-state";
 import { hikeEventStatus, type HikeEventStatus } from "./hike-event-state";
 import { hikeThreadStatus, type HikeThreadStatus } from "./hike-thread-state";
 
@@ -65,8 +69,20 @@ export interface AdminPanelState {
   thread?: HikeThreadStatus | null;
   /** Where the finished round's scheduled event stands. */
   event?: HikeEventStatus | null;
+  /**
+   * The announcements of the shown round's closed polls (the active
+   * round's, or the finished one's) that are not known to be posted.
+   */
+  announcements?: PollAnnouncement[];
   /** The time the panel is drawn at, for the clock in the guild's zone. */
   now?: number;
+}
+
+/** Where a closed poll's announcement stands, for the panel. */
+export interface PollAnnouncement {
+  pollId: number;
+  kind: PollKind;
+  status: Exclude<AnnouncementStatus, { state: "none" | "posted" }>;
 }
 
 export const ADMIN_PANEL_IDS = {
@@ -96,6 +112,7 @@ export const POLL_CONTROL_IDS = {
     customId("thread", "create", String(roundId)),
   createHikeEvent: (roundId: number) =>
     customId("event", "create", String(roundId)),
+  announce: (pollId: number) => customId("poll", "announce", String(pollId)),
 } as const;
 
 /** How the panel names each kind of poll. */
@@ -155,8 +172,42 @@ export function loadAdminPanelState(
       finished === null
         ? null
         : hikeEventStatus(storage, finished, now, settings.timezone),
+    announcements: pollAnnouncements(storage, round ?? finished, now),
     now,
   };
+}
+
+/** The announcements of the round's closed polls not known to be posted. */
+function pollAnnouncements(
+  storage: DurableObjectStorage,
+  round: RoundView | null,
+  now: number,
+): PollAnnouncement[] {
+  const polls = [round?.locationPoll, round?.datePoll].filter(
+    (poll): poll is PollView =>
+      poll !== null && poll !== undefined && poll.winnerOptionId !== null,
+  );
+  return polls.flatMap((poll) => {
+    const status = announcementStatus(storage, poll.id, now);
+    return status.state === "none" || status.state === "posted"
+      ? []
+      : [{ pollId: poll.id, kind: poll.kind, status }];
+  });
+}
+
+/** Announce <vote> for each announcement that failed or was cut off. */
+function announceButtons(
+  state: AdminPanelState,
+): APIButtonComponentWithCustomId[] {
+  return (state.announcements ?? [])
+    .filter(({ status }) => status.state !== "posting")
+    .map(({ pollId, kind }) =>
+      button({
+        custom_id: POLL_CONTROL_IDS.announce(pollId),
+        label: `Announce ${POLL_NAMES[kind]}`,
+        style: ButtonStyle.Secondary,
+      }),
+    );
 }
 
 /**
@@ -185,7 +236,9 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
         : []),
       // Only while the last round is complete without a thread.
       ...(finished &&
-      (thread?.state === "missing" || thread?.state === "failed")
+      (thread?.state === "missing" ||
+        thread?.state === "failed" ||
+        thread?.state === "unconfirmed")
         ? [
             button({
               custom_id: POLL_CONTROL_IDS.createHikeThread(finished.id),
@@ -196,7 +249,10 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
         : []),
       // Only while the last round is complete without an event, and its
       // start is ahead.
-      ...(finished && (event?.state === "missing" || event?.state === "failed")
+      ...(finished &&
+      (event?.state === "missing" ||
+        event?.state === "failed" ||
+        event?.state === "unconfirmed")
         ? [
             button({
               custom_id: POLL_CONTROL_IDS.createHikeEvent(finished.id),
@@ -205,6 +261,7 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
             }),
           ]
         : []),
+      ...announceButtons(state),
     ];
   }
   const open = openPoll(round);
@@ -225,6 +282,7 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
             label: `Close ${POLL_NAMES[open.kind]}`,
           }),
         ]),
+    ...announceButtons(state),
     button({
       custom_id: POLL_CONTROL_IDS.cancelRound(round.id),
       label: "Cancel round",
@@ -307,6 +365,7 @@ function roundSection(state: AdminPanelState) {
           `**Last hike:** ${hikeSummary(finished)}`,
           ...threadLines(state.thread),
           ...eventLines(state.event),
+          ...announcementLines(state.announcements),
         ]
       : [];
     if (setupComplete(state.settings)) {
@@ -348,7 +407,26 @@ function roundSection(state: AdminPanelState) {
       );
     }
   }
+  lines.push(...announcementLines(state.announcements));
   return [separator(), textDisplay(lines.join("\n"))];
+}
+
+/** Where each announcement not known to be posted stands. */
+function announcementLines(
+  announcements: readonly PollAnnouncement[] | undefined,
+): string[] {
+  return (announcements ?? []).map(({ kind, status }) => {
+    const name = POLL_NAMES[kind];
+    const head = `**${name.charAt(0).toUpperCase()}${name.slice(1)} announcement:**`;
+    switch (status.state) {
+      case "posting":
+        return `${head} being posted.`;
+      case "failed":
+        return `${head} not posted. ${status.reason}`;
+      case "unconfirmed":
+        return `${head} not confirmed: posting it was cut off, so it may or may not have been posted. Check the announcements channel, and click Announce ${name} only if it is missing.`;
+    }
+  });
 }
 
 /** Where the last hike's forum thread stands, for its summary. */
@@ -360,6 +438,10 @@ function threadLines(thread: HikeThreadStatus | null | undefined): string[] {
       return ["**Hike thread:** being created."];
     case "failed":
       return [`**Hike thread:** not created. ${thread.reason}`];
+    case "unconfirmed":
+      return [
+        "**Hike thread:** not confirmed: creating it was cut off, so it may or may not exist. Check the hike threads channel, and click Create hike thread only if it is missing.",
+      ];
     case "missing":
       return [
         "**Hike thread:** not created. Click Create hike thread to create it.",
@@ -382,6 +464,10 @@ function eventLines(event: HikeEventStatus | null | undefined): string[] {
       ];
     case "failed":
       return [`**Hike event:** not created. ${event.reason}`];
+    case "unconfirmed":
+      return [
+        "**Hike event:** not confirmed: creating it was cut off, so it may or may not exist. Check the server's events, and click Create hike event only if it is missing.",
+      ];
     case "missing":
       return [
         "**Hike event:** not created. Click Create hike event to create it.",

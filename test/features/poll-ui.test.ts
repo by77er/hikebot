@@ -605,7 +605,7 @@ describe("closePoll", () => {
       .mockImplementation(() => Promise.resolve(Response.json({ id: "1" })));
     await runInDurableObject(stub(guild), async (_i, state) => {
       const store = new PollStore(state.storage, { random: sequence(1) });
-      const result = closePoll(
+      const result = await closePoll(
         closeClick(view),
         { env, storage: state.storage },
         { location: LOCATION_POLL },
@@ -657,7 +657,7 @@ describe("closePoll", () => {
         );
       });
     await runInDurableObject(stub(guild), async (_i, state) => {
-      const result = closePoll(
+      const result = await closePoll(
         closeClick(view),
         { env, storage: state.storage },
         { location: LOCATION_POLL },
@@ -682,8 +682,8 @@ describe("closePoll", () => {
   it("refuses to close a poll without options", async () => {
     const guild = "poll-ui-close-empty";
     const view = await openPoll(guild, []);
-    await runInDurableObject(stub(guild), (_i, state) => {
-      const result = closePoll(
+    await runInDurableObject(stub(guild), async (_i, state) => {
+      const result = await closePoll(
         closeClick(view),
         { env, storage: state.storage },
         { location: LOCATION_POLL },
