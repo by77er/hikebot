@@ -439,7 +439,9 @@ Run `npm test` for the whole suite before opening a pull request.
    ```
 
 2. Set up the panel, then take the round's steps with `startLocationVote`,
-   `startDateVote`, `vote`, `closeVote` and `cancelRound`. Put one location
+   `startDateVote`, `vote`, `closeVote` and `cancelRound`, or finish an open
+   location vote's round in one step with
+   `finishRound(g, panel, poll, location, dates, date)`. Put one location
    or date per line, joined with `\n`:
 
    ```ts

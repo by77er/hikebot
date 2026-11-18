@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 interface Node {
-  type: number;
+  type: ComponentType;
   content?: string;
   custom_id?: string;
   label?: string;
