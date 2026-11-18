@@ -1,0 +1,599 @@
+import { describe, expect, it } from "vitest";
+import { MAX_OPTIONS, type PollStore } from "../../src/polls/store";
+import { count, expectCode, locations, sequence, withStore } from "./helpers";
+
+/** A round whose location poll is closed with `Ridge` as the winner. */
+function decidedRound(store: PollStore) {
+  const round = store.startRound("u-admin", locations("Ridge", "Lake"));
+  const poll = round.locationPoll;
+  if (!poll) throw new Error("no location poll");
+  store.setVotes(poll.id, "u1", [poll.options[0]?.id ?? 0]);
+  store.closePoll(poll.id, "u-admin");
+  return round;
+}
+
+function dates(n: number): string[] {
+  return Array.from(
+    { length: n },
+    (_, i) => `2027-01-${String(i + 1).padStart(2, "0")}`,
+  );
+}
+
+describe("startRound", () => {
+  it("creates a round with an open location poll and its options", async () => {
+    const round = await withStore((store) =>
+      store.startRound("u-admin", [
+        { label: "  Ridge  trail ", details: " Steep ", proposedBy: "u1" },
+        { label: "Lake loop", proposedBy: "u2" },
+      ]),
+    );
+    expect(round).toMatchObject({
+      status: "location_voting",
+      startedBy: "u-admin",
+      startedAt: 1_800_000_000_000,
+      threadId: null,
+      locationOptionId: null,
+      dateOptionId: null,
+      datePoll: null,
+    });
+    expect(round.locationPoll).toMatchObject({
+      roundId: round.id,
+      kind: "location",
+      status: "open",
+      openedBy: "u-admin",
+      channelId: null,
+      messageId: null,
+      winnerOptionId: null,
+      voterCount: 0,
+      viewerVotes: [],
+    });
+    expect(
+      round.locationPoll?.options.map((o) => [
+        o.label,
+        o.details,
+        o.proposedBy,
+        o.votes,
+        o.dateValue,
+      ]),
+    ).toEqual([
+      ["Ridge  trail", "Steep", "u1", 0, null],
+      ["Lake loop", null, "u2", 0, null],
+    ]);
+  });
+
+  it("accepts no initial options", async () => {
+    const round = await withStore((store) => store.startRound("u-admin"));
+    expect(round.locationPoll?.options).toEqual([]);
+  });
+
+  it("fails with round_active while a round is active", async () => {
+    await withStore((store, storage) => {
+      store.startRound("u-admin");
+      expectCode(() => store.startRound("u-admin"), "round_active");
+      expect(count(storage, "rounds")).toBe(1);
+    });
+  });
+
+  it("rejects duplicate or invalid initial options and writes nothing", async () => {
+    await withStore((store, storage) => {
+      expectCode(
+        () => store.startRound("u-admin", locations("Ridge", "ridge")),
+        "duplicate_option",
+      );
+      expectCode(
+        () => store.startRound("u-admin", locations("Ridge", " ")),
+        "invalid_label",
+      );
+      expectCode(
+        () =>
+          store.startRound(
+            "u-admin",
+            locations(...Array.from({ length: 26 }, (_, i) => `L${String(i)}`)),
+          ),
+        "too_many_options",
+      );
+      expect(count(storage, "rounds")).toBe(0);
+      expect(count(storage, "polls")).toBe(0);
+      expect(count(storage, "poll_options")).toBe(0);
+    });
+  });
+});
+
+describe("addOption", () => {
+  it("adds a trimmed option with details", async () => {
+    await withStore((store) => {
+      const poll = store.startRound("u-admin").locationPoll;
+      const option = store.addOption(poll?.id ?? 0, {
+        label: "  Summit ",
+        details: "Bring water",
+        proposedBy: "u3",
+      });
+      expect(option).toMatchObject({
+        label: "Summit",
+        details: "Bring water",
+        proposedBy: "u3",
+        votes: 0,
+        createdAt: 1_800_000_001_000,
+      });
+      expect(store.getPoll(poll?.id ?? 0)?.options).toEqual([option]);
+    });
+  });
+
+  it("enforces label and details lengths", async () => {
+    await withStore((store) => {
+      const pollId = store.startRound("u-admin").locationPoll?.id ?? 0;
+      const add = (label: string, details?: string) =>
+        store.addOption(pollId, { label, details, proposedBy: "u1" });
+      expectCode(() => add(""), "invalid_label");
+      expectCode(() => add("   "), "invalid_label");
+      expectCode(() => add("x".repeat(81)), "invalid_label");
+      expectCode(() => add("ok", "d".repeat(301)), "invalid_details");
+      expect(add(` ${"x".repeat(80)} `).label).toHaveLength(80);
+      expect(add("ok", "d".repeat(300)).details).toHaveLength(300);
+      expect(add("blank details", "   ").details).toBeNull();
+    });
+  });
+
+  it("treats labels differing only in case and whitespace as duplicates", async () => {
+    await withStore((store) => {
+      const pollId =
+        store.startRound("u-admin", locations("Ridge Trail")).locationPoll
+          ?.id ?? 0;
+      for (const label of ["ridge trail", "  RIDGE   TRAIL ", "Ridge\tTrail"]) {
+        expectCode(
+          () => store.addOption(pollId, { label, proposedBy: "u1" }),
+          "duplicate_option",
+        );
+      }
+      store.addOption(pollId, { label: "Ridge Trails", proposedBy: "u1" });
+      expect(store.getPoll(pollId)?.options).toHaveLength(2);
+    });
+  });
+
+  it(`caps a poll at ${String(MAX_OPTIONS)} options`, async () => {
+    await withStore((store) => {
+      const pollId = store.startRound("u-admin").locationPoll?.id ?? 0;
+      for (let i = 0; i < MAX_OPTIONS; i++) {
+        store.addOption(pollId, { label: `L${String(i)}`, proposedBy: "u1" });
+      }
+      expectCode(
+        () => store.addOption(pollId, { label: "one more", proposedBy: "u1" }),
+        "too_many_options",
+      );
+      expect(store.getPoll(pollId)?.options).toHaveLength(MAX_OPTIONS);
+    });
+  });
+
+  it("fails on a closed poll and an unknown poll", async () => {
+    await withStore((store) => {
+      const round = decidedRound(store);
+      expectCode(
+        () =>
+          store.addOption(round.locationPoll?.id ?? 0, {
+            label: "Late",
+            proposedBy: "u1",
+          }),
+        "poll_closed",
+      );
+      expectCode(
+        () => store.addOption(999, { label: "x", proposedBy: "u1" }),
+        "poll_not_found",
+      );
+    });
+  });
+
+  it("parses the label on a date poll", async () => {
+    await withStore((store) => {
+      const round = decidedRound(store);
+      const poll = store.startDatePoll(round.id, "u-admin", dates(2));
+      const option = store.addOption(poll.id, {
+        label: "2026-12-05 09:00",
+        proposedBy: "u-admin",
+      });
+      expect(option).toMatchObject({
+        label: "Sat, 5 Dec 2026 · 09:00",
+        dateValue: "2026-12-05 09:00",
+      });
+      expectCode(
+        () =>
+          store.addOption(poll.id, {
+            label: "2026-12-05 09:00",
+            proposedBy: "u-admin",
+          }),
+        "duplicate_option",
+      );
+      expectCode(
+        () => store.addOption(poll.id, { label: "soon", proposedBy: "u1" }),
+        "invalid_date",
+      );
+    });
+  });
+});
+
+describe("setVotes and read models", () => {
+  it("replaces, counts and clears a user's votes", async () => {
+    await withStore((store) => {
+      const poll = store.startRound(
+        "u-admin",
+        locations("A", "B", "C"),
+      ).locationPoll;
+      const [a, b, c] = (poll?.options ?? []).map((o) => o.id) as [
+        number,
+        number,
+        number,
+      ];
+      const pollId = poll?.id ?? 0;
+
+      store.setVotes(pollId, "u1", [a, b]);
+      store.setVotes(pollId, "u2", [b, b]);
+      let view = store.getPoll(pollId, "u1");
+      expect(view?.options.map((o) => o.votes)).toEqual([1, 2, 0]);
+      expect(view?.voterCount).toBe(2);
+      expect(view?.viewerVotes).toEqual([a, b]);
+
+      view = store.setVotes(pollId, "u1", [c]);
+      expect(view.options.map((o) => o.votes)).toEqual([0, 1, 1]);
+      expect(view.viewerVotes).toEqual([c]);
+      expect(store.getPoll(pollId, "u2")?.viewerVotes).toEqual([b]);
+
+      view = store.setVotes(pollId, "u1", []);
+      expect(view.options.map((o) => o.votes)).toEqual([0, 1, 0]);
+      expect(view.voterCount).toBe(1);
+      expect(view.viewerVotes).toEqual([]);
+      expect(store.getPoll(pollId)?.viewerVotes).toEqual([]);
+    });
+  });
+
+  it("rejects options from another poll and leaves votes unchanged", async () => {
+    await withStore((store) => {
+      const round = decidedRound(store);
+      const datePoll = store.startDatePoll(round.id, "u-admin", dates(2));
+      const [first] = datePoll.options;
+      store.setVotes(datePoll.id, "u1", [first?.id ?? 0]);
+      const locationOption = round.locationPoll?.options[1]?.id ?? 0;
+      expectCode(
+        () => store.setVotes(datePoll.id, "u1", [locationOption]),
+        "unknown_option",
+      );
+      expectCode(
+        () => store.setVotes(datePoll.id, "u1", [first?.id ?? 0, 999]),
+        "unknown_option",
+      );
+      expect(store.getPoll(datePoll.id, "u1")?.viewerVotes).toEqual([
+        first?.id,
+      ]);
+    });
+  });
+
+  it("fails on a closed poll and an unknown poll", async () => {
+    await withStore((store) => {
+      const round = decidedRound(store);
+      expectCode(
+        () => store.setVotes(round.locationPoll?.id ?? 0, "u1", []),
+        "poll_closed",
+      );
+      expectCode(() => store.setVotes(999, "u1", []), "poll_not_found");
+    });
+  });
+
+  it("reads the active and last rounds", async () => {
+    await withStore((store) => {
+      expect(store.getActiveRound()).toBeNull();
+      expect(store.getLastRound()).toBeNull();
+      expect(store.getPoll(1)).toBeNull();
+      expect(store.getRound(1)).toBeNull();
+
+      const first = store.startRound("u-admin", locations("A"));
+      const pollId = first.locationPoll?.id ?? 0;
+      const optionId = first.locationPoll?.options[0]?.id ?? 0;
+      store.setVotes(pollId, "u1", [optionId]);
+      const active = store.getActiveRound("u1");
+      expect(active?.id).toBe(first.id);
+      expect(active?.locationPoll?.viewerVotes).toEqual([optionId]);
+      expect(active?.locationPoll?.voterCount).toBe(1);
+
+      store.cancelRound(first.id, "u-admin");
+      expect(store.getActiveRound()).toBeNull();
+      expect(store.getLastRound()?.status).toBe("cancelled");
+
+      const second = store.startRound("u-admin");
+      expect(store.getLastRound()?.id).toBe(second.id);
+      expect(store.getRound(first.id)?.status).toBe("cancelled");
+    });
+  });
+});
+
+describe("closePoll", () => {
+  it("picks the top option and moves the round to location_decided", async () => {
+    await withStore((store) => {
+      const poll = store.startRound(
+        "u-admin",
+        locations("A", "B", "C"),
+      ).locationPoll;
+      const [a, b] = (poll?.options ?? []).map((o) => o.id);
+      const pollId = poll?.id ?? 0;
+      store.setVotes(pollId, "u1", [a ?? 0, b ?? 0]);
+      store.setVotes(pollId, "u2", [b ?? 0]);
+      const closed = store.closePoll(pollId, "u-admin");
+      expect(closed).toMatchObject({
+        status: "closed",
+        winnerOptionId: b,
+        tieBroken: false,
+        tiedOptionIds: [],
+        closedBy: "u-admin",
+      });
+      expect(closed.closedAt).toBeGreaterThan(closed.openedAt);
+      expect(store.getActiveRound()).toMatchObject({
+        status: "location_decided",
+        locationOptionId: b,
+      });
+    });
+  });
+
+  it("breaks a tie with the injected random source", async () => {
+    for (const [value, index] of [
+      [0, 0],
+      [1, 2],
+      [2, 3],
+      [3, 0],
+    ] as const) {
+      await withStore(
+        (store) => {
+          const poll = store.startRound(
+            "u-admin",
+            locations("A", "B", "C", "D"),
+          ).locationPoll;
+          const ids = (poll?.options ?? []).map((o) => o.id);
+          const pollId = poll?.id ?? 0;
+          const at = (i: number) => ids[i] ?? 0;
+          store.setVotes(pollId, "u1", [at(0), at(2), at(3)]);
+          store.setVotes(pollId, "u2", [at(0), at(1), at(2), at(3)]);
+          store.setVotes(pollId, "u3", [at(1)]);
+          store.setVotes(pollId, "u4", [at(0), at(2), at(3)]);
+          const closed = store.closePoll(pollId, "u-admin");
+          expect(closed.winnerOptionId).toBe(at(index));
+          expect(closed.tieBroken).toBe(true);
+          expect(closed.tiedOptionIds).toEqual([at(0), at(2), at(3)]);
+          expect(store.getPoll(pollId)?.tiedOptionIds).toEqual([
+            at(0),
+            at(2),
+            at(3),
+          ]);
+        },
+        { random: sequence(value) },
+      );
+    }
+  });
+
+  it("draws among all options when nobody voted", async () => {
+    await withStore(
+      (store) => {
+        const poll = store.startRound(
+          "u-admin",
+          locations("A", "B", "C"),
+        ).locationPoll;
+        const ids = (poll?.options ?? []).map((o) => o.id);
+        const closed = store.closePoll(poll?.id ?? 0, "u-admin");
+        expect(closed.winnerOptionId).toBe(ids[1]);
+        expect(closed.tieBroken).toBe(true);
+        expect(closed.tiedOptionIds).toEqual(ids);
+      },
+      { random: sequence(1) },
+    );
+  });
+
+  it("fails on a poll without options, a closed poll and an unknown poll", async () => {
+    await withStore((store, storage) => {
+      const round = store.startRound("u-admin");
+      const pollId = round.locationPoll?.id ?? 0;
+      expectCode(() => store.closePoll(pollId, "u-admin"), "no_options");
+      expect(store.getPoll(pollId)?.status).toBe("open");
+      store.addOption(pollId, { label: "A", proposedBy: "u1" });
+      store.closePoll(pollId, "u-admin");
+      expectCode(() => store.closePoll(pollId, "u-admin"), "poll_closed");
+      expectCode(() => store.closePoll(999, "u-admin"), "poll_not_found");
+      expect(count(storage, "rounds")).toBe(1);
+    });
+  });
+});
+
+describe("startDatePoll", () => {
+  it("opens a date poll in date order and moves the round to date_voting", async () => {
+    await withStore((store) => {
+      const round = decidedRound(store);
+      const poll = store.startDatePoll(round.id, "u-admin", [
+        "2026-12-12",
+        "2026-12-05 09:00",
+        "2026-12-05",
+      ]);
+      expect(poll).toMatchObject({
+        roundId: round.id,
+        kind: "date",
+        status: "open",
+        openedBy: "u-admin",
+      });
+      expect(poll.options.map((o) => [o.dateValue, o.label])).toEqual([
+        ["2026-12-05", "Sat, 5 Dec 2026"],
+        ["2026-12-05 09:00", "Sat, 5 Dec 2026 · 09:00"],
+        ["2026-12-12", "Sat, 12 Dec 2026"],
+      ]);
+      expect(store.getActiveRound()).toMatchObject({
+        status: "date_voting",
+        datePoll: { id: poll.id },
+      });
+    });
+  });
+
+  it("requires 2 to 25 distinct valid dates", async () => {
+    await withStore((store, storage) => {
+      const round = decidedRound(store);
+      const start = (lines: string[]) =>
+        store.startDatePoll(round.id, "u-admin", lines);
+      expectCode(() => start(dates(1)), "too_few_options");
+      expectCode(() => start([]), "too_few_options");
+      expectCode(() => start([...dates(25), "2027-02-01"]), "too_many_options");
+      expectCode(
+        () => start(["2027-01-01", " 2027-01-01 "]),
+        "duplicate_option",
+      );
+      expectCode(() => start(["2027-01-01", "2027-02-30"]), "invalid_date");
+      expect(count(storage, "polls")).toBe(1);
+      expect(start(dates(25)).options).toHaveLength(25);
+    });
+  });
+
+  it("works only from location_decided", async () => {
+    await withStore((store) => {
+      const round = store.startRound("u-admin", locations("A"));
+      expectCode(
+        () => store.startDatePoll(round.id, "u-admin", dates(2)),
+        "invalid_state",
+      );
+      store.closePoll(round.locationPoll?.id ?? 0, "u-admin");
+      store.startDatePoll(round.id, "u-admin", dates(2));
+      expectCode(
+        () => store.startDatePoll(round.id, "u-admin", dates(2)),
+        "invalid_state",
+      );
+      expectCode(
+        () => store.startDatePoll(999, "u-admin", dates(2)),
+        "round_not_found",
+      );
+    });
+  });
+});
+
+describe("round lifecycle", () => {
+  it("runs from location vote to complete", async () => {
+    await withStore((store) => {
+      const round = decidedRound(store);
+      const datePoll = store.startDatePoll(round.id, "u-admin", dates(3));
+      const winner = datePoll.options[2]?.id ?? 0;
+      store.setVotes(datePoll.id, "u1", [winner]);
+      store.closePoll(datePoll.id, "u-admin");
+      expect(store.getActiveRound()).toBeNull();
+      expect(store.getLastRound()).toMatchObject({
+        status: "complete",
+        locationOptionId: round.locationPoll?.options[0]?.id,
+        dateOptionId: winner,
+        endedBy: "u-admin",
+      });
+      expectCode(() => store.cancelRound(round.id, "u-admin"), "invalid_state");
+      expect(store.startRound("u-admin").status).toBe("location_voting");
+    });
+  });
+
+  it.each(["location_voting", "location_decided", "date_voting"] as const)(
+    "can be cancelled during %s, after which a new round starts",
+    async (stage) => {
+      await withStore((store) => {
+        const round = store.startRound("u-admin", locations("A", "B"));
+        if (stage !== "location_voting") {
+          store.closePoll(round.locationPoll?.id ?? 0, "u-admin");
+        }
+        if (stage === "date_voting") {
+          store.startDatePoll(round.id, "u-admin", dates(2));
+        }
+        expect(store.getActiveRound()?.status).toBe(stage);
+
+        const cancelled = store.cancelRound(round.id, "u-admin");
+        expect(cancelled).toMatchObject({
+          status: "cancelled",
+          endedBy: "u-admin",
+        });
+        const polls = [cancelled.locationPoll, cancelled.datePoll].filter(
+          (poll) => poll !== null,
+        );
+        expect(polls.every((poll) => poll.status === "closed")).toBe(true);
+        const openPoll =
+          stage === "location_voting"
+            ? cancelled.locationPoll
+            : stage === "date_voting"
+              ? cancelled.datePoll
+              : null;
+        if (openPoll) {
+          expect(openPoll.winnerOptionId).toBeNull();
+          expect(openPoll.closedBy).toBe("u-admin");
+        }
+        expect(cancelled.dateOptionId).toBeNull();
+        expectCode(
+          () => store.cancelRound(round.id, "u-admin"),
+          "invalid_state",
+        );
+        expect(store.getActiveRound()).toBeNull();
+        expect(store.startRound("u-admin").status).toBe("location_voting");
+      });
+    },
+  );
+
+  it("fails to cancel an unknown round", async () => {
+    await withStore((store) => {
+      expectCode(() => store.cancelRound(1, "u-admin"), "round_not_found");
+    });
+  });
+});
+
+describe("message and thread ids", () => {
+  it("records the poll message and the round thread", async () => {
+    await withStore((store) => {
+      const round = store.startRound("u-admin");
+      const pollId = round.locationPoll?.id ?? 0;
+      store.setPollMessage(pollId, "c1", "m1");
+      store.setRoundThread(round.id, "t1");
+      expect(store.getPoll(pollId)).toMatchObject({
+        channelId: "c1",
+        messageId: "m1",
+      });
+      expect(store.getActiveRound()?.threadId).toBe("t1");
+      expectCode(() => {
+        store.setPollMessage(999, "c", "m");
+      }, "poll_not_found");
+      expectCode(() => {
+        store.setRoundThread(999, "t");
+      }, "round_not_found");
+    });
+  });
+});
+
+describe("transactions", () => {
+  it("leaves no partial rows when a write fails part-way", async () => {
+    await withStore((store, storage) => {
+      storage.sql.exec("ALTER TABLE poll_options RENAME TO poll_options_off");
+      expect(() => store.startRound("u-admin", locations("A"))).toThrow();
+      storage.sql.exec("ALTER TABLE poll_options_off RENAME TO poll_options");
+      expect(count(storage, "rounds")).toBe(0);
+      expect(count(storage, "polls")).toBe(0);
+
+      const round = decidedRound(store);
+      storage.sql.exec("ALTER TABLE poll_options RENAME TO poll_options_off");
+      expect(() =>
+        store.startDatePoll(round.id, "u-admin", dates(2)),
+      ).toThrow();
+      storage.sql.exec("ALTER TABLE poll_options_off RENAME TO poll_options");
+      expect(count(storage, "polls")).toBe(1);
+      expect(store.getActiveRound()?.status).toBe("location_decided");
+    });
+  });
+
+  it("rolls back a vote replacement that fails part-way", async () => {
+    await withStore((store, storage) => {
+      const poll = store.startRound(
+        "u-admin",
+        locations("A", "B"),
+      ).locationPoll;
+      const [a, b] = (poll?.options ?? []).map((o) => o.id);
+      const pollId = poll?.id ?? 0;
+      store.setVotes(pollId, "u1", [a ?? 0]);
+      storage.sql.exec(
+        `CREATE TRIGGER fail_vote BEFORE INSERT ON poll_votes
+         WHEN NEW.option_id = ${String(b)}
+         BEGIN SELECT RAISE(ABORT, 'forced'); END`,
+      );
+      expect(() => store.setVotes(pollId, "u1", [a ?? 0, b ?? 0])).toThrow(
+        /forced/,
+      );
+      storage.sql.exec("DROP TRIGGER fail_vote");
+      expect(store.getPoll(pollId, "u1")?.viewerVotes).toEqual([a]);
+    });
+  });
+});

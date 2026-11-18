@@ -126,7 +126,8 @@ inside Label or action row wrappers.
 constructor applies, in list order, every migration whose name is not yet in
 the `_migrations` table, each in its own transaction together with its
 record. Migrations are never renamed, reordered or edited once shipped; new
-ones are appended. The list ships empty; features add their tables.
+ones are appended. `0001_polls` creates the poll tables described under
+"Polls".
 
 ## Source layout
 
@@ -143,7 +144,10 @@ src/guild/schema.ts           SQLite migrations
 src/guild/config.ts           guild settings store (later task)
 src/guild/permissions.ts      admin check (later task)
 src/features/index.ts         registerFeatures: one registration line per handler
-src/polls/                    rounds, polls, options, votes, tally (later task)
+src/polls/store.ts            PollStore: rounds, polls, options, votes (SQLite)
+src/polls/tally.ts            winner pick with uniform random tie-break
+src/polls/dates.ts            date option parsing and labels
+src/polls/errors.ts           PollError and its codes
 src/features/admin-panel.ts   /hike admin panel (later task)
 src/features/location-vote.ts (later task)
 src/features/date-vote.ts     (later task)
@@ -175,7 +179,88 @@ One slash command, `/hike admin`, guild-only. It is visible to everyone;
 permission is enforced by the bot: the guild owner or members with the
 configured admin role.
 
-## Round lifecycle _(later task)_
+## Polls
+
+`src/polls/` holds the rules and storage for hike rounds and their votes. It
+has no Discord code (nothing there imports `src/discord/` or
+`src/features/`); features call it and turn its results into messages.
+
+### Data model
+
+All tables live in the guild's `GuildHike` SQLite database.
+
+- `rounds`: one hike being planned. `status` is `location_voting` ->
+  `location_decided` -> `date_voting` -> `complete`, or `cancelled` from any
+  of the first three. A guild has at most one active round (status other than
+  `complete` / `cancelled`), enforced by the code and by a partial unique
+  index. Also `location_option_id` and `date_option_id` (the winners),
+  `thread_id` (the hike's forum thread), `started_by` / `started_at`, and
+  `ended_by` / `ended_at` (set on complete or cancel).
+- `polls`: belongs to a round; `kind` is `location` or `date` (one of each per
+  round at most); `status` is `open` or `closed`. `channel_id` /
+  `message_id` locate its Discord message. On close: `winner_option_id`,
+  `tie_broken` (0/1) and `tied_option_ids` (JSON array of the options that
+  shared the top count; empty when there was no tie). `opened_by` /
+  `opened_at` and `closed_by` / `closed_at`.
+- `poll_options`: belongs to a poll. `label` (trimmed, 1-80 characters),
+  `details` (trimmed, at most 300 characters, null when blank),
+  `proposed_by`, `created_at`, and for date options `date_value`
+  (`YYYY-MM-DD` or `YYYY-MM-DD HH:MM`). `label_key` (trimmed, whitespace
+  collapsed, lower-cased) is unique per poll, so `Ridge  Trail` and
+  `ridge trail` are the same option. At most 25 options per poll, Discord's
+  select limit.
+- `poll_votes`: `(poll_id, option_id, user_id)` is unique, with `voted_at`. A
+  member may vote for any number of options in a poll.
+
+User ids, channel ids and the like are Discord snowflakes stored as text;
+times are milliseconds since the epoch.
+
+### Operations
+
+`new PollStore(storage, { now, random })` gives these operations. `now`
+defaults to `Date.now` and `random` to `crypto.getRandomValues`; tests inject
+both. Every operation that writes more than one row runs in one
+`transactionSync`, so a failure leaves no partial rows. A refusal throws
+`PollError` with a `code` and a message a member can read.
+
+| Operation                                           | Does                                                                                                                           | Refuses with                                                                                                                |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `startRound(userId, initialLocations)`              | creates a `location_voting` round and its open location poll with the given options (may be none)                              | `round_active`, plus the option codes below                                                                                 |
+| `addOption(pollId, { label, details, proposedBy })` | adds an option; on a date poll the label is parsed as a date and stored as its display label                                   | `poll_not_found`, `poll_closed`, `invalid_label`, `invalid_details`, `invalid_date`, `too_many_options`, `duplicate_option` |
+| `setVotes(pollId, userId, optionIds)`               | replaces the member's votes in the poll with exactly that set; empty clears them                                               | `poll_not_found`, `poll_closed`, `unknown_option`                                                                           |
+| `closePoll(pollId, userId)`                         | picks the winner (below), closes the poll, and moves the round to `location_decided` (location poll) or `complete` (date poll) | `poll_not_found`, `poll_closed`, `no_options`, `invalid_state`                                                              |
+| `startDatePoll(roundId, userId, dates)`             | from `location_decided` only: opens the date poll with 2-25 distinct dates, sorted chronologically; round -> `date_voting`     | `round_not_found`, `invalid_state`, `invalid_date`, `duplicate_option`, `too_few_options`, `too_many_options`               |
+| `cancelRound(roundId, userId)`                      | closes any open poll without a winner; round -> `cancelled`                                                                    | `round_not_found`, `invalid_state` (already ended)                                                                          |
+| `setPollMessage(pollId, channelId, messageId)`      | records the poll's Discord message                                                                                             | `poll_not_found`                                                                                                            |
+| `setRoundThread(roundId, threadId)`                 | records the hike's forum thread                                                                                                | `round_not_found`                                                                                                           |
+
+Reads return null when there is nothing to return:
+`getPoll(pollId, viewerId?)`, `getRound(roundId, viewerId?)`,
+`getActiveRound(viewerId?)` and `getLastRound(viewerId?)` (the most recently
+started round). A poll read model has its options in creation order, each
+with its vote count, the number of distinct voters, and `viewerVotes`, the
+viewer's current votes. A round read model includes its location and date
+polls.
+
+### Winner and tie-break
+
+`pickWinner` (`src/polls/tally.ts`) takes the options with the highest vote
+count. One option wins outright. When several share the top count, including
+every option at zero votes, one is drawn uniformly at random (rejection
+sampling over a 32-bit random value, so there is no modulo bias) and the poll
+records `tie_broken` and the tied option ids.
+
+### Date options
+
+`parseDateOption(line)` accepts `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` (24-hour,
+one or more spaces between date and time, surrounding whitespace ignored).
+It rejects dates and times that do not exist (`2026-02-30`, `25:00`) and any
+other format (`2026/12/05`, `2026-12-05T09:00`, `9:00`). It returns the
+normalized `value` and a `label` with the weekday of the calendar date, for
+example `Sat, 5 Dec 2026` or `Sat, 5 Dec 2026 · 09:00`. There is no timezone
+conversion.
+
+## Round lifecycle
 
 A guild has at most one active round: `location_voting` ->
 `location_decided` -> `date_voting` -> `complete`. An admin can cancel an
