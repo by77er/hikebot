@@ -27,7 +27,12 @@ import {
   shortenAll,
 } from "../../src/features/poll-ui";
 import { GuildConfig } from "../../src/guild/config";
-import { PollStore, type PollView } from "../../src/polls/store";
+import { osmLink, placeLine } from "../../src/geo/links";
+import {
+  PollStore,
+  type OptionPlace,
+  type PollView,
+} from "../../src/polls/store";
 import {
   callWorker,
   componentInteraction,
@@ -234,6 +239,97 @@ describe("renderPollMessage", () => {
   });
 });
 
+describe("places on the poll message", () => {
+  const SI = { lat: 47.4875, lon: -121.7234 };
+  const found = (name: string, lat = SI.lat): OptionPlace => ({
+    status: "found",
+    point: { lat, lon: SI.lon },
+    name,
+    attempts: 1,
+  });
+  const ATTRIBUTION = "-# © OpenStreetMap contributors";
+
+  it("shows each located option's place name and a short map link, under the attribution", () => {
+    const view = renderPollMessage(
+      poll({
+        options: [
+          { ...option(1, "Si", 2), place: found("Mount Si, King County") },
+          {
+            ...option(2, "Given", 1),
+            place: { status: "given", point: SI, name: null, attempts: 0 },
+          },
+          {
+            ...option(3, "Pending", 0),
+            place: { status: "pending", point: null, name: null, attempts: 0 },
+          },
+        ],
+      }),
+      LOCATION_POLL,
+    );
+    const shown = text(view);
+    expect(shown).toContain(
+      `**Si** · 2 votes\n📍 Mount Si, King County · [map](${osmLink(SI, true)})`,
+    );
+    expect(shown).toContain(
+      `**Given** · 1 vote\n📍 [map](${osmLink(SI, true)})`,
+    );
+    expect(shown).toContain("**Pending** · 0 votes\nProposed by");
+    expect(shown).toContain(ATTRIBUTION);
+    expectWithinLimits(view);
+  });
+
+  it("leaves the attribution out while no option is located", () => {
+    const view = renderPollMessage(
+      poll({ options: [option(1, "Ridge", 0)] }),
+      LOCATION_POLL,
+    );
+    expect(text(view)).not.toContain("OpenStreetMap");
+  });
+
+  it("keeps every map link with 25 located options, shortening place names and details", () => {
+    const view = renderPollMessage(
+      poll({
+        options: Array.from({ length: 25 }, (_, i) => ({
+          ...option(i + 1, `Trail number ${String(i).padStart(2, "0")}`, 9),
+          details: "D".repeat(300),
+          place: found(`${"N".repeat(78)}${String(i).padStart(2, "0")}`, i),
+        })),
+        voterCount: 99,
+      }),
+      LOCATION_POLL,
+    );
+    expectWithinLimits(view);
+    const shown = text(view);
+    expect(
+      shown.match(/\[map\]\(https:\/\/www\.openstreetmap\.org\//g),
+    ).toHaveLength(25);
+    expect(shown).not.toContain("N".repeat(78));
+    expect(shown).toContain(ATTRIBUTION);
+  });
+
+  it("stays within Discord's limits with 25 located options at the longest label, details and place name", () => {
+    for (const status of ["open", "closed"] as const) {
+      const view = renderPollMessage(
+        fullPoll({
+          status,
+          winnerOptionId: status === "closed" ? 1 : null,
+          options: fullPoll().options.map((o, i) => ({
+            ...o,
+            place: found(
+              `${"N".repeat(78)}${String(i).padStart(2, "0")}`,
+              -89.12345 + i,
+            ),
+          })),
+        }),
+        LOCATION_POLL,
+      );
+      expectWithinLimits(view);
+      expect(text(view).match(/Proposed by <@1\d{19}>/g)).toHaveLength(25);
+      expect(text(view)).toContain(`**00${"L".repeat(78)}**`);
+    }
+  });
+});
+
 describe("shortenAll", () => {
   it("keeps texts that fit and cuts the longest ones evenly with an ellipsis", () => {
     expect(shortenAll(["abc", "de"], 10)).toEqual(["abc", "de"]);
@@ -306,6 +402,41 @@ describe("renderAnnouncement", () => {
       `https://discord.com/channels/200000000000000001/${TEXT}/${POLL_MESSAGE}`,
     );
     expect(shown).not.toContain("<@");
+    expect(shown).not.toContain("OpenStreetMap");
+  });
+
+  it("shows where the winner is, with both map links and the attribution", () => {
+    const point = { lat: 47.4875, lon: -121.7234 };
+    const view = renderAnnouncement(
+      {
+        poll: poll({
+          status: "closed",
+          options: [
+            {
+              ...option(1, "Si", 2, "Steep"),
+              place: { status: "found", point, name: "Mount Si", attempts: 1 },
+            },
+          ],
+          winnerOptionId: 1,
+        }),
+        round: null,
+        guildId: "200000000000000001",
+        timeZone: "America/Los_Angeles",
+      },
+      LOCATION_POLL,
+      ["**Extra:** line"],
+    );
+    const shown = text(view);
+    expect(shown).toContain(`Steep\n${placeLine(point, "Mount Si")}`);
+    expect(shown).toContain(
+      "https://www.openstreetmap.org/?mlat=47.4875&mlon=-121.7234#map=13/47.4875/-121.7234",
+    );
+    expect(shown).toContain(
+      "https://www.google.com/maps/search/?api=1&query=47.4875,-121.7234",
+    );
+    expect(
+      shown.endsWith("**Extra:** line\n-# © OpenStreetMap contributors"),
+    ).toBe(true);
   });
 });
 
