@@ -161,7 +161,12 @@ describe("a whole hike round", () => {
 
     // Every message the bot sent is Components V2 and pings no one.
     for (const request of e2e.discord.requests) {
-      if (request.method === "POST" || request.method === "PATCH") {
+      if (request.path.endsWith("/threads")) {
+        // A forum thread's first message is nested in its body.
+        expect(request.body).toMatchObject({
+          message: { allowed_mentions: { parse: [] } },
+        });
+      } else if (request.method === "POST" || request.method === "PATCH") {
         expect(request.body).toMatchObject({
           allowed_mentions: { parse: [] },
         });
