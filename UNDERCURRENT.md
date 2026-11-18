@@ -208,3 +208,271 @@ const modal = {
   components,
 };
 ```
+
+## TypeScript stays strict
+only: tsconfig.json
+
+Every `tsconfig.json` resolves to `"strict": true` and sets no option of the
+strict family (`noImplicitAny`, `strictNullChecks`, `strictFunctionTypes`,
+`strictBindCallApply`, `strictPropertyInitialization`,
+`strictBuiltinIteratorReturn`, `noImplicitThis`, `useUnknownInCatchVariables`,
+`alwaysStrict`) to `false`. Put the option back and fix the type errors `tsc`
+reports instead.
+
+```sh
+config="$(npx tsc --showConfig -p "$FILE")"
+printf '%s' "$config" | node -e '
+let text = "";
+process.stdin.on("data", (chunk) => (text += chunk)).on("end", () => {
+  const options = JSON.parse(text).compilerOptions ?? {};
+  const family = ["noImplicitAny", "strictNullChecks", "strictFunctionTypes", "strictBindCallApply", "strictPropertyInitialization", "strictBuiltinIteratorReturn", "noImplicitThis", "useUnknownInCatchVariables", "alwaysStrict"];
+  const problems = family.filter((name) => options[name] === false).map((name) => `"${name}": false`);
+  if (options.strict !== true) problems.unshift(`"strict" is not true`);
+  if (problems.length > 0) {
+    console.error(`${process.env.FILE}: ${problems.join(", ")}. Set "strict": true, remove the options that turn part of it off, and fix the type errors tsc reports instead.`);
+    process.exit(1);
+  }
+});
+'
+```
+
+## A source change comes with tests
+only: src/**/*.ts
+
+A change that adds or changes what code under `src/` does adds or updates a
+test under `test/` in the same pull request, one that fails without the
+change. Put the tests for `src/<dir>/<file>.ts` in `test/<dir>/<file>.test.ts`
+and follow `test/AGENTS.md` to write them. A change that keeps behaviour as it
+is, such as a comment, a rename, formatting or a refactor the existing tests
+already cover, needs no new test.
+
+```diff good
+--- a/src/polls/dates.ts
++++ b/src/polls/dates.ts
+@@
+-  if (!/^\d{4}-\d{2}-\d{2}$/.test(line)) {
++  if (!/^\d{4}-\d{2}-\d{2}$/.test(line.trim())) {
+--- a/test/polls/dates.test.ts
++++ b/test/polls/dates.test.ts
+@@
++  it("accepts a date with spaces around it", () => {
++    expect(parseDate(" 2026-06-14 ")).toEqual(parseDate("2026-06-14"));
++  });
+```
+
+```diff good
+--- a/src/guild/router.ts
++++ b/src/guild/router.ts
+@@
+-  private readonly commands = new Map<string, CommandHandler>();
++  private readonly commandHandlers = new Map<string, CommandHandler>();
+```
+
+```diff bad
+--- a/src/polls/store.ts
++++ b/src/polls/store.ts
+@@
+   closePoll(pollId: number, userId: string): PollView {
+     return this.storage.transactionSync(() => {
++      if (this.optionCount(pollId) === 0) {
++        throw new PollError("no_options", "Add an option before closing the poll.");
++      }
+```
+
+```diff bad
+--- a/src/features/index.ts
++++ b/src/features/index.ts
+@@
+   router.command("hike", hikeCommand);
++  router.command("trail", trailCommand);
+   return router;
+```
+
+## AGENTS.md files give procedures, not facts
+only: AGENTS.md
+
+Each entry in an `AGENTS.md` tells an agent how to do a job in that
+directory: a heading that names the job, then steps with real paths and the
+exact commands, ending with the command that checks the result. A
+description of what the code is or does is a fact the code already states,
+and it goes stale when the code changes. Delete it, or rewrite it as the
+procedure that needs it, following "Record what you learned" in the root
+`AGENTS.md`. Behaviour and design belong in `docs/design.md`.
+
+```md bad
+The Durable Object stores migrations in `src/guild/schema.ts`.
+```
+
+```md bad
+## Layout
+
+- `src/discord/` is the REST client and the Components V2 builders.
+- `src/guild/router.ts` dispatches interactions to handlers by custom_id
+  prefix.
+```
+
+```md bad
+`PollStore` wraps the poll tables and returns read models such as
+`PollView`.
+```
+
+````md good
+## Add a SQLite migration
+
+1. To add a table, append a migration to the list in `src/guild/schema.ts`.
+   To change a table that has shipped, append a migration that runs
+   `ALTER TABLE`, not an edit of the old one.
+2. Run the tests:
+
+   ```sh
+   npm test
+   ```
+````
+
+````md good
+## Add a REST method to the client
+
+1. Add a method to `DiscordApi` in `src/discord/api.ts` that returns
+   `this.call({ method, path, body, auth })`.
+2. Add the method to the `cases` table in `test/discord/api.test.ts` and
+   run `npx vitest run test/discord/api.test.ts`.
+````
+
+## AGENTS.md files hold nothing near-term
+only: AGENTS.md
+
+An `AGENTS.md` holds only what stays true until the code changes. Status,
+plans, what is unfinished, what a later task will do, follow-up work, task
+and pull request numbers, and dates belong on the task board or in the pull
+request description. Move the statement there, or delete it. If it hides a
+procedure ("run the migrations by hand until the script exists"), write the
+procedure as it is today and nothing about when it will change.
+
+```md bad
+Polls are currently stored in memory; a later task moves them to SQLite.
+```
+
+```md bad
+## Deploy
+
+TODO: write the deploy steps once the workflow from #12 lands.
+```
+
+```md bad
+Voting by reaction is not yet supported (tsk_3q714r0o051t4m5b, planned for
+2026-12).
+```
+
+````md good
+## Run one test file
+
+```sh
+npx vitest run test/guild/router.test.ts
+```
+````
+
+```md good
+## Add a Worker secret
+
+1. Add the name to `secrets.required` in `wrangler.jsonc`.
+2. Add a line with a dummy value to `.dev.vars.example`.
+```
+
+## AGENTS.md files hold no near-term markers
+only: AGENTS.md
+
+This backs up "AGENTS.md files hold nothing near-term" for when no model
+judges it. Move the statement on the printed line to the task or the pull
+request description, or delete it. The words matched are `TODO`, `FIXME`,
+`WIP`, `TBD` (upper case, whole word), `todo:`, `fixme:`, `currently`,
+`for now`, `for the time being`, `not yet`, `later task`, `follow-up task`,
+`temporarily`, `work in progress`, task ids (`tsk_…`) and pull request
+references (`#12`, `PR 12`). Plain `later` is not matched, because "Node.js
+22.13 or later" is a procedure, and neither is `TODOs` in a sentence about
+where TODOs go.
+
+```sh
+awk '
+  {
+    line = tolower($0)
+    found = ""
+    if (match($0, /(^|[^[:alnum:]_])(TODO|FIXME|WIP|TBD)([^[:alnum:]_]|$)/)) found = substr($0, RSTART, RLENGTH)
+    else if (match(line, /todo:|fixme:|tsk_[[:alnum:]]+/)) found = substr($0, RSTART, RLENGTH)
+    else if (match(line, /(^|[^[:alnum:]_])(currently|for now|for the time being|not yet|later task|follow-up task|temporarily|work in progress)([^[:alnum:]_]|$)/)) found = substr($0, RSTART, RLENGTH)
+    else if (match(line, /(^|[[:space:](])(#|pr #?|pull request #?)[0-9]+([^[:alnum:]_]|$)/)) found = substr($0, RSTART, RLENGTH)
+    if (found != "") {
+      gsub(/^[^[:alnum:]_#]+|[^[:alnum:]_:]+$/, "", found)
+      print FILENAME ":" FNR ": near-term statement (\"" found "\"); move it to the task or the pull request description, or delete it"
+      bad = 1
+    }
+  }
+  END { exit bad }
+' "$FILE"
+```
+
+## AGENTS.md files hold no standing prohibitions
+only: AGENTS.md
+
+A "never", "do not" or "must not" that holds beyond the step it sits in is
+negative knowledge, and prose is not checked. Write it as a rule in the
+`UNDERCURRENT.md` of the directory it governs, as a command rule when a
+command can detect it and a semantic rule with good and bad examples
+otherwise, in a pull request of its own (see "Record what you learned" in the
+root `AGENTS.md`), and remove it from the `AGENTS.md`. A caution inside a
+procedure step, which says how to do that step right, stays.
+
+```md bad
+Never commit `.dev.vars` or any other file with secrets in it.
+```
+
+```md bad
+## Conventions
+
+- Do not use discord.js; talk to Discord over plain HTTP.
+- Migrations must never be edited once shipped.
+```
+
+````md good
+2. Install the dependencies with `npm ci`, not `npm install`, so the
+   lockfile stays as it is:
+
+   ```sh
+   npm ci
+   ```
+````
+
+```md good
+1. Pick a command name that no line in `registerFeatures` registers yet;
+   registering a name twice throws when the object starts.
+```
+
+## No secrets file is committed
+only: {.dev.vars,.dev.vars.*,.env,.env.*}
+
+`.dev.vars`, `.dev.vars.*`, `.env` and `.env.*` hold real values and are
+never tracked. Put the value in `.dev.vars` on your machine, which git
+ignores, or in the Worker's secrets with `npx wrangler secret put <NAME>`,
+and take the file out of git with `git rm --cached <file>`. If the file was
+ever pushed, rotate every secret in it: deleting the file does not remove it
+from the history. `.dev.vars.example`, with dummy values, is the one file of
+this kind that is committed.
+
+```sh
+case "$FILE" in */.dev.vars.example) exit 0 ;; esac
+echo "$FILE is a secrets file and must not be committed. Run git rm --cached on it, keep the values in .dev.vars on your machine (git-ignored) or set them with npx wrangler secret put <NAME>, and rotate every secret in it if it was ever pushed."
+exit 1
+```
+
+## Infrastructure is written with inframe, not HCL
+only: *.{tf,tfvars,hcl}
+
+`wrangler deploy` creates and updates the Worker and its Durable Object from
+`wrangler.jsonc`; declare anything Cloudflare can create from there in that
+file. Write any other infrastructure with the owner's `by77er/inframe`, the
+functional frontend for OpenTofu, following "Add infrastructure" in the root
+`AGENTS.md`, and delete the HCL file.
+
+```sh
+echo "$FILE is HCL. Declare Worker resources in wrangler.jsonc (wrangler deploy manages the Worker and its Durable Object), write any other infrastructure with by77er/inframe, and delete this file."
+exit 1
+```
