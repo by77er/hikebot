@@ -180,13 +180,10 @@ Run `npm test` for the whole suite before opening a pull request.
 
 ## Fix the clock in a test that goes through the Worker
 
-Handlers read the time from `PollStore`'s default clock, `Date.now`. In a
-unit test (not an end-to-end one) the Worker and its objects run in the
-test's runtime, so a faked `Date` reaches them.
-
-1. Fake only `Date` and set the time before sending the interaction or
-   writing the rows whose time matters, and restore real timers after each
-   test:
+1. In a unit test under `test/features/` (end-to-end tests cannot fake the
+   Worker's clock), fake only `Date` and set the time before sending the
+   interaction or writing the rows whose time matters, and restore real
+   timers after each test:
 
    ```ts
    afterEach(() => {
@@ -562,9 +559,8 @@ test's runtime, so a faked `Date` reaches them.
 
    To have a member propose a date on the open date vote, call
    `play.proposeDate(member, when, "<YYYY-MM-DD[ HH:MM]>")`; it returns the
-   modal and the answer to the submit. A member may propose only from today
-   to 31 days ahead in the guild's time zone, so compute those dates from
-   today in Los Angeles, the default zone, as
+   modal and the answer to the submit. Compute each proposed date from today
+   in Los Angeles, the default zone, between today and 31 days ahead, as
    `test/e2e/date-vote.test.ts` does, and check the answer with
    `expectEphemeral(member, "Added **<label>** to the date vote.")`.
 
