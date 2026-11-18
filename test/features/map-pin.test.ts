@@ -68,7 +68,11 @@ function stub(guildId: string) {
  */
 async function decided(
   guildId: string,
-  { complete, place }: { complete: boolean; place: OptionPlace | null },
+  {
+    complete,
+    place,
+    proposer = OWNER,
+  }: { complete: boolean; place: OptionPlace | null; proposer?: string },
 ): Promise<number> {
   return runInDurableObject(stub(guildId), (_i, state) => {
     const config = new GuildConfig(state.storage);
@@ -80,7 +84,7 @@ async function decided(
       {
         label: "Mount Si",
         details: "Steep, 13 km",
-        proposedBy: OWNER,
+        proposedBy: proposer,
         ...(place === null ? {} : { place }),
       },
     ]);
@@ -324,6 +328,24 @@ describe("saving the map pin", () => {
       "The map pin of **Mount Si** is set to 47.5, -121.8.",
     );
     expect(panel?.body).not.toContain("Could not");
+  });
+
+  it("keeps naming hikebot as the proposer of a location the bot entered", async () => {
+    const guild = "200000000000000818";
+    const roundId = await decided(guild, {
+      complete: true,
+      place: FOUND,
+      proposer: env.DISCORD_APPLICATION_ID,
+    });
+    const sent = discord(guild);
+    const ctx = createExecutionContext();
+    await send(submit(roundId, guild, LINK), ctx);
+    await waitOnExecutionContext(ctx);
+    const thread = sent.find(
+      (r) => r.path === `/channels/${THREAD}/messages/${THREAD}`,
+    );
+    expect(thread?.body).toContain("Proposed by hikebot");
+    expect(thread?.body).not.toContain(`<@${env.DISCORD_APPLICATION_ID}>`);
   });
 
   it("removes the pin when the field is empty, and the thread no longer shows one", async () => {

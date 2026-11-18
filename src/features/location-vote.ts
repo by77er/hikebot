@@ -53,6 +53,7 @@ import {
   PollStore,
   cooldownMessage,
   labelKey,
+  type OptionPlace,
   type PastLocation,
   type PollView,
   type RestingLocation,
@@ -227,6 +228,25 @@ function proposalRefusal(error: PollError, name: string): string {
 
 function userIdOf(interaction: APIMessageComponentInteraction): string {
   return interaction.member?.user.id ?? interaction.user?.id ?? "";
+}
+
+/**
+ * The place a location suggested again takes from the earlier option: its
+ * pin or the geocoder's answer, so nothing is looked up again. A lookup
+ * that failed or never ended is made afresh (an empty object leaves the
+ * new option pending).
+ */
+export function copiedPlace(place: OptionPlace | null): {
+  place?: OptionPlace;
+} {
+  if (
+    place === null ||
+    place.status === "failed" ||
+    place.status === "pending"
+  ) {
+    return {};
+  }
+  return { place };
 }
 
 /** The past locations a member can put on the poll again, at most 25. */
@@ -405,7 +425,7 @@ const pickPastLocation: ComponentHandler = async (interaction, context) => {
       label: source.label,
       details: source.details,
       proposedBy: userId,
-      ...(source.place === null ? {} : { place: source.place }),
+      ...copiedPlace(source.place),
     });
     await scheduleRefresh(context.storage, pollId, store.now());
     await scheduleNewLookup(context.storage, store, store.now());

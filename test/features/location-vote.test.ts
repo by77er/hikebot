@@ -14,6 +14,7 @@ import {
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   LOCATION_IDS,
+  copiedPlace,
   parseInitialLocations,
   renderSuggestAgain,
   restingRefusal,
@@ -795,6 +796,40 @@ const RIDGE_PLACE: OptionPlace = {
   name: null,
   attempts: 0,
 };
+
+describe("copiedPlace", () => {
+  const point = { lat: 47.1, lon: -121.5 };
+  it.each([
+    ["found", { status: "found", point, name: "Lake", attempts: 1 }, true],
+    ["given", { status: "given", point, name: null, attempts: 0 }, true],
+    [
+      "not_found",
+      { status: "not_found", point: null, name: null, attempts: 1 },
+      true,
+    ],
+    [
+      "cleared",
+      { status: "cleared", point: null, name: null, attempts: 1 },
+      true,
+    ],
+    [
+      "failed",
+      { status: "failed", point: null, name: null, attempts: 3 },
+      false,
+    ],
+    [
+      "pending",
+      { status: "pending", point: null, name: null, attempts: 2 },
+      false,
+    ],
+  ] as const)("copies a %s place: %s", (_status, place: OptionPlace, kept) => {
+    expect(copiedPlace(place)).toEqual(kept ? { place } : {});
+  });
+
+  it("leaves a location without a place to be looked up", () => {
+    expect(copiedPlace(null)).toEqual({});
+  });
+});
 
 describe("suggesting a past location again", () => {
   /**

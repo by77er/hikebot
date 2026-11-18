@@ -45,9 +45,9 @@ service's name.
    tests at a host that never answers, in `miniflare.bindings` in
    `vitest.config.ts` (`TRAIL_BASE: "https://trail.test"`), so no test
    reaches the real service.
-3. Never call the service while answering an interaction. In the handler,
-   store what is to be fetched as pending (a status column or a storage
-   key) and schedule a job, as "Add a scheduled job" in
+3. Call the service from a scheduled job, after the answer. In the
+   handler, store what is to be fetched as pending (a status column or a
+   storage key) and schedule a job, as "Add a scheduled job" in
    `src/guild/AGENTS.md` says. The job takes one pending item per run,
    keeps the service's rate limit by storing the time of its last request
    and scheduling itself for the next free slot when it runs early, records

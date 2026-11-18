@@ -60,7 +60,7 @@
     // fake Discord API.
     "DISCORD_OAUTH_AUTHORIZE_URL": "https://discord.com/oauth2/authorize",
     // OpenStreetMap's geocoder, which finds where proposed locations are.
-    // Tests and local runs override this to point at a fake geocoder.
+    // Tests override this to point at a fake geocoder.
     "NOMINATIM_BASE": "https://nominatim.openstreetmap.org",
   },
   // The deploy workflow sets them from GitHub Actions secrets; locally they come

@@ -267,7 +267,14 @@ export const updateThreadPin: MapPinHook = {
     await discordApi(context.env).editMessage(
       round.threadId,
       round.threadId,
-      messageBody(renderThreadMessage(round, guildId, timeZone)),
+      messageBody(
+        renderThreadMessage(
+          round,
+          guildId,
+          timeZone,
+          context.env.DISCORD_APPLICATION_ID,
+        ),
+      ),
     );
   },
 };

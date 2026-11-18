@@ -1067,7 +1067,8 @@ waits for a lookup (see "Locating hikes"). A map field that holds no
 coordinates the bot can read (such as a short link, which is never opened)
 does not stop the proposal; the confirmation says the location will be
 looked up by its name. A location suggested again carries the place of the
-option it was copied from, so it is not looked up again. A duplicate name ("**X** is already on the list."), a
+option it was copied from, so it is not looked up again, unless that
+option's lookup failed or never ended: then it is looked up afresh. A duplicate name ("**X** is already on the list."), a
 full poll ("This vote already has 25 locations…"), a closed poll and a
 resting location (the cooldown message) each get their own ephemeral answer,
 whether typed or picked from a stale select (which is replaced by the
@@ -1668,8 +1669,8 @@ http libraries will not do"), for results to be cached ("Clients sending
 repeatedly the same query may be classified as faulty and blocked"), for no
 autocomplete, and for attribution. The bot meets it this way: one request
 per lookup, made only for a new option and kept with it (a location
-suggested again carries its place, and the home area is looked up only when
-it changes); no lookup while a member types; "© OpenStreetMap contributors"
+suggested again carries its place, found or not, and the home area is
+looked up only when it changes); no lookup while a member types; "© OpenStreetMap contributors"
 wherever place data is shown. The 1-request-per-second limit is for the
 whole application, but each guild's object paces only its own requests: a
 Durable Object cannot see the others' without a shared coordinator, which
@@ -1704,9 +1705,10 @@ current pin; it takes coordinates or a map link as above, and empty removes
 the pin. Input it cannot read is refused and changes nothing. The pin is
 stored before the answer (`given`, or `cleared` when removed, ending any
 pending lookup), then the follow-up runs the map pin hooks and redraws the
-panel with the result and a line for each hook that failed. `setMapPin`
-(`src/features/map-pin.ts`) is the one way to set a pin from other code: it
-stores the pin and runs the hooks it is given. The hooks are listed in
+panel with the result and a line for each hook that failed. Other code
+sets a pin with `setMapPin` (`src/features/map-pin.ts`), which stores the
+pin and runs the hooks it is given; the panel uses its two halves,
+`storeMapPin` before answering and `runMapPinHooks` in the follow-up. The hooks are listed in
 `MAP_PIN_HOOKS` in `src/features/index.ts`: today the hike thread's first
 message and the event's description are edited when they exist; a feature
 that shows the pin (a map picture, a web page) adds its hook there.
