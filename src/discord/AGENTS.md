@@ -22,7 +22,8 @@
      value instead (`basicAuth(client)` for the token routes,
      `Bearer <access token>` for a user's routes), and send a token
      route's body as `form`, as the methods in the OAuth2 block of
-     `DiscordApi` do. Never put a token or the client secret in the path.
+     `DiscordApi` do, so the path, and with it every error, holds no token
+     or secret.
 3. Add the method to the `cases` table in `test/discord/api.test.ts` (method,
    URL, whether it sends the bot token). If it sends a message, add it to the
    `calls` table in the `allowed_mentions` block too.
