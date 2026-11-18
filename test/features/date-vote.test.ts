@@ -1161,7 +1161,7 @@ describe("proposing a date", () => {
       options: [...poll.options].sort((a, b) => a.id - b.id),
     };
     const select = flatten(nodes(renderVoteSelect(added, DATE_POLL))).find(
-      (c) => c.type === ComponentType.StringSelect,
+      (c) => c.custom_id === POLL_IDS.choose(pollId),
     ) as { options?: { label: string }[] } | undefined;
     expect(select?.options?.map((o) => o.label)).toEqual([
       "Fri, 20 Nov 2026 · 11:00",
