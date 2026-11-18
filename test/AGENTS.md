@@ -261,6 +261,46 @@ Run `npm test` for the whole suite before opening a pull request.
    `eventually` or `waitForMessage` instead, as "Write an end-to-end
    scenario" says.
 
+## Test a job that runs days or weeks apart
+
+The example plays the weekly schedule's job, `cadence:tick`, from one
+cadence instant to the next; use your job's name and times.
+
+1. Fake only `Date` for the whole file and restore it after each test, and
+   pick times years ahead (2030), so an alarm the test sets never fires by
+   itself while the test runs:
+
+   ```ts
+   beforeEach(() => {
+     vi.useFakeTimers({ toFake: ["Date"] });
+   });
+   afterEach(() => {
+     vi.useRealTimers();
+     vi.restoreAllMocks();
+   });
+   ```
+
+2. Set the clock before the action that schedules the job, then move it to
+   each time the job is due and run the alarm there. The alarm runs every
+   job due by the faked clock, so a close flow scheduled in between runs
+   with it:
+
+   ```ts
+   vi.setSystemTime(Date.parse("2030-01-02T17:00Z"));
+   expect(await runDurableObjectAlarm(stub(name))).toBe(true);
+   ```
+
+3. After each run, check what the job did (the rounds in storage, the
+   requests `fetch` received) and when it runs next, from
+   `scheduledJobs(state.storage).get("cadence:tick")`. To check that a run
+   at the wrong time does nothing, run the alarm with the clock before the
+   due time: it runs the earliest job anyway.
+4. Run the file, as `test/features/cadence.test.ts` does:
+
+   ```sh
+   npx vitest run test/features/cadence.test.ts
+   ```
+
 ## Run the end-to-end suite
 
 1. Run the suite, with or without a `.dev.vars` in the checkout. It needs no
