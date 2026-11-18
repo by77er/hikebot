@@ -104,14 +104,14 @@ export const WIDTHS = {
     [14, 1],
   ],
   path: [
-    [11, 0.9],
-    [13, 1.4],
-    [16, 2.2],
+    [11, 1.1],
+    [13, 1.6],
+    [16, 2.4],
   ],
   track: [
-    [11, 0.8],
-    [13, 1.2],
-    [16, 2],
+    [11, 1],
+    [13, 1.4],
+    [16, 2.2],
   ],
   /** Added to a path's or track's width on each side for its halo. */
   pathHalo: [
@@ -134,7 +134,7 @@ export const WIDTHS = {
     [14, 1.2],
   ],
   /** Text halos, round each glyph. */
-  labelHalo: [[0, 2.2]],
+  labelHalo: [[0, 2.5]],
 } as const satisfies Record<string, ZoomStops>;
 
 /** Dash patterns, in multiples of the line's width. */
@@ -161,29 +161,29 @@ export const MIN_ZOOM = {
 export const LABEL_SIZES = {
   /** Cities and towns. */
   town: [
-    [8, 12],
-    [12, 15],
-    [16, 18],
+    [8, 15],
+    [12, 18],
+    [16, 21],
   ],
   /** Villages and hamlets. */
   village: [
-    [10, 10.5],
-    [14, 12.5],
-    [16, 14],
+    [10, 13],
+    [14, 15],
+    [16, 16],
   ],
   neighbourhood: [
-    [12, 10],
-    [16, 12],
+    [12, 12],
+    [16, 14],
   ],
   peak: [
-    [10, 10],
-    [14, 11.5],
-    [16, 13],
+    [10, 13],
+    [14, 14.5],
+    [16, 16],
   ],
   water: [
-    [10, 10.5],
-    [14, 12],
-    [16, 14],
+    [10, 13],
+    [14, 14.5],
+    [16, 16],
   ],
 } as const satisfies Record<string, ZoomStops>;
 
@@ -226,16 +226,17 @@ export const LABEL_ZOOM_LEAD: Record<LabelRole, number> = {
 /** Sizes of the drawn furniture, in logical pixels. */
 export const FURNITURE = {
   /** The pin's head radius and its height from tip to head centre. */
-  pinRadius: 9,
-  pinHeight: 22,
+  pinRadius: 11,
+  pinHeight: 27,
   pinOutline: 2,
   /** The peak triangle's side. */
-  peakSize: 7,
+  peakSize: 9,
   /** Room kept between labels and round the pin. */
   labelPadding: 2,
   /** The scale bar's longest length and its text size. */
-  scaleBarMaxLength: 110,
-  furnitureText: 10,
+  scaleBarMaxLength: 120,
+  scaleBarText: 13,
+  attributionText: 11,
   /** Distance of the scale bar and attribution from the picture's edges. */
   margin: 6,
   frame: 1,

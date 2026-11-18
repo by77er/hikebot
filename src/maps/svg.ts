@@ -9,7 +9,7 @@
 import type { VectorTile, VectorTileFeature } from "@mapbox/vector-tile";
 import { clipLine, clipRing, type Rect } from "./clip";
 import type { FontFace, MapFonts } from "./font";
-import { placeLabels, type Box, type LabelCandidate } from "./labels";
+import { overlaps, placeLabels, type Box, type LabelCandidate } from "./labels";
 import {
   metresPerPixel,
   tilePixels,
@@ -228,7 +228,7 @@ export function buildSvg(scene: Scene): string {
   }
 
   const furniture = drawFurniture(scene);
-  const labels = drawLabels(scene, furniture.obstacles, defs);
+  const labels = drawLabels(scene, furniture, defs);
   out.push(...labels, ...furniture.svg);
   const frame = FURNITURE.frame * ratio;
   out.push(
@@ -395,7 +395,11 @@ interface CurvedLabel {
 
 type Label = { text: TextLabel } | { curved: CurvedLabel };
 
-function drawLabels(scene: Scene, obstacles: Box[], defs: string[]): string[] {
+function drawLabels(
+  scene: Scene,
+  furniture: { obstacles: Box[]; pin: Box },
+  defs: string[],
+): string[] {
   const { view, fonts } = scene;
   const ratio = view.pixelRatio;
   const zoom = view.zoom;
@@ -424,6 +428,7 @@ function drawLabels(scene: Scene, obstacles: Box[], defs: string[]): string[] {
       bottom: centre.y + height / 2,
     };
   };
+  const seen = new Set<string>();
   const curves = new Map<
     string,
     { role: LabelRole; line: Point[]; length: number }
@@ -463,6 +468,9 @@ function drawLabels(scene: Scene, obstacles: Box[], defs: string[]): string[] {
         const at = toPoint(raw);
         const role = pointRole(layerName, feature);
         if (!role || !shown(role, feature)) continue;
+        // The same place can come from two layers or two tiles' buffers.
+        if (seen.has(`${role}:${name}`)) continue;
+        seen.add(`${role}:${name}`);
         const priority = labelPriority(role, feature);
         if (role === "peak") {
           const elevation = Number(feature.properties.elevation);
@@ -487,10 +495,22 @@ function drawLabels(scene: Scene, obstacles: Box[], defs: string[]): string[] {
             { x: at.x, y: at.y - gap - h / 2 },
             { x: at.x, y: at.y + gap + h / 2 },
           ];
+          // A peak under the pin is labelled beside it; its marker is hidden.
+          const markers = overlaps(markerBox, furniture.pin) ? [] : [markerBox];
           candidates.push({
             priority,
-            positions: centres.map((c) => [markerBox, textBox(role, lines, c)]),
-            value: { text: { role, lines, centres, marker: at } },
+            positions: centres.map((c) => [
+              ...markers,
+              textBox(role, lines, c),
+            ]),
+            value: {
+              text: {
+                role,
+                lines,
+                centres,
+                ...(markers.length > 0 ? { marker: at } : {}),
+              },
+            },
           });
           continue;
         }
@@ -539,7 +559,7 @@ function drawLabels(scene: Scene, obstacles: Box[], defs: string[]): string[] {
 
   const placed = placeLabels(candidates, {
     bounds: { left: 0, top: 0, right: view.width, bottom: view.height },
-    obstacles,
+    obstacles: furniture.obstacles,
     padding: FURNITURE.labelPadding * ratio,
   });
 
@@ -611,7 +631,8 @@ function pointRole(
   const kind = String(feature.properties.kind ?? "");
   const detail = String(feature.properties.kind_detail ?? "");
   if (layer === "pois") {
-    return kind === "peak" || kind === "volcano" ? "peak" : undefined;
+    if (kind === "peak" || kind === "volcano") return "peak";
+    return kind === "water" ? "water" : undefined;
   }
   if (layer === "water") return "water";
   if (layer !== "places") return undefined;
@@ -763,17 +784,24 @@ function pointAt(line: Point[], distance: number): Point {
 }
 
 /** The pin, the scale bar and the attribution, and the room they take. */
-function drawFurniture(scene: Scene): { svg: string[]; obstacles: Box[] } {
+function drawFurniture(scene: Scene): {
+  svg: string[];
+  obstacles: Box[];
+  pin: Box;
+} {
   const { view, fonts } = scene;
   const ratio = view.pixelRatio;
   const svg: string[] = [];
-  const obstacles: Box[] = [];
   const margin = FURNITURE.margin * ratio;
-  const textSize = FURNITURE.furnitureText * ratio;
   const metrics = fonts.metrics({ weight: 400, italic: false });
-  const textHeight = textSize * (metrics.ascent + metrics.descent);
   const pad = 3 * ratio;
-  const textAttributes = ` font-family="${fonts.family}" font-size="${num(textSize)}"${fill("furniture")}`;
+  const text = (size: number) => ({
+    size,
+    height: size * (metrics.ascent + metrics.descent),
+    /** The baseline for text whose box ends at `bottom`. */
+    baseline: (bottom: number) => bottom - metrics.descent * size,
+    attributes: ` font-family="${fonts.family}" font-size="${num(size)}"${fill("furniture")}`,
+  });
 
   // The pin: a teardrop whose tip is on the point.
   const tip = toPicture(view, scene.pin.lon, scene.pin.lat);
@@ -791,27 +819,26 @@ function drawFurniture(scene: Scene): { svg: string[]; obstacles: Box[] } {
     `<path d="M${num(tip.x)} ${num(tip.y)}L${num(left.x)} ${num(left.y)}A${num(r)} ${num(r)} 0 1 1 ${num(right.x)} ${num(right.y)}Z"${fill("pin")}${stroke("pinOutline", outline)} stroke-linejoin="round" paint-order="stroke"/>`,
     `<circle cx="${num(head.x)}" cy="${num(head.y)}" r="${num(r * 0.38)}"${fill("pinOutline")}/>`,
   );
-  obstacles.push({
+  const pin: Box = {
     left: head.x - r - outline,
     right: head.x + r + outline,
     top: head.y - r - outline,
     bottom: tip.y + outline,
-  });
+  };
 
   // The attribution, bottom right.
-  const attribution = scene.attribution;
-  const attributionWidth = metrics.width(attribution, textSize);
+  const attribution = text(FURNITURE.attributionText * ratio);
+  const attributionWidth = metrics.width(scene.attribution, attribution.size);
   const attributionBox: Box = {
     right: view.width - margin,
     left: view.width - margin - attributionWidth - 2 * pad,
     bottom: view.height - margin,
-    top: view.height - margin - textHeight - pad,
+    top: view.height - margin - attribution.height - pad,
   };
   svg.push(
     background(attributionBox, ratio),
-    `<text x="${num(attributionBox.right - pad)}" y="${num(attributionBox.bottom - pad / 2 - metrics.descent * textSize)}" text-anchor="end"${textAttributes}>${escape(attribution)}</text>`,
+    `<text x="${num(attributionBox.right - pad)}" y="${num(attribution.baseline(attributionBox.bottom - pad / 2))}" text-anchor="end"${attribution.attributes}>${escape(scene.attribution)}</text>`,
   );
-  obstacles.push(attributionBox);
 
   // The scale bar, bottom left.
   const scale = scaleBar(
@@ -819,13 +846,14 @@ function drawFurniture(scene: Scene): { svg: string[]; obstacles: Box[] } {
     FURNITURE.scaleBarMaxLength * ratio,
     scene.units,
   );
+  const scaleText = text(FURNITURE.scaleBarText * ratio);
   const barHeight = 4 * ratio;
-  const labelWidth = metrics.width(scale.label, textSize);
+  const labelWidth = metrics.width(scale.label, scaleText.size);
   const scaleBox: Box = {
     left: margin,
     bottom: view.height - margin,
     right: margin + Math.max(scale.pixels, labelWidth) + 2 * pad,
-    top: view.height - margin - textHeight - barHeight - 2 * pad,
+    top: view.height - margin - scaleText.height - barHeight - 2 * pad,
   };
   const barLeft = scaleBox.left + pad;
   const barBottom = scaleBox.bottom - pad;
@@ -833,10 +861,9 @@ function drawFurniture(scene: Scene): { svg: string[]; obstacles: Box[] } {
   svg.push(
     background(scaleBox, ratio),
     `<path d="M${num(barLeft)} ${num(barBottom - barHeight)}V${num(barBottom)}H${num(barLeft + scale.pixels)}V${num(barBottom - barHeight)}" fill="none"${stroke("furniture", width)} stroke-linecap="square"/>`,
-    `<text x="${num(barLeft)}" y="${num(barBottom - barHeight - pad / 2 - metrics.descent * textSize)}"${textAttributes}>${escape(scale.label)}</text>`,
+    `<text x="${num(barLeft)}" y="${num(scaleText.baseline(barBottom - barHeight - pad / 2))}"${scaleText.attributes}>${escape(scale.label)}</text>`,
   );
-  obstacles.push(scaleBox);
-  return { svg, obstacles };
+  return { svg, obstacles: [pin, attributionBox, scaleBox], pin };
 }
 
 function background(box: Box, ratio: number): string {

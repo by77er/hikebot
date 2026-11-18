@@ -60,8 +60,8 @@ export const SAMPLE_VIEWS: SampleView[] = [
   {
     file: "lake-z14.png",
     title: "the shore of Crater Lake at zoom 14",
-    lon: -121.7223,
-    lat: 47.5203,
+    lon: -121.7213,
+    lat: 47.52,
     zoom: 14,
   },
   {
