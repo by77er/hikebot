@@ -172,7 +172,10 @@ describe("modal builders", () => {
       max_length: 80,
     });
     expect(
-      textInput({ custom_id: "x", style: TextInputStyle.Paragraph }).style,
+      textInput({
+        custom_id: "hb:location:notes",
+        style: TextInputStyle.Paragraph,
+      }).style,
     ).toBe(TextInputStyle.Paragraph);
   });
 

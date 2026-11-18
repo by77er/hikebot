@@ -412,10 +412,13 @@ describe("allowed_mentions", () => {
 
     it(`${name} keeps the caller's allowed_mentions`, async () => {
       const { api, sent } = client([ok()]);
-      await call(api, { ...message, allowed_mentions: { users: ["5"] } });
+      await call(api, {
+        ...message,
+        allowed_mentions: { parse: [], replied_user: false },
+      });
       expect(sentMessage(sent[0]?.body)).toEqual({
         ...message,
-        allowed_mentions: { users: ["5"] },
+        allowed_mentions: { parse: [], replied_user: false },
       });
     });
   }
