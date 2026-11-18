@@ -110,9 +110,9 @@
 ## Change the map style
 
 1. Change the roles' colours, opacities, widths, dashes, zooms, label sizes
-   or furniture in `src/maps/style.ts`. Put every colour there, under a role;
-   the drawing code in `src/maps/svg.ts` reads the roles. A new kind of feature gets a new
-   role in `COLOURS` and is drawn from it in `svg.ts`.
+   or furniture in `src/maps/style.ts`. Put every colour there, under a
+   role. For a new kind of feature, add a role to `COLOURS` in
+   `src/maps/style.ts` and draw it from that role in `src/maps/svg.ts`.
 2. To change the typeface, put its TrueType files (regular, semibold and
    italic) and its licence in `src/maps/fonts/`, then change the imports and
    `FAMILY` in `src/maps/font.ts`. Subset each file first, with the same
