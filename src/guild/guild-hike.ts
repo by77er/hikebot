@@ -3,7 +3,9 @@ import type {
   APIInteraction,
   APIInteractionResponse,
 } from "discord-api-types/v10";
+import type { Calendar } from "../calendar/ical";
 import { registerFeatures, runAlarm } from "../features";
+import { loadCalendarFeed } from "../features/calendar-feed";
 import { Router } from "./router";
 import { applyMigrations } from "./schema";
 
@@ -46,6 +48,14 @@ export class GuildHike extends DurableObject<Env> {
       response: result.response,
       followUp: result.followUp !== undefined,
     };
+  }
+
+  /**
+   * The guild's calendar feed, for `guildId` (this object's name). The
+   * Worker calls it only after checking the feed address's signature.
+   */
+  calendarFeed(guildId: string): Calendar {
+    return loadCalendarFeed(this.ctx.storage, guildId);
   }
 
   /** Runs the scheduled jobs that are due, such as poll message refreshes. */

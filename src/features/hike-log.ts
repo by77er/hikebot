@@ -3,6 +3,7 @@ import {
   type APIComponentInContainer,
   type APIMessageTopLevelComponent,
 } from "discord-api-types/v10";
+import { calendarAddress } from "../calendar/address";
 import {
   actionRow,
   button,
@@ -35,6 +36,10 @@ export const NO_HIKES_MESSAGE =
 export const HIKE_LOG_IDS = {
   page: (page: number) => customId("log", "page", String(page)),
 } as const;
+
+/** The sentence under the calendar address. */
+export const CALENDAR_HINT =
+  "Calendar apps can subscribe to this address to show every hike; anyone who has it can see them.";
 
 /** One page of the log, as `loadHikeLog` reads it. */
 export interface HikeLogPage {
@@ -72,12 +77,13 @@ export function loadHikeLog(
 /**
  * The log message: the heading and count, then one entry per hike, newest
  * first (date, location, shortened details, thread and the link to the
- * event in `guildId`), and while there is more than one page, Newer and
- * Older buttons.
+ * event in `guildId`), the guild's calendar address `calendar`, and while
+ * there is more than one page, Newer and Older buttons.
  */
 export function renderHikeLog(
   log: HikeLogPage,
   guildId: string,
+  calendar: string,
 ): APIMessageTopLevelComponent[] {
   const count = log.total === 1 ? "1 hike" : `${String(log.total)} hikes`;
   const head = [
@@ -92,6 +98,8 @@ export function renderHikeLog(
   for (const hike of log.hikes) {
     body.push(textDisplay(hikeEntry(hike, guildId)));
   }
+  body.push(separator());
+  body.push(textDisplay(`Calendar: ${calendar}\n${CALENDAR_HINT}`));
   if (log.pages > 1) {
     body.push(separator());
     body.push(
@@ -130,20 +138,29 @@ function hikeEntry(hike: HikeView, guildId: string): string {
 }
 
 /** `/hike log`: the first page of the log, to any member, ephemeral. */
-export const showHikeLog: CommandHandler = (interaction, context) => ({
-  response: ephemeralReply(
-    renderHikeLog(loadHikeLog(context.storage, 1), interaction.guild_id ?? ""),
-  ),
-});
+export const showHikeLog: CommandHandler = async (interaction, context) => {
+  const guildId = interaction.guild_id ?? "";
+  return {
+    response: ephemeralReply(
+      renderHikeLog(
+        loadHikeLog(context.storage, 1),
+        guildId,
+        await calendarAddress(context.env, guildId),
+      ),
+    ),
+  };
+};
 
 /** Newer and Older: redraws the log message at the page in the custom_id. */
-const turnPage: ComponentHandler = (interaction, context) => {
+const turnPage: ComponentHandler = async (interaction, context) => {
   const page = Number(parseCustomId(interaction.data.custom_id)?.arg);
+  const guildId = interaction.guild_id ?? "";
   return {
     response: update(
       renderHikeLog(
         loadHikeLog(context.storage, page),
-        interaction.guild_id ?? "",
+        guildId,
+        await calendarAddress(context.env, guildId),
       ),
     ),
   };

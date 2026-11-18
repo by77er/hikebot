@@ -5,6 +5,7 @@
  * when a request does reach the Worker (as in the unit tests), and turns a
  * missing one into the HTML 404 page.
  */
+import { calendarRoute } from "./calendar";
 import { MethodNotAllowedPage, NotFoundPage } from "./pages/errors";
 import { HomePage } from "./pages/home";
 import { htmlResponse } from "./response";
@@ -24,6 +25,7 @@ export const webRouter = new WebRouter({
     const asset = await env.ASSETS.fetch(request);
     return asset.status === 404 ? notFound() : asset;
   })
+  .get("/calendar/*", calendarRoute(notFound))
   .get(
     "/healthz",
     () =>
