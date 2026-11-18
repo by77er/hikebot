@@ -2,6 +2,7 @@ name: Undercurrent
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
   push:
     branches: [main]
 
@@ -14,6 +15,7 @@ concurrency:
 
 jobs:
   commands:
+    if: github.event_name == 'push' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -35,7 +37,7 @@ jobs:
           all: "true"
           rules-from: head
   semantic:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -47,7 +49,7 @@ jobs:
           typesafe-api-key: ${{ secrets.TYPESAFE_API_KEY }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
   review:
-    if: always() && github.event_name == 'pull_request'
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && !github.event.pull_request.draft }}
     needs: [commands, semantic]
     runs-on: ubuntu-latest
     permissions:
