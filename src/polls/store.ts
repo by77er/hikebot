@@ -702,6 +702,42 @@ export class PollStore {
     });
   }
 
+  /**
+   * Takes back a round whose location poll message could not be posted:
+   * closes the poll without a winner and cancels the round, as `cancelRound`
+   * does, but only while the round is `location_voting` with this poll
+   * open, so a round another admin cancelled or decided meanwhile is left
+   * as it is.
+   */
+  withdrawLocationRound(pollId: number, userId: string): RoundView {
+    return this.storage.transactionSync(() => {
+      const poll = this.openPollRow(pollId);
+      const round = this.roundRow(poll.round_id);
+      if (poll.kind !== "location" || round.status !== "location_voting") {
+        throw new PollError(
+          "invalid_state",
+          "Only a round whose location vote is open can be withdrawn.",
+        );
+      }
+      const at = this.now();
+      this.sql.exec(
+        `UPDATE polls SET status = 'closed', closed_by = ?, closed_at = ?
+         WHERE id = ?`,
+        userId,
+        at,
+        pollId,
+      );
+      this.sql.exec(
+        `UPDATE rounds SET status = 'cancelled', ended_by = ?, ended_at = ?
+         WHERE id = ?`,
+        userId,
+        at,
+        round.id,
+      );
+      return this.roundView(this.roundRow(round.id), null);
+    });
+  }
+
   /** Closes any open poll without a winner and cancels the round. */
   cancelRound(roundId: number, userId: string): RoundView {
     return this.storage.transactionSync(() => {
