@@ -123,6 +123,20 @@ describe("a whole hike round", () => {
     await eventually(() => {
       expect(channel(g.channels.news)).toHaveLength(2);
     });
+    // The hike's thread in the forum channel, linked from the announcement.
+    const [thread] = e2e.discord.threads(g.channels.forum);
+    expect(e2e.discord.threads(g.channels.forum)).toHaveLength(1);
+    expect(thread?.name).toBe("Lake Loop — Sat, 15 Jun 2030 · 09:00");
+    const threadText = channel(thread?.id ?? "")[0] ?? "";
+    expect(threadText).toContain("## Lake Loop");
+    expect(threadText).toContain(`Proposed by <@${g.owner.actor.userId}>`);
+    expect(threadText).toContain("**When:** Sat, 15 Jun 2030 · 09:00");
+    expect(threadText).toContain(
+      "**Location vote:** **Lake Loop** won with 3 votes; 4 members voted.",
+    );
+    expect(threadText).toContain(
+      `**Date vote:** **Sat, 15 Jun 2030 · 09:00** won with 3 votes; 3 members voted. [See the date vote](https://discord.com/channels/${g.guildId}/${g.channels.text}/${datePoll.id})`,
+    );
     const [, hikeAnnouncement] = channel(g.channels.news);
     expect(hikeAnnouncement?.split("\n")).toEqual([
       "## Hike planned",
@@ -130,12 +144,14 @@ describe("a whole hike round", () => {
       "**When:** Sat, 15 Jun 2030 · 09:00",
       "**Sat, 15 Jun 2030 · 09:00** won the date vote with 3 votes.",
       `[See the vote](https://discord.com/channels/${g.guildId}/${g.channels.text}/${datePoll.id})`,
+      `**Hike thread:** <#${thread?.id ?? ""}>`,
     ]);
     expect(channel(g.channels.text)).toHaveLength(2);
     const summary = messageText(play.shown(panel));
     expect(summary).toContain(
       "**Last hike:** **Lake Loop** on **Sat, 15 Jun 2030 · 09:00**.",
     );
+    expect(summary).toContain(`**Hike thread:** <#${thread?.id ?? ""}>`);
     expect(summary).toContain("No hike is being planned.");
     expect(buttonLabels(play.shown(panel))).toEqual([
       "Start location vote",
@@ -154,6 +170,7 @@ describe("a whole hike round", () => {
     for (const message of [
       ...e2e.discord.channelMessages(g.channels.text),
       ...e2e.discord.channelMessages(g.channels.news),
+      ...e2e.discord.channelMessages(thread?.id ?? ""),
     ]) {
       expect(message.flags & MessageFlags.IsComponentsV2).toBeTruthy();
     }
@@ -181,5 +198,9 @@ describe("a whole hike round", () => {
     await eventually(() => {
       expect(channel(g.channels.news)).toHaveLength(4);
     });
+    expect(e2e.discord.threads(g.channels.forum).map((t) => t.name)).toEqual([
+      "Lake Loop — Sat, 15 Jun 2030 · 09:00",
+      "Summit Path — Sun, 7 Jul 2030",
+    ]);
   });
 });
