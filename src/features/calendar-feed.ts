@@ -4,9 +4,11 @@
  * returns it to the Worker, which checks the address and answers the HTTP
  * request (`src/web/calendar.ts`); `src/calendar/ical.ts` writes the text.
  */
+import { calendarAddress } from "../calendar/address";
 import type { Calendar, CalendarEvent } from "../calendar/ical";
 import { eventUrl } from "../discord/api";
 import { GuildConfig } from "../guild/config";
+import type { WebViewSource } from "../guild/web-view";
 import { HIKE_DURATION_HOURS, hikeStart } from "../polls/dates";
 import { PollStore, type HikeView } from "../polls/store";
 
@@ -60,4 +62,17 @@ function hikeEvent(
     description: description.join("\n").trim(),
     url: thread ?? event,
   };
+}
+
+/** The calendar feed's section of the web view. */
+export interface WebCalendarSection {
+  /** The feed's signed address, which any calendar app can subscribe to. */
+  url: string;
+}
+
+/** The guild's feed address, for the web view's members. */
+export async function calendarSection(
+  source: WebViewSource,
+): Promise<WebCalendarSection> {
+  return { url: await calendarAddress(source.env, source.guildId) };
 }

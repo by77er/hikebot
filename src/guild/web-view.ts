@@ -6,7 +6,8 @@
  * The view is made of sections, each built by its own function from a
  * `WebViewSource`: the guild-wide ones here (`serverSection`,
  * `viewerSection`, `settingsSection`), the others beside the feature that
- * owns their data (`roundSection`, `plannedHikeSection`, `hikeLogSection`).
+ * owns their data (`roundSection`, `plannedHikeSection`, `hikeLogSection`,
+ * `calendarSection`).
  * Nothing here writes to storage except the owner cache in the guild's
  * settings.
  */
@@ -16,6 +17,10 @@ import {
   guildIconUrl,
   type DiscordApi,
 } from "../discord/api";
+import {
+  calendarSection,
+  type WebCalendarSection,
+} from "../features/calendar-feed";
 import {
   HIKES_PER_PAGE,
   hikeLogSection,
@@ -64,6 +69,7 @@ export interface WebView {
   round: WebRoundSection | null;
   plannedHike: WebPlannedHike | null;
   log: WebHikeLogSection;
+  calendar: WebCalendarSection;
 }
 
 export interface WebServerSection {
@@ -102,6 +108,7 @@ export interface GuildDirectory {
 
 /** Everything the section builders read from. */
 export interface WebViewSource {
+  env: Env;
   guildId: string;
   viewerId: string;
   isAdmin: boolean;
@@ -115,7 +122,7 @@ export interface WebViewSource {
 }
 
 /** Builds the view, one section per function. */
-export function buildWebView(source: WebViewSource): WebView {
+export async function buildWebView(source: WebViewSource): Promise<WebView> {
   return {
     server: serverSection(source),
     viewer: viewerSection(source),
@@ -123,6 +130,7 @@ export function buildWebView(source: WebViewSource): WebView {
     round: roundSection(source),
     plannedHike: plannedHikeSection(source),
     log: hikeLogSection(source),
+    calendar: await calendarSection(source),
   };
 }
 
@@ -280,7 +288,8 @@ export async function readWebView(
     return { kind: "unavailable" };
   }
 
-  const view = buildWebView({
+  const view = await buildWebView({
+    env: context.env,
     guildId,
     viewerId: userId,
     isAdmin: decision.isAdmin,

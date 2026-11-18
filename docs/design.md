@@ -172,6 +172,9 @@ permission", with the roles from their membership.
   thread and event links, when it completed), `page` (clamped to
   `1..pages`, as the log's buttons are), `pageSize` (1-50, default 10),
   `pages` and `total`.
+- `calendar` (`calendarSection`, `src/features/calendar-feed.ts`): `url`,
+  the guild's signed feed address (see "Calendar feed"), which the view
+  gives only to members, as `/hike log` does.
 
 **Caches.** The guild object keeps, in memory only (`WebViewCache`):
 

@@ -1,6 +1,7 @@
 import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { calendarAddress, calendarGuild } from "../../src/calendar/address";
 import { GuildConfig } from "../../src/guild/config";
 import { OWNER_CACHE_MS } from "../../src/guild/permissions";
 import {
@@ -119,6 +120,16 @@ describe("who may see a server", () => {
         announceChannel: { id: NEWS, name: "news" },
         forumChannel: null,
       });
+    });
+  });
+
+  it("gives a member the server's signed calendar address", async () => {
+    const { guild, stub } = freshGuild();
+    await inObject(stub, guild, async ({ read }) => {
+      const { url } = viewOf(await read(MEMBER, T0)).calendar;
+      expect(url).toBe(await calendarAddress(env, guild.id));
+      expect(url).toMatch(/^https:\/\/hikebot\.example\/calendar\//);
+      expect(await calendarGuild(env, new URL(url).pathname)).toBe(guild.id);
     });
   });
 
