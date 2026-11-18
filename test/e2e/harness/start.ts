@@ -1,13 +1,15 @@
 /**
  * Starts the Worker under test in local workerd with Wrangler's
- * `createTestHarness`, next to a fake Discord API. Each start gets fresh
+ * `createTestHarness`, next to a fake Discord API and a fake Nominatim
+ * geocoder (`./fake-nominatim.ts`). Each start gets fresh
  * in-memory Durable Object storage, a `MAPS` bucket holding the sample map
  * archive and its manifest (`./maps.ts`) unless `maps` is false, a newly
  * generated signing key pair, a
  * dummy bot token, application id, OAuth client secret and SIGNING_SECRET,
- * PUBLIC_URL set to an example origin, and DISCORD_API_BASE and
- * DISCORD_OAUTH_AUTHORIZE_URL pointing at the fake, which accepts
- * `${PUBLIC_URL}/auth/callback` as the application's OAuth2 redirect URI.
+ * PUBLIC_URL set to an example origin, DISCORD_API_BASE and
+ * DISCORD_OAUTH_AUTHORIZE_URL pointing at the fake Discord API, which
+ * accepts `${PUBLIC_URL}/auth/callback` as the application's OAuth2 redirect
+ * URI, and NOMINATIM_BASE at the fake geocoder.
  * These go in as the harness's `vars` and `secrets`, which override
  * whatever `.dev.vars`, `.env` files or the environment hold, so the Worker
  * runs the same in any checkout. `useE2E` in `./worker` starts one per test
@@ -24,6 +26,7 @@ import {
   type TestHarnessOptions,
 } from "wrangler";
 import { FakeDiscord } from "./fake-discord";
+import { FakeNominatim } from "./fake-nominatim";
 import { createSigner, InteractionClient, type Signer } from "./interactions";
 import { seedMaps, type MapsBucket } from "./maps";
 
@@ -48,6 +51,8 @@ export interface E2E {
   /** Where the Worker listens; send interactions to `${url}interactions`. */
   url: URL;
   discord: FakeDiscord;
+  /** The fake Nominatim the Worker looks place names up with. */
+  geocoder: FakeNominatim;
   signer: Signer;
   /** Sends signed interactions and checks the Worker's answers. */
   client: InteractionClient;
@@ -76,12 +81,13 @@ export interface E2EOptions {
 }
 
 /**
- * One run of the fake Discord API and the Worker. `close` stops whatever
+ * One run of the fake Discord API, the fake geocoder and the Worker. `close` stops whatever
  * `start` began, also when the start failed or is still under way.
  */
 export class E2ERun {
   private harness?: TestHarness;
   private discord?: FakeDiscord;
+  private geocoder?: FakeNominatim;
   private probeDir?: string;
 
   async start(options: E2EOptions = {}): Promise<E2E> {
@@ -93,6 +99,9 @@ export class E2ERun {
     });
     this.discord = discord;
     await discord.listen();
+    const geocoder = new FakeNominatim();
+    this.geocoder = geocoder;
+    await geocoder.listen();
     const signer = createSigner();
     const secrets = {
       DISCORD_PUBLIC_KEY: signer.publicKeyHex,
@@ -104,6 +113,7 @@ export class E2ERun {
     const vars = {
       DISCORD_API_BASE: discord.apiBase,
       DISCORD_OAUTH_AUTHORIZE_URL: discord.authorizeUrl,
+      NOMINATIM_BASE: geocoder.base,
       PUBLIC_URL,
     };
     const root = options.root?.() ?? ROOT;
@@ -121,6 +131,7 @@ export class E2ERun {
     return {
       url,
       discord,
+      geocoder,
       signer,
       harness,
       client: new InteractionClient({
@@ -133,15 +144,23 @@ export class E2ERun {
   }
 
   async close(): Promise<void> {
-    const { harness, discord, probeDir } = this;
+    const { harness, discord, geocoder, probeDir } = this;
     this.harness = undefined;
     this.discord = undefined;
+    this.geocoder = undefined;
     this.probeDir = undefined;
     try {
       await harness?.close();
     } finally {
-      await discord?.close();
-      if (probeDir) await rm(probeDir, { recursive: true, force: true });
+      try {
+        await discord?.close();
+      } finally {
+        try {
+          await geocoder?.close();
+        } finally {
+          if (probeDir) await rm(probeDir, { recursive: true, force: true });
+        }
+      }
     }
   }
 }
