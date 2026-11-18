@@ -126,6 +126,7 @@ export class FakeDiscord {
   /** Interactions on their way to the Worker, by token; see `sendingInteraction`. */
   private readonly sending = new Map<string, () => void>();
   private readonly answered = new Map<string, Promise<void>>();
+  private held = 0;
   private readonly failures = new Map<string, ChannelFailure>();
   private readonly rateLimits: RateLimit[] = [];
   private readonly waiters: Waiter[] = [];
@@ -331,6 +332,11 @@ export class FakeDiscord {
     );
   }
 
+  /** How many webhook requests wait for their interaction's response. */
+  get heldRequests(): number {
+    return this.held;
+  }
+
   /** The original response to an interaction, after any edits. */
   originalResponse(token: string): FakeMessage | undefined {
     const id = this.interactions.get(token)?.originalId;
@@ -405,7 +411,12 @@ export class FakeDiscord {
     const method = req.method ?? "GET";
     const path = url.pathname.replace(/^\/api\/v10/, "") + url.search;
     const token = /^\/webhooks\/[^/]+\/([^/?]+)/.exec(path)?.[1];
-    if (token !== undefined) await this.answered.get(token);
+    const answered = token === undefined ? undefined : this.answered.get(token);
+    if (answered) {
+      this.held += 1;
+      await answered;
+      this.held -= 1;
+    }
     const recorded: RecordedRequest = {
       method,
       path,
