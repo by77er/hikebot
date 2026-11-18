@@ -36,6 +36,34 @@
    `new DiscordApi({ token, fetch, sleep })`. See `fakeFetch` in
    `test/discord/api.test.ts`.
 
+## Add a slash command or subcommand
+
+1. Add the definition to `commands` in `src/discord/commands.ts`: a new
+   subcommand goes in the `options` of `hike` with
+   `type: ApplicationCommandOptionType.Subcommand`, a new command is a new
+   entry with the same `contexts` and `integration_types` as `hike` and no
+   `default_member_permissions`. Names are lowercase, 1 to 32 characters;
+   descriptions 1 to 100.
+2. For a subcommand, add its handler to `subcommands` in
+   `src/features/hike.ts`. Wrap it in `adminOnly` if only admins may use it.
+   For a command, register its handler as "Add a slash command handler" in
+   `src/guild/AGENTS.md` says.
+3. Update the expected definition in `test/discord/commands.test.ts`, and
+   add a case to `test/features/hike.test.ts` that the subcommand reaches
+   its handler. Add an end-to-end scenario that runs it, as "Write an
+   end-to-end scenario" in `test/AGENTS.md` says, with
+   `member.run("hike", [subcommand("<name>")])`.
+4. Run the tests:
+
+   ```sh
+   npx vitest run test/discord/commands.test.ts
+   npx vitest run test/features/hike.test.ts
+   ```
+
+5. The `Deploy` workflow registers the new definition when the pull request
+   merges. To see it in a test application first, follow "Register the slash
+   commands" in `AGENTS.md`.
+
 ## Add a component builder
 
 1. Find the component's type in `discord-api-types/v10`:
