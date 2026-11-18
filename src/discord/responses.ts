@@ -1,9 +1,5 @@
-import {
-  ComponentType,
-  InteractionResponseType,
-  MessageFlags,
-  type APIInteractionResponseChannelMessageWithSource,
-} from "discord-api-types/v10";
+import type { APIInteractionResponseChannelMessageWithSource } from "discord-api-types/v10";
+import { ephemeralReply, textDisplay } from "./components";
 
 export const GUILD_ONLY_MESSAGE =
   "hikebot only works in servers. Use it from a server it has been added to.";
@@ -12,12 +8,5 @@ export const GUILD_ONLY_MESSAGE =
 export function ephemeralNotice(
   text: string,
 ): APIInteractionResponseChannelMessageWithSource {
-  return {
-    type: InteractionResponseType.ChannelMessageWithSource,
-    data: {
-      flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
-      components: [{ type: ComponentType.TextDisplay, content: text }],
-      allowed_mentions: { parse: [] },
-    },
-  };
+  return ephemeralReply([textDisplay(text)]);
 }
