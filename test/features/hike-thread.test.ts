@@ -237,16 +237,11 @@ describe("renderThreadMessage", () => {
     (_name, label, details, tied) => {
       const view = renderThreadMessage(
         round(
-          poll(
-            1,
-            "location",
-            [option(1, 1, label, { details, votes: 9999 })],
-            {
-              tieBroken: tied > 1,
-              tiedOptionIds: Array.from({ length: tied }, (_, i) => i + 1),
-              voterCount: 9999,
-            },
-          ),
+          poll(1, "location", [option(1, 1, label, { details, votes: 9999 })], {
+            tieBroken: tied > 1,
+            tiedOptionIds: Array.from({ length: tied }, (_, i) => i + 1),
+            voterCount: 9999,
+          }),
           poll(2, "date", [option(11, 2, "Wed, 25 Dec 2030 · 23:59")], {
             tieBroken: tied > 1,
             tiedOptionIds: Array.from({ length: tied }, (_, i) => i + 11),
@@ -254,9 +249,9 @@ describe("renderThreadMessage", () => {
         ),
         "2".repeat(20),
       );
-      expect(
-        flatten(view as unknown as Node[]).length,
-      ).toBeLessThanOrEqual(MAX_MESSAGE_COMPONENTS);
+      expect(flatten(view as unknown as Node[]).length).toBeLessThanOrEqual(
+        MAX_MESSAGE_COMPONENTS,
+      );
       expect(text(view).length).toBeLessThanOrEqual(MAX_MESSAGE_TEXT);
       expect(text(view)).toContain(`## ${label}`);
     },
@@ -348,11 +343,11 @@ async function dateVoting(guildId: string): Promise<PollView> {
 
 function click(
   customId: string,
+  guildId = GUILD,
   userId = OWNER,
 ): APIMessageComponentInteraction {
-  const interaction = componentInteraction(customId, "unused");
+  const interaction = componentInteraction(customId, guildId);
   Object.assign(interaction, {
-    guild_id: GUILD,
     member: { user: { id: userId }, roles: [] },
     message: { id: "800000000000000009", components: [] },
   });
@@ -543,9 +538,9 @@ describe("closing the date vote", () => {
       );
       expect(result).toEqual({});
     });
-    expect(
-      sent(spy).filter((r) => r.route.endsWith("/threads")),
-    ).toHaveLength(1);
+    expect(sent(spy).filter((r) => r.route.endsWith("/threads"))).toHaveLength(
+      1,
+    );
   });
 });
 
@@ -559,7 +554,7 @@ describe("Create hike thread", () => {
 
     const spy = discord(guild, created);
     const ctx = createExecutionContext();
-    const reply = await send(click(HIKE_THREAD_IDS.create(1)), ctx);
+    const reply = await send(click(HIKE_THREAD_IDS.create(1), guild), ctx);
     expect(reply.type).toBe(InteractionResponseType.DeferredMessageUpdate);
     await waitOnExecutionContext(ctx);
     const requests = sent(spy);
@@ -574,14 +569,14 @@ describe("Create hike thread", () => {
     expect((await lastRound(guild))?.threadId).toBe(THREAD);
 
     // A click on an old panel creates nothing.
-    const again = await send(click(HIKE_THREAD_IDS.create(1)));
+    const again = await send(click(HIKE_THREAD_IDS.create(1), guild));
     expect(again.type).toBe(InteractionResponseType.UpdateMessage);
     expect(text(again.data?.components ?? [])).toContain(
       `The hike thread already exists: <#${THREAD}>.`,
     );
-    expect(
-      sent(spy).filter((r) => r.route.endsWith("/threads")),
-    ).toHaveLength(1);
+    expect(sent(spy).filter((r) => r.route.endsWith("/threads"))).toHaveLength(
+      1,
+    );
   });
 
   it("creates one thread when the button is clicked twice quickly", async () => {
@@ -597,8 +592,8 @@ describe("Create hike thread", () => {
     });
     const spy = discord(guild, () => held.then(created));
     const first = createExecutionContext();
-    const one = await send(click(HIKE_THREAD_IDS.create(1)), first);
-    const two = await send(click(HIKE_THREAD_IDS.create(1)));
+    const one = await send(click(HIKE_THREAD_IDS.create(1), guild), first);
+    const two = await send(click(HIKE_THREAD_IDS.create(1), guild));
     expect(one.type).toBe(InteractionResponseType.DeferredMessageUpdate);
     expect(two.type).toBe(InteractionResponseType.UpdateMessage);
     expect(text(two.data?.components ?? [])).toContain(
@@ -612,9 +607,9 @@ describe("Create hike thread", () => {
     );
     release();
     await waitOnExecutionContext(first);
-    expect(
-      sent(spy).filter((r) => r.route.endsWith("/threads")),
-    ).toHaveLength(1);
+    expect(sent(spy).filter((r) => r.route.endsWith("/threads"))).toHaveLength(
+      1,
+    );
     expect((await lastRound(guild))?.threadId).toBe(THREAD);
   });
 
@@ -628,7 +623,7 @@ describe("Create hike thread", () => {
     });
     vi.restoreAllMocks();
     const spy = discord(guild, created);
-    const reply = await send(click(HIKE_THREAD_IDS.create(1)));
+    const reply = await send(click(HIKE_THREAD_IDS.create(1), guild));
     expect(text(reply.data?.components ?? [])).toContain(
       "That hike is no longer the last one",
     );
@@ -645,7 +640,7 @@ describe("Create hike thread", () => {
     await closeDateVote(guild, view);
     vi.restoreAllMocks();
     const spy = discord(guild, created);
-    const reply = await send(click(HIKE_THREAD_IDS.create(1), STRANGER));
+    const reply = await send(click(HIKE_THREAD_IDS.create(1), guild, STRANGER));
     expect(reply.type).toBe(InteractionResponseType.ChannelMessageWithSource);
     expect(sent(spy)).toEqual([]);
     expect((await lastRound(guild))?.threadId).toBeNull();

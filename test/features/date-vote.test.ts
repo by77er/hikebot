@@ -83,14 +83,14 @@ function nodes(components: readonly unknown[]): Node[] {
   return components as Node[];
 }
 
-function text(components: readonly unknown[]): string {
+function text(components: readonly unknown[] = []): string {
   return flatten(nodes(components))
     .map((c) => c.content ?? "")
     .filter((c) => c !== "")
     .join("\n");
 }
 
-function ids(components: readonly unknown[]): string[] {
+function ids(components: readonly unknown[] = []): string[] {
   return flatten(nodes(components)).flatMap((c) =>
     c.custom_id === undefined ? [] : [c.custom_id],
   );
@@ -430,9 +430,11 @@ function requests(spy: { mock: { calls: Parameters<typeof fetch>[] } }) {
 
 function bodyOf(sent: Sent | undefined) {
   return JSON.parse(sent?.body ?? "{}") as {
-    components: APIMessageTopLevelComponent[];
+    // A forum thread's body has its message's components under `message`.
+    components?: APIMessageTopLevelComponent[];
     allowed_mentions?: unknown;
     flags?: number;
+    message?: { allowed_mentions?: unknown };
   };
 }
 
@@ -707,7 +709,10 @@ describe("closing the date vote", () => {
     expect(panel).toContain("**Hike thread:** <#1>");
     expect(ids(bodyOf(sent[3]).components)).toContain("hb:location:start");
     for (const r of sent) {
-      expect(bodyOf(r).allowed_mentions).toEqual({ parse: [] });
+      // A forum thread's message is nested in its body.
+      expect(
+        bodyOf(r).allowed_mentions ?? bodyOf(r).message?.allowed_mentions,
+      ).toEqual({ parse: [] });
     }
   });
 
