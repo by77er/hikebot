@@ -1,0 +1,142 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [Undercurrent]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      HEALTH_URL: https://hiking.bitcru.sh/
+      HEALTH_LINE: hikebot is running
+    steps:
+      - name: Check the secrets are set
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DISCORD_PUBLIC_KEY: ${{ secrets.DISCORD_PUBLIC_KEY }}
+          DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: |
+          missing=0
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DISCORD_PUBLIC_KEY DISCORD_APPLICATION_ID DISCORD_BOT_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "::error::GitHub Actions secret $name is missing or empty. Add it under Settings > Secrets and variables > Actions, then re-run this workflow."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Skip unless the commit is the tip of main
+        id: tip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          tip=$(gh api "repos/$REPO/commits/main" --jq .sha)
+          if [ "$tip" = "$DEPLOY_SHA" ]; then
+            echo "Deploying $DEPLOY_SHA, the tip of main."
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping deploy of $DEPLOY_SHA: main has moved on to $tip, whose own run deploys it."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.tip.outputs.deploy == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          persist-credentials: false
+
+      - if: steps.tip.outputs.deploy == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - if: steps.tip.outputs.deploy == 'true'
+        run: npm ci
+
+      - name: Write the Worker secrets file
+        if: steps.tip.outputs.deploy == 'true'
+        env:
+          DISCORD_PUBLIC_KEY: ${{ secrets.DISCORD_PUBLIC_KEY }}
+          DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          SECRETS_FILE: ${{ runner.temp }}/worker-secrets.json
+        run: |
+          node -e '
+          const { DISCORD_PUBLIC_KEY, DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN, SECRETS_FILE } = process.env;
+          require("node:fs").writeFileSync(
+            SECRETS_FILE,
+            JSON.stringify({ DISCORD_PUBLIC_KEY, DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN }),
+            { mode: 0o600 },
+          );
+          '
+
+      # --secrets-file sets the secrets in the same upload as the code, which
+      # wrangler accepts for a Worker that does not exist yet even though
+      # wrangler.jsonc lists them under secrets.required.
+      - name: Deploy
+        if: steps.tip.outputs.deploy == 'true'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --secrets-file ${{ runner.temp }}/worker-secrets.json --message ${{ env.DEPLOY_SHA }}
+
+      - name: Delete the Worker secrets file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/worker-secrets.json"
+
+      - name: Register slash commands
+        if: steps.tip.outputs.deploy == 'true'
+        env:
+          DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: npm run register --if-present
+
+      - name: Smoke check
+        if: steps.tip.outputs.deploy == 'true'
+        env:
+          DEADLINE_SECONDS: "120"
+        run: |
+          deadline=$((SECONDS + DEADLINE_SECONDS))
+          body_file=$(mktemp)
+          while :; do
+            status=$(curl -sS --max-time 10 -o "$body_file" -w '%{http_code}' "$HEALTH_URL" 2>"$body_file.err") || status="curl failed: $(cat "$body_file.err")"
+            if [ "$status" = "200" ] && grep -qF "$HEALTH_LINE" "$body_file"; then
+              echo "$HEALTH_URL answered 200: $(head -c 200 "$body_file")"
+              exit 0
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::$HEALTH_URL did not return 200 with \"$HEALTH_LINE\" within $DEADLINE_SECONDS seconds."
+              echo "Last response: $status"
+              head -c 2000 "$body_file"
+              echo
+              exit 1
+            fi
+            echo "Not healthy yet ($status); retrying in 5 seconds."
+            sleep 5
+          done
