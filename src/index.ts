@@ -5,6 +5,7 @@ import {
 } from "discord-api-types/v10";
 import { ephemeralNotice, GUILD_ONLY_MESSAGE } from "./discord/responses";
 import { verifyDiscordSignature } from "./discord/verify";
+import { setAssetVersion } from "./web/assets";
 import { webRouter } from "./web/routes";
 
 import type { GuildHike } from "./guild/guild-hike";
@@ -19,6 +20,7 @@ export default {
       if (request.method !== "POST") return methodNotAllowed("POST");
       return handleInteractionRequest(request, env, ctx);
     }
+    setAssetVersion(env.CF_VERSION_METADATA.id);
     return webRouter.handle(request, env, ctx);
   },
 } satisfies ExportedHandler<Env>;

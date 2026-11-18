@@ -55,7 +55,7 @@ minutes, fails the run.
 
 ## Request flow
 
-A request for a file under `public/` (such as `/assets/app.css`) is
+A request for a file under `public/` (such as `/assets/cairn/cairn.css`) is
 answered by Workers Static Assets before the Worker runs; see "Web pages".
 The Worker (`src/index.ts`) handles the rest:
 
@@ -72,8 +72,13 @@ The Worker (`src/index.ts`) handles the rest:
     `maps/regions.json` at the default size and zoom (see "Map pictures"),
     `image/png`, cacheable for an hour; the HTML 404 page while there is no
     map data there.
+  - `GET /styleguide` (or `HEAD`): the style guide, every token and
+    component of the design system (`docs/design-system.md`).
   - `GET /assets/*`: the file from `public/` through the `ASSETS` binding,
     for a request that reaches the Worker.
+  - `GET /assets/v/<version>/*`: the same files under the deployed
+    version, cacheable for a year (see "Versioned assets" under "Web
+    pages").
   - `GET /calendar/<guild id>/<signature>.ics` (or `HEAD`): the guild's
     calendar feed, described under "Calendar feed". The Worker checks the
     signature before it reaches any Durable Object; a bad address gets the
@@ -123,19 +128,31 @@ so a name or title from Discord or a form cannot inject markup.
   `default-src 'none'; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self' data: https://cdn.discordapp.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`.
   Pages therefore carry no inline script or style, and load nothing from
   another host except images from Discord's CDN (avatars, server icons).
-- **Page shell.** `Layout` (`src/web/layout.tsx`) is the document every page
-  renders into: `lang`, the viewport meta, the `<title>`, the stylesheet, a
-  skip link to `<main id="main">`, and the `<header>`, `<main>` and
-  `<footer>` landmarks.
+- **Page shell and design system.** Every page is built from Cairn, the
+  design system described in `docs/design-system.md`: `Layout`
+  (`src/web/layout.tsx`) is the document every page renders into (`lang`,
+  the viewport meta, the `<title>`, the preloaded font and the stylesheet, a
+  skip link to `<main id="main">`, and the header, main and footer
+  landmarks), and the components are in `src/web/components/`.
+  `GET /styleguide` shows every token and component.
 - **Static files.** `public/` is the Workers Static Assets directory
-  declared under `assets` in `wrangler.jsonc`, so `public/assets/app.css` is
-  served at `/assets/app.css`, with an ETag. `public/_headers` gives
-  everything under `/assets/` `Cache-Control: public, max-age=300`: browsers
-  reuse a file for five minutes and then revalidate, so a deploy that changes
-  one reaches every browser within five minutes. `public/.assetsignore`
-  keeps the directory's `AGENTS.md` and `UNDERCURRENT.md` from being served.
-  The stylesheet is a neutral baseline (system fonts, a readable line
-  length).
+  declared under `assets` in `wrangler.jsonc`, so
+  `public/assets/cairn/cairn.css` is served at `/assets/cairn/cairn.css`,
+  with an ETag. `public/_headers` gives everything under `/assets/`
+  `Cache-Control: public, max-age=300`: browsers reuse a file for five
+  minutes and then revalidate. `public/.assetsignore` keeps the directory's
+  `AGENTS.md` and `UNDERCURRENT.md` from being served.
+- **Versioned assets.** Pages link the stylesheet and the font under
+  `/assets/v/<version>/`, where the version is the deployed Worker
+  version's id from the `CF_VERSION_METADATA` binding. No static file has
+  that path, so the Worker answers it (`src/web/assets.ts`) with the file
+  from `public/assets/` and
+  `Cache-Control: public, max-age=31536000, immutable`. Each deploy
+  changes the URLs, so browsers cache the files for a year and still never
+  keep an old one; the stylesheet's relative imports and `url()`s stay
+  under the same version. A path naming another version
+  (a page rendered by the other version during a gradual deploy) gets the
+  same files with the five-minute caching instead.
 - **Screenshots and design review.** Every page has committed screenshots
   in `docs/screenshots/`, named `<page>--<viewport>--<scheme>.png`, at a
   phone (390x844) and a desktop (1280x800) viewport in the light and dark
@@ -145,9 +162,10 @@ so a name or title from Discord or a form cannot inject markup.
   data, and opens the pages in headless Chromium from the
   `@sparticuz/chromium` npm package driven by `puppeteer-core`, so nothing
   is downloaded at run time. The browser's clock, time zone and language are
-  fixed, animations are off, the device scale factor is 1 and fonts come
-  from the package, never from the machine, so a run gives the same bytes
-  on every machine. The page list (`test/screenshots/pages.json`) names
+  fixed, animations are off, the device scale factor is 1, fonts come
+  from the package, never from the machine, and each shot waits for the
+  page's fonts and CSS images (such as the header's contour mask), so a run
+  gives the same bytes on every machine. The page list (`test/screenshots/pages.json`) names
   each page with its path, expected status, seed and signed-in member; a
   unit test fails when a `GET` route of the web router is neither on it nor
   excluded with a reason. On a pull request, CI regenerates the screenshots

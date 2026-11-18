@@ -1,0 +1,173 @@
+/*
+ * Cairn tokens: every colour, size, radius, duration and font the other
+ * layers use. docs/design-system.md gives each token's role and when to use
+ * it; test/web/contrast.test.ts reads the values here (the `:root` block
+ * for the light scheme, the `prefers-color-scheme: dark` block for dark)
+ * and checks the contrast of every pairing the docs allow. Only this file
+ * holds raw colour values.
+ */
+
+@layer tokens {
+  :root {
+    color-scheme: light dark;
+
+    /* Colour roles, light scheme: warm paper, granite text, pine actions. */
+    --color-bg: #faf8f3;
+    --color-surface: #ffffff;
+    --color-surface-raised: #ffffff;
+    --color-surface-subtle: #efeae0;
+    --color-text: #1f2421;
+    --color-text-muted: #566059;
+    --color-border: #ddd6c8;
+    --color-border-strong: #7d8781;
+    --color-primary: #1f5d45;
+    --color-primary-hover: #174a37;
+    --color-primary-active: #103627;
+    --color-on-primary: #ffffff;
+    --color-accent: #d9541e;
+    --color-link: #1d5e86;
+    --color-info: #1d5e86;
+    --color-info-subtle: #e3edf3;
+    --color-success: #2c6a35;
+    --color-success-subtle: #e4f0e3;
+    --color-warning: #8a5300;
+    --color-warning-subtle: #fbefd5;
+    --color-danger: #b3261e;
+    --color-danger-hover: #932019;
+    --color-danger-active: #73190f;
+    --color-on-danger: #ffffff;
+    --color-danger-subtle: #fbe7e4;
+    --color-focus: #1d5e86;
+    --color-contour: #1f5d45;
+    --contour-opacity: 0.09;
+
+    /* Typography: one variable sans-serif, a six-step scale on 16px. */
+    --font-sans:
+      "Public Sans Variable", "Cairn fallback", "Cairn fallback Roboto",
+      system-ui, sans-serif;
+    --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    --font-size-small: 0.875rem;
+    --font-size-body: 1rem;
+    --font-size-lead: 1.125rem;
+    --font-size-h3: 1.25rem;
+    --font-size-h2: 1.5rem;
+    --font-size-h1: clamp(1.75rem, 1.5rem + 1.25vw, 2.25rem);
+    --line-height-small: 1.25rem;
+    --line-height-body: 1.5rem;
+    --line-height-lead: 1.75rem;
+    --line-height-h3: 1.75rem;
+    --line-height-h2: 2rem;
+    --line-height-h1: 1.2;
+    --font-weight-regular: 400;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+    --measure: 68ch;
+    --letter-spacing-tight: -0.01em;
+    --letter-spacing-wide: 0.04em;
+
+    /* Space on a 4px base. */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+    --space-7: 3rem;
+    --space-8: 4rem;
+
+    /* Shape. */
+    --radius-control: 0.5rem;
+    --radius-card: 0.75rem;
+    --radius-pill: 999px;
+    --radius-blaze: 2px;
+    --border-width: 1px;
+    --border-width-strong: 2px;
+    --focus-width: 3px;
+    --focus-offset: 2px;
+    --underline-offset: 0.2em;
+
+    /* Sizes of fixed things. */
+    --target-min: 2.75rem;
+    --icon-size: 1.25rem;
+    --icon-size-small: 1rem;
+    --blaze-width: 0.5rem;
+    --blaze-height: 1.125rem;
+
+    /* Layout widths: a readable task column and a wider overview. */
+    --width-task: 45rem;
+    --width-overview: 67.5rem;
+    --gutter: var(--space-4);
+    --height-screen: 100dvh;
+    --width-card-min: 13.5rem;
+
+    /* Widths of the style guide's grids. */
+    --width-index: 10rem;
+    --width-swatch: 10.5rem;
+    --width-pair: 10.5rem;
+    --width-pair-sample: 4.75rem;
+    --width-shape: 10rem;
+    --width-scale-label: 9rem;
+
+    /* Elevation, for overlays only. */
+    --elevation-overlay:
+      0 0.5rem 1.5rem -0.25rem rgb(31 36 33 / 0.18),
+      0 0.125rem 0.375rem rgb(31 36 33 / 0.1);
+
+    /* Motion. */
+    --duration-quick: 120ms;
+    --duration-moderate: 240ms;
+    --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      /* Colour roles, dark scheme: a night in the forest, not inverted. */
+      --color-bg: #121613;
+      --color-surface: #1a1f1c;
+      --color-surface-raised: #232a26;
+      --color-surface-subtle: #252b26;
+      --color-text: #e9ece7;
+      --color-text-muted: #a8b2ac;
+      --color-border: #323b36;
+      --color-border-strong: #7a847e;
+      --color-primary: #7cc4a0;
+      --color-primary-hover: #97d3b5;
+      --color-primary-active: #b1e0c8;
+      --color-on-primary: #0d1a13;
+      --color-accent: #f07f4a;
+      --color-link: #8ec5ec;
+      --color-info: #8ec5ec;
+      --color-info-subtle: #16252f;
+      --color-success: #8acb92;
+      --color-success-subtle: #17261a;
+      --color-warning: #e9ba5b;
+      --color-warning-subtle: #2a2212;
+      --color-danger: #f4958c;
+      --color-danger-hover: #f7aca5;
+      --color-danger-active: #fac3be;
+      --color-on-danger: #1f0d0b;
+      --color-danger-subtle: #2e1816;
+      --color-focus: #8ec5ec;
+      --color-contour: #7cc4a0;
+      --contour-opacity: 0.12;
+
+      --elevation-overlay:
+        0 0.5rem 1.5rem -0.25rem rgb(0 0 0 / 0.5),
+        0 0.125rem 0.375rem rgb(0 0 0 / 0.35);
+    }
+  }
+
+  /* From the breakpoint, the style guide's swatches get room for names. */
+  @media (min-width: 48rem) {
+    :root {
+      --width-swatch: 14rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root {
+      --duration-quick: 0ms;
+      --duration-moderate: 0ms;
+    }
+  }
+}

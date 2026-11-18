@@ -31,23 +31,29 @@ describe("the landing page", () => {
     expect(page.body).toMatch(/^<!doctype html><html lang="en">/);
     expect(page.body).toContain("<title>hikebot</title>");
     expect(page.body).toContain('<a class="skip-link" href="#main">');
-    for (const tag of ["<header>", '<main id="main">', "<footer>"]) {
+    for (const tag of [
+      '<header class="shell__header">',
+      '<main id="main" class="shell__main" tabindex="-1">',
+      '<footer class="shell__footer">',
+    ]) {
       expect(page.body).toContain(tag);
     }
     expect(page.body).not.toMatch(/<script|<style|\sstyle=|\son[a-z]+=/i);
   });
 
-  it("links a stylesheet the Worker serves as cacheable CSS", async () => {
+  it("links one stylesheet the Worker serves as CSS cacheable for a year", async () => {
     const client = new PageClient(e2e.url);
     const page = await client.get("/");
     const [href, ...others] = stylesheetLinks(page.body);
     expect(others).toEqual([]);
-    expect(href).toMatch(/^\/assets\//);
+    expect(href).toMatch(/^\/assets\/v\/[\w-]+\/cairn\/cairn\.css$/);
     const css = await client.get(href ?? "");
     expect(css.status).toBe(200);
     expect(css.headers.get("content-type")).toBe("text/css; charset=utf-8");
-    expect(css.headers.get("cache-control")).toBe("public, max-age=300");
-    expect(css.body).toContain("font-family");
+    expect(css.headers.get("cache-control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(css.body).toContain("@layer reset, tokens");
   });
 });
 
@@ -78,7 +84,11 @@ describe("unknown paths", () => {
       expect(page.status).toBe(404);
       expectPageHeaders(page.headers);
       expect(page.body).toContain("<title>Page not found · hikebot</title>");
-      expect(page.body).toContain('<main id="main">');
+      expect(page.body).toContain("Error 404");
+      expect(page.body).toContain(
+        '<a class="button button--primary" href="/">',
+      );
+      expect(page.body).toContain('<main id="main"');
     },
   );
 

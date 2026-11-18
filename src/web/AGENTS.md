@@ -8,8 +8,9 @@ and which headers they carry.
 
 1. Write the page as a component in `src/web/pages/<page>.tsx` that renders
    its content inside `Layout`. Put every value into the markup as a JSX
-   expression (`{trail.name}`, `href={url}`), so it is escaped; style it with
-   classes from the stylesheet ("Add a static asset"):
+   expression (`{trail.name}`, `href={url}`), so it is escaped; build it
+   from the design system's layout classes and components, as "Build a
+   page from the design system" says:
 
    ```tsx
    /** The list of trails at `/trails`. */
@@ -220,22 +221,271 @@ in `docs/design.md` says which POSTs are refused.
    <img src="/assets/trail-map.svg" alt="Map of the trails" />
    ```
 
-2. For a stylesheet, add a `<link rel="stylesheet">` next to the one in
-   `src/web/layout.tsx`, or add your rules to `public/assets/app.css`.
-3. Start the dev server as "Run the bot locally" in the root `AGENTS.md`
+   A file the design system's stylesheet uses goes under
+   `public/assets/cairn/` and is referred to by a relative `url()`, so it
+   is served under the stylesheet's versioned path. For styles, follow
+   "Add a component to the design system" instead of adding a stylesheet.
+
+2. Start the dev server as "Run the bot locally" in the root `AGENTS.md`
    says and request the file in its place in that procedure. It answers
    `200` with the file's type and `Cache-Control: public, max-age=300`, set
-   for everything under `/assets/` by `public/_headers`:
+   for everything under `/assets/` by `public/_headers`. Under the running
+   version's path, which a rendered page links, it answers with
+   `Cache-Control: public, max-age=31536000, immutable` (a path naming any
+   other version keeps `max-age=300`):
 
    ```sh
-   curl -fsS -D - -o /dev/null http://localhost:8787/assets/app.css
+   curl -fsS -D - -o /dev/null http://localhost:8787/assets/trail-map.svg
+   V=$(curl -fsS http://localhost:8787/ | grep -o '/assets/v/[^/]*/' | head -1)
+   curl -fsS -D - -o /dev/null "http://localhost:8787${V}trail-map.svg"
    ```
 
-4. Add the file's path to the stylesheet test in `test/web/routes.test.ts`
+3. Add the file's path to the stylesheet test in `test/web/routes.test.ts`
    ("static assets"), or to a test of your own there, and run it:
 
    ```sh
    npx vitest run test/web/routes.test.ts -t "static assets"
+   ```
+
+## Build a page from the design system
+
+1. Read "Designing a new page" in `docs/design-system.md` and decide what
+   the page answers: where am I, what state is the hike in, what can I do
+   next. Decide its one primary action.
+2. Write the page from the shell, the layout classes and the components,
+   with no styles of its own. `width="overview"` is for lists and
+   dashboards; a page that does one job keeps the default task width:
+
+   ```tsx
+   /** The list of trails at `/trails`. */
+   import { Banner } from "../components/banner";
+   import { Button } from "../components/button";
+   import { Card } from "../components/card";
+   import { MapPinIcon } from "../components/icons";
+   import { Layout } from "../layout";
+
+   export function TrailsPage({ names }: { names: string[] }) {
+     return (
+       <Layout title="Trails · hikebot" width="overview">
+         <div class="stack stack--section">
+           <div class="page-heading">
+             <p class="page-heading__eyebrow">Location vote</p>
+             <h1>Trails</h1>
+             <p class="page-heading__lead">Every place proposed so far.</p>
+           </div>
+           {names.length === 0 && (
+             <Banner tone="info" title="No location has been proposed yet." />
+           )}
+           <ul class="grid list-reset">
+             {names.map((name) => (
+               <li key={name}>
+                 <Card title={name} />
+               </li>
+             ))}
+           </ul>
+           <div class="cluster">
+             <Button variant="primary" icon={MapPinIcon} href="/trails/new">
+               Propose a location
+             </Button>
+           </div>
+         </div>
+       </Layout>
+     );
+   }
+   ```
+
+3. If the page needs something no component offers, add a component
+   ("Add a component to the design system") rather than page CSS. Only a
+   layout used by this page alone goes in `public/assets/cairn/pages/<page>.css`,
+   with classes named `.<page>-<thing>`, imported by a line in
+   `public/assets/cairn/cairn.css` under the page styles, in alphabetical
+   order:
+
+   ```css
+   @import url("pages/trails.css") layer(components);
+   ```
+
+4. Register and test the page as "Add a page" says, then run the design
+   system's checks:
+
+   ```sh
+   npx vitest run test/web/token-use.test.ts test/web/size-budget.test.ts test/web/routes.test.ts
+   ```
+
+## Add a token
+
+1. Check the token tables in `docs/design-system.md` first: use an
+   existing role if one fits. Name a new token after its role, as the
+   others are named (`--color-warning` rather than `--color-amber`).
+2. Add it to `public/assets/cairn/tokens.css`, in its group in `:root`. A
+   colour also gets its dark value in the `prefers-color-scheme: dark`
+   block, in the same order:
+
+   ```css
+   --color-planned: #2f5d7c;
+   ```
+
+3. For a colour, add every pairing it may be drawn in to `PAIRINGS` in
+   `src/web/tokens.ts`, with its kind (`text`, `large-text` or
+   `non-text`), and add its two lines to the lists at the end of
+   `public/assets/cairn/pages/styleguide.css`:
+
+   ```css
+   .styleguide-sample[data-bg="color-planned"] {
+     background: var(--color-planned);
+   }
+   .styleguide-sample[data-fg="color-planned"] {
+     color: var(--color-planned);
+   }
+   ```
+
+4. Add a row for it to its table in `docs/design-system.md`, saying its
+   value in each scheme, its role and when to use it; a colour's pairings
+   go in "Allowed pairings".
+5. Run the checks. The contrast test names any pairing below its minimum,
+   in either scheme; change the value until it passes:
+
+   ```sh
+   npx vitest run test/web/contrast.test.ts test/web/token-use.test.ts test/web/routes.test.ts
+   ```
+
+6. Open `/styleguide` on the dev server ("Run the bot locally" in the root
+   `AGENTS.md`) and find the token under "Colour" and its pairings under
+   "Contrast".
+
+## Add a component to the design system
+
+Give the component four files of its own, one per job, and one line in
+each of three lists, in alphabetical order, one item per line, so that
+tasks adding different components at the same time edit different lines.
+Here the component is `pill`; use your component's name.
+
+1. Write the markup as a typed Preact component in
+   `src/web/components/pill.tsx`, with a comment at the top saying what it
+   is for and when to use it. Give it the classes `.pill`, `.pill__<part>`
+   and `.pill--<variant>`, take states from the platform (`disabled`,
+   `aria-current`, `aria-disabled`), and accept `preview?: Preview` (from
+   `button.tsx`) as `data-preview` if it is interactive, so the style guide
+   can show hover, active and focus:
+
+   ```tsx
+   /** Pill: a hike's state in a word, such as "Open" or "Decided". */
+   export type PillTone = "open" | "decided" | "cancelled";
+
+   export function Pill({
+     tone,
+     children,
+   }: {
+     tone: PillTone;
+     children: string;
+   }) {
+     return <span class={`pill pill--${tone}`}>{children}</span>;
+   }
+   ```
+
+2. Style it in `public/assets/cairn/components/pill.css`, with a comment at
+   the top, using tokens only (`var(--space-2)`, `var(--color-success)`),
+   and every state it has: `:hover` and `[data-preview="hover"]`,
+   `:active` and `[data-preview="active"]`, `:disabled` or
+   `[aria-disabled="true"]`. The focus ring comes from the base layer. Use
+   only pairings listed in "Allowed pairings" of `docs/design-system.md`,
+   or add the pairing as "Add a token" says. Then add its import to
+   `public/assets/cairn/cairn.css`, in alphabetical order among the
+   components:
+
+   ```css
+   @import url("components/pill.css") layer(components);
+   ```
+
+3. Test its rendered markup and its accessible name in
+   `test/web/components/pill.test.tsx`, with `render` and `spokenText`
+   from `test/web/components/render.ts`:
+
+   ```tsx
+   import { describe, expect, it } from "vitest";
+   import { Pill } from "../../../src/web/components/pill";
+   import { render, spokenText } from "./render";
+
+   describe("Pill", () => {
+     it("says the state in words", async () => {
+       const html = render(<Pill tone="decided">Decided</Pill>);
+       expect(html).toBe('<span class="pill pill--decided">Decided</span>');
+       expect(await spokenText(html)).toBe("Decided");
+     });
+   });
+   ```
+
+4. Show it in every variant and state in
+   `src/web/pages/styleguide/pill.tsx`, exporting a `StyleguideSection`
+   whose `id` is the component's name; `StateList` from `section.tsx` lays
+   out one example per state. Use the bot's words in the examples. Add the
+   section to `COMPONENTS` in `src/web/pages/styleguide.tsx`, in
+   alphabetical order:
+
+   ```tsx
+   import { pillSection } from "./styleguide/pill";
+
+     pillSection,
+   ```
+
+5. Add an entry for it to "Components" in `docs/design-system.md`, in
+   alphabetical order: its file, what it is for, its variants and states,
+   and its accessible name.
+6. Run the design system's checks and the component's test:
+
+   ```sh
+   npx vitest run test/web
+   ```
+
+7. Take the screenshots and review the style guide and every page that
+   uses the component, as "Take the screenshots" and "Review your own UI
+   change as a designer" say. Chromium repeats the top of a page past
+   16,384 pixels, so check that the style guide's phone screenshot is
+   shorter than that; this prints its width and height:
+
+   ```sh
+   node -e 'const b = require("fs").readFileSync(process.argv[1]); console.log(b.readUInt32BE(16), b.readUInt32BE(20))' docs/screenshots/styleguide--phone--light.png
+   ```
+
+   If it is taller, give your component a page of its own at
+   `/styleguide/<component>`, built like `StyleguidePage`, linked from the
+   style guide's index, with its own entry in the screenshot page list.
+
+## Add an icon
+
+1. Find the icon on lucide.dev and copy its shapes from the Lucide package
+   at the version named at the top of `src/web/components/icons.tsx`
+   (here `tent`):
+
+   ```sh
+   mkdir -p /tmp/lucide
+   npm pack lucide-static@1.75.0 --pack-destination /tmp/lucide
+   tar -xzf /tmp/lucide/lucide-static-1.75.0.tgz -C /tmp/lucide
+   grep -E "<(path|circle|line|rect|polyline|polygon|ellipse)" /tmp/lucide/package/icons/tent.svg
+   ```
+
+2. Add it to `src/web/components/icons.tsx` as a component named after
+   it, in alphabetical order, and to `ICONS` at the end of the file in the
+   same place:
+
+   ```tsx
+   export function TentIcon(props: IconProps) {
+     return (
+       <Icon {...props}>
+         <path d="M3.5 21 14 3" />
+         <path d="M20.5 21 10 3" />
+         <path d="M15.5 21 12 15l-3.5 6" />
+         <path d="M2 21h20" />
+       </Icon>
+     );
+   }
+   ```
+
+3. Run the icon tests; every icon in `ICONS` is checked for the shared
+   frame:
+
+   ```sh
+   npx vitest run test/web/components/icons.test.tsx
    ```
 
 ## Test a page
@@ -440,23 +690,32 @@ before marking the pull request ready.
    never seen it:
    - **Purpose and hierarchy.** Within a few seconds it is clear what the
      page is, what state the hike is in, and what the visitor can do next.
-     There is one primary action, and it looks like one.
+     There is one primary action, and it looks like one. ("Principles" and
+     "Designing a new page" in `docs/design-system.md`.)
    - **Consistency.** Headings, buttons, forms, spacing, colours and wording
-     look and behave like the existing pages and components.
+     look and behave like the existing pages and components, built from
+     Cairn's tokens and components. ("Tokens", "Components" and "Layout
+     rules" in `docs/design-system.md`; compare with `/styleguide`.)
    - **Every state.** Empty, error, success and disabled states, very long
      text (a 100-character location name) and many items (25 options) each
      look right. Add a page entry with a seed for each state that differs.
    - **Phone layout.** Nothing scrolls sideways at 390px, and every tap
-     target is at least 44px high and wide.
+     target is at least 44px high and wide. ("Layout rules" in
+     `docs/design-system.md`.)
    - **Accessibility.** Text contrast is at least 4.5:1 (3:1 for large
      text); focus is visible and moves in a sensible order; every control
      has a label; headings go in order without skipping a level; everything
      works from the keyboard alone; nothing is conveyed by colour alone;
-     motion stops under `prefers-reduced-motion`.
+     motion stops under `prefers-reduced-motion`. ("Accessibility rules" and
+     "Allowed pairings" in `docs/design-system.md`.)
    - **Wording.** Plain words, and the same words the bot uses in Discord
-     for the same things.
+     for the same things. ("Content rules" in `docs/design-system.md`.)
    - **Dark scheme.** Every colour, border, image and focus ring still
-     works on the dark background.
+     works on the dark background. ("Colour" in `docs/design-system.md`.)
+   - **Visual direction.** Hiking-themed through restraint: the blaze only
+     as a marker, contour lines only in the header or an empty state, no
+     photos, emoji, decorative gradients or shadows outside overlays.
+     ("Visual direction" in `docs/design-system.md`.)
 
    A screenshot does not show focus, keyboard order or motion: check those
    in a browser against the dev server ("Run the bot locally" in the root

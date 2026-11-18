@@ -11,8 +11,9 @@
  * Every run on the same commit writes the same bytes: each page gets a fresh
  * Worker with fixed seed data, the browser's clock is frozen, its time zone
  * and language are fixed, animations and transitions are off, the device
- * scale factor is 1, and fonts come from the browser package, never from
- * the machine.
+ * scale factor is 1, fonts come from the browser package, never from the
+ * machine, and the shot waits for the page's fonts and CSS images (such as
+ * the header's contour-line mask) to be ready.
  *
  * With `--check` it then prints the SHA-256 of each PNG, to compare with
  * another machine's without copying the files, and fails if any file in
@@ -197,6 +198,7 @@ async function capture(
     }
     await stopMotion(session);
     await page.evaluate("document.fonts.ready.then(() => undefined)");
+    await page.evaluate(CSS_IMAGES_READY);
     if (failures.length > 0) {
       throw new Error(
         `${entry.name} (${entry.path}) at ${viewport} ${scheme}:\n${failures.join("\n")}`,
@@ -271,6 +273,30 @@ const FREEZE_CLOCK = `(() => {
       property === "now" ? () => at : Reflect.get(target, property, receiver),
   });
 })();`;
+
+/**
+ * Resolves once every image the page's CSS uses (backgrounds and masks, on
+ * elements and their ::before and ::after) is decoded and a frame has been
+ * painted with them, so a shot never catches a mask that has not arrived.
+ * A string for the same reason as `FREEZE_CLOCK`.
+ */
+const CSS_IMAGES_READY = `(async () => {
+  const urls = new Set();
+  for (const element of document.querySelectorAll("*")) {
+    for (const pseudo of [null, "::before", "::after"]) {
+      const style = getComputedStyle(element, pseudo);
+      for (const value of [style.backgroundImage, style.maskImage, style.webkitMaskImage]) {
+        for (const match of (value || "").matchAll(/url\\("?([^")]+)"?\\)/g)) urls.add(match[1]);
+      }
+    }
+  }
+  await Promise.all([...urls].map((url) => {
+    const image = new Image();
+    image.src = url;
+    return image.decode().catch(() => undefined);
+  }));
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+})()`;
 
 main().catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : error);

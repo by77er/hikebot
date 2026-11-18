@@ -49,12 +49,23 @@
       "status": 400,
       "seed": "empty",
       "user": null
+    },
+    {
+      "name": "styleguide",
+      "path": "/styleguide",
+      "status": 200,
+      "seed": "empty",
+      "user": null
     }
   ],
   "excluded": [
     {
       "route": "/assets/*",
       "reason": "Static files such as the stylesheet, not pages; every page's screenshot shows them in use."
+    },
+    {
+      "route": "/assets/v/*",
+      "reason": "The same static files under the deployed version, cacheable for a year; every page's screenshot shows them in use."
     },
     {
       "route": "/healthz",

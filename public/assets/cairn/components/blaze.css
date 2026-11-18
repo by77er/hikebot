@@ -1,0 +1,21 @@
+/*
+ * Blaze: the small painted rectangle that marks a trail. It is the brand
+ * mark, and marks "you are here" and the winner; never decoration.
+ */
+
+.blaze {
+  display: inline-block;
+  flex: none;
+  width: var(--blaze-width);
+  height: var(--blaze-height);
+  border-radius: var(--radius-blaze);
+  background: var(--color-accent);
+  vertical-align: middle;
+}
+
+/* In forced colours the background is dropped; draw the mark as a border. */
+@media (forced-colors: active) {
+  .blaze {
+    border: calc(var(--blaze-width) / 2) solid;
+  }
+}
