@@ -52,19 +52,28 @@ On the printed line, replace the string of markup, the
 
 ```sh
 case "$FILE" in ./response.ts) export SKIP_TYPE=1 ;; *) export SKIP_TYPE= ;; esac
-perl -ne '
-  next if m{^\s*(//|/?\*)};
-  my $line = $_;
-  $line =~ s/<!doctype html>//gi;
-  my $why = "";
-  $why = "dangerouslySetInnerHTML or innerHTML" if $line =~ /dangerouslySetInnerHTML|\binnerHTML\b|\bouterHTML\b/;
-  $why = "a string of HTML markup" if !$why && $line =~ /["\x27`]\s*<\/?[a-zA-Z!][^"\x27`]*>/;
-  $why = "a text/html response built by hand" if !$why && !$ENV{SKIP_TYPE} && $line =~ /text\/html/;
-  if ($why) {
-    print "$ARGV:$.: $why; build the page with JSX and answer with htmlResponse (\"Add a page\" in src/web/AGENTS.md)\n";
-    $bad = 1;
+perl -0777 -ne '
+  my $text = $_;
+  my @found;
+  my $at = sub {
+    my ($pos, $why) = @_;
+    my $start = rindex($text, "\n", $pos) + 1;
+    my $end = index($text, "\n", $pos);
+    my $line = substr($text, $start, ($end < 0 ? length($text) : $end) - $start);
+    return if $line =~ m{^\s*(//|/?\*|\{/\*)};
+    push @found, [$pos, $why];
+  };
+  $text =~ s/<!doctype html>/               /gi;
+  $at->($-[0], "dangerouslySetInnerHTML or innerHTML") while $text =~ /dangerouslySetInnerHTML|\binnerHTML\b|\bouterHTML\b/g;
+  $at->($-[0], "a string of HTML markup") while $text =~ /["\x27`]\s*<\/?[a-zA-Z!][^"\x27`]*>/g;
+  if (!$ENV{SKIP_TYPE}) {
+    $at->($-[0], "a text/html response built by hand") while $text =~ /text\/html/g;
   }
-  END { exit($bad ? 1 : 0) }
+  for my $f (sort { $a->[0] <=> $b->[0] } @found) {
+    my $line = 1 + (substr($text, 0, $f->[0]) =~ tr/\n//);
+    print "$ARGV:$line: $f->[1]; build the page with JSX and answer with htmlResponse (\"Add a page\" in src/web/AGENTS.md)\n";
+  }
+  exit(@found ? 1 : 0);
 ' "$FILE"
 ```
 
@@ -104,18 +113,26 @@ route.
 ```
 
 ```sh
-perl -ne '
-  next if m{^\s*(//|/?\*|\{/\*)};
-  my $why = "";
-  $why = "an inline <script>" if /<script\b(?![^>]*\bsrc=)/;
-  $why = "a <style> element" if !$why && /<style\b/;
-  $why = "a style attribute" if !$why && /\sstyle=/;
-  $why = "an event attribute" if !$why && /\son[A-Z][A-Za-z]*=/;
-  if ($why) {
-    print "$ARGV:$.: $why; put styles in a stylesheet under public/assets/ and do the work on the server (\"Add a static asset\" in src/web/AGENTS.md)\n";
-    $bad = 1;
+perl -0777 -ne '
+  my $text = $_;
+  my @found;
+  my $at = sub {
+    my ($pos, $why) = @_;
+    my $start = rindex($text, "\n", $pos) + 1;
+    my $end = index($text, "\n", $pos);
+    my $line = substr($text, $start, ($end < 0 ? length($text) : $end) - $start);
+    return if $line =~ m{^\s*(//|/?\*|\{/\*)};
+    push @found, [$pos, $why];
+  };
+  $at->($-[0], "an inline <script>") while $text =~ /<script\b(?![^>]*\bsrc=)/g;
+  $at->($-[0], "a <style> element") while $text =~ /<style\b/g;
+  $at->($-[0], "a style attribute") while $text =~ /\sstyle=/g;
+  $at->($-[0], "an event attribute") while $text =~ /\son[a-z]+=/gi;
+  for my $f (sort { $a->[0] <=> $b->[0] } @found) {
+    my $line = 1 + (substr($text, 0, $f->[0]) =~ tr/\n//);
+    print "$ARGV:$line: $f->[1]; put styles in a stylesheet under public/assets/ and do the work on the server (\"Add a static asset\" in src/web/AGENTS.md)\n";
   }
-  END { exit($bad ? 1 : 0) }
+  exit(@found ? 1 : 0);
 ' "$FILE"
 ```
 
@@ -149,16 +166,28 @@ itself makes on the server.
 ```
 
 ```sh
-perl -ne '
-  next if m{^\s*(//|/?\*|\{/\*)};
-  my $line = $_;
-  $line =~ s{https://cdn\.discordapp\.com/}{}g if $line =~ /\b(src|srcSet|srcset)=/;
-  if ($line =~ /\b(src|srcSet|srcset|poster|action|formAction|data)=\{?["\x27`](https?:)?\/\//
-      || ($line =~ /<link\b/ && $line =~ /\bhref=\{?["\x27`](https?:)?\/\//)) {
-    print "$ARGV:$.: loads a file from another host; copy it into public/assets/ and link it by its path (\"Add a static asset\" in src/web/AGENTS.md)\n";
-    $bad = 1;
+perl -0777 -ne '
+  my $text = $_;
+  my @found;
+  my $at = sub {
+    my ($pos, $why) = @_;
+    my $start = rindex($text, "\n", $pos) + 1;
+    my $end = index($text, "\n", $pos);
+    my $line = substr($text, $start, ($end < 0 ? length($text) : $end) - $start);
+    return if $line =~ m{^\s*(//|/?\*|\{/\*)};
+    push @found, [$pos, $why];
+  };
+  while ($text =~ /\b(src|srcSet|srcset|poster|action|formAction|data)=\{?\s*["\x27`]((?:https?:)?\/\/[^"\x27`\s]*)/g) {
+    my ($pos, $attr, $url) = ($-[0], $1, $2);
+    next if $attr =~ /^src/i && $url =~ m{^https://cdn\.discordapp\.com/};
+    $at->($pos, "loads a file from another host");
   }
-  END { exit($bad ? 1 : 0) }
+  $at->($-[0], "loads a file from another host") while $text =~ /<link\b[^>]*?\K\bhref=\{?\s*["\x27`](https?:)?\/\//g;
+  for my $f (sort { $a->[0] <=> $b->[0] } @found) {
+    my $line = 1 + (substr($text, 0, $f->[0]) =~ tr/\n//);
+    print "$ARGV:$line: $f->[1]; copy it into public/assets/ and link it by its path (\"Add a static asset\" in src/web/AGENTS.md)\n";
+  }
+  exit(@found ? 1 : 0);
 ' "$FILE"
 ```
 

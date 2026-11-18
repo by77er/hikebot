@@ -106,7 +106,8 @@ Content-Security-Policy names) are not requests and pass.
 ```sh
 case "$FILE" in ./discord/api.ts) exit 0 ;; esac
 ! awk '
-  /discord(app)?\.com|DISCORD_API_BASE/ && !/discord(app)?\.com\/(channels|developers)\// && !/https:\/\/cdn\.discordapp\.com([^A-Za-z0-9.-]|$)/ { hit = 1 }
+  { line = $0; gsub(/https:\/\/cdn\.discordapp\.com([^A-Za-z0-9.-]|$)/, "", line) }
+  line ~ /discord(app)?\.com|DISCORD_API_BASE/ && line !~ /discord(app)?\.com\/(channels|developers)\// { hit = 1 }
   /(^|[^A-Za-z0-9_$])fetch[[:space:]]*\(/ && !/^[[:space:]]*(async[[:space:]]+)?fetch[[:space:]]*\([^)]*\)[[:space:]]*(:[^=]*)?\{/ && tolower($0) ~ /discord|\/webhooks\/|\/channels\/|\/guilds\/|\/applications\/|\/interactions\// { hit = 1 }
   hit { print FILENAME ":" FNR ": requests Discord outside DiscordApi; call a DiscordApi method instead, adding it to src/discord/api.ts first if it is missing (see src/discord/AGENTS.md): " $0; bad = 1; hit = 0 }
   END { exit !bad }
