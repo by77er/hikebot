@@ -214,6 +214,11 @@
   );
 }
 
+/* Items of a grid are as tall as the tallest in their row. */
+.grid > li {
+  display: grid;
+}
+
 /* The page heading block: an eyebrow, the h1 and a lead paragraph. */
 .page-heading {
   display: flex;

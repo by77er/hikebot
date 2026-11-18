@@ -9,7 +9,7 @@ function BlazeSection() {
       title="Blaze"
       intro="The painted mark on a tree that shows the trail. It is the brand mark and marks “you are here” and the winner, always next to words that say the same."
     >
-      <ul class="cluster">
+      <ul class="cluster list-reset">
         <li class="cluster">
           <Blaze /> hikebot
         </li>

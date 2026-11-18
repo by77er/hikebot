@@ -21,7 +21,8 @@ function BannerSection() {
           You can change your vote until then.
         </Banner>
         <Banner tone="danger" title="This round was cancelled.">
-          <a href="/styleguide#banner">See past hikes</a>
+          The next one starts when an organiser opens a vote, or{" "}
+          <a href="/styleguide#banner">see past hikes</a>.
         </Banner>
       </div>
     </Section>
