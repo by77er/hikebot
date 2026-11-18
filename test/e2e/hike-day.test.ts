@@ -5,7 +5,13 @@ import {
   messageText,
   waitForMessage,
 } from "./harness/helpers";
-import { ROUND_IDS, RoundPlayer } from "./harness/rounds";
+import {
+  buttonLabels,
+  idStarting,
+  ROUND_IDS,
+  RoundPlayer,
+  type TestGuild,
+} from "./harness/rounds";
 import { useE2E } from "./harness/worker";
 
 const e2e = useE2E();
@@ -44,22 +50,37 @@ function noonZone(): { zone: string; today: string; weekday: string } {
   };
 }
 
+/**
+ * Plays a round in `g` up to an open date vote that 23:00 today wins, in a
+ * zone where it is about noon now, and returns the panel and the zone.
+ */
+async function upToTodaysDateVote(g: TestGuild) {
+  const [ana] = g.members as [Member];
+  const { zone, today, weekday } = noonZone();
+  const panel = await play.setUpPanel(g);
+  await play.setTimezone(g, panel, zone, zone);
+  const where = await play.startLocationVote(g, panel, "Lake Loop");
+  await play.vote(ana, where, ["Lake Loop"]);
+  await play.closeVote(g.owner, panel, "location vote");
+  const when = await play.startDateVote(
+    g,
+    panel,
+    [`${today} 23:00`, `${today} 23:30`].join("\n"),
+  );
+  await play.vote(ana, when, [`${weekday} · 23:00`]);
+  return { panel, zone };
+}
+
+function hikeDays(g: TestGuild) {
+  return e2e.discord
+    .channelMessages(g.channels.news)
+    .filter((m) => messageText(m).includes("## Hike today"));
+}
+
 describe("the hike-day announcement", () => {
   it("is posted once, at once, for a hike decided on its own day that has not started", async () => {
     const g = play.guild(1);
-    const [ana] = g.members as [Member];
-    const { zone, today, weekday } = noonZone();
-    const panel = await play.setUpPanel(g);
-    await play.setTimezone(g, panel, zone, zone);
-    const where = await play.startLocationVote(g, panel, "Lake Loop");
-    await play.vote(ana, where, ["Lake Loop"]);
-    await play.closeVote(g.owner, panel, "location vote");
-    const when = await play.startDateVote(
-      g,
-      panel,
-      [`${today} 23:00`, `${today} 23:30`].join("\n"),
-    );
-    await play.vote(ana, when, [`${weekday} · 23:00`]);
+    const { panel, zone } = await upToTodaysDateVote(g);
     await play.closeVote(g.owner, panel, "date vote");
 
     const announcement = await waitForMessage(
@@ -103,10 +124,45 @@ describe("the hike-day announcement", () => {
         `**Hike-day announcement:** posted in <#${g.channels.news}>.`,
       );
     });
-    expect(
-      e2e.discord
-        .channelMessages(g.channels.news)
-        .filter((m) => messageText(m).includes("## Hike today")),
-    ).toHaveLength(1);
+    expect(hikeDays(g)).toHaveLength(1);
+  });
+
+  it("is posted once from the panel after Discord refused it, even when the retry is clicked twice", async () => {
+    const g = play.guild(2);
+    const { panel } = await upToTodaysDateVote(g);
+    await play.closeVote(g.owner, panel, "date vote");
+    // The result is announced at once; the hike-day post follows seconds
+    // later, when the bot can no longer post in the channel.
+    await waitForMessage(e2e.discord, g.channels.news, (m) =>
+      messageText(m).includes("## Hike planned"),
+    );
+    e2e.discord.failChannel(g.channels.news, "missing-permissions");
+    await eventually(
+      async () => {
+        await g.owner.click(panel, ROUND_IDS.refresh);
+        expect(messageText(play.shown(panel))).toContain(
+          `**Hike-day announcement:** not posted. Could not post the hike-day announcement in <#${g.channels.news}>: Discord answered: Missing Permissions (HTTP 403, code 50013). Check that the bot can post there, then click Post hike-day announcement.`,
+        );
+      },
+      { timeout: 20_000 },
+    );
+    expect(buttonLabels(play.shown(panel))).toContain(
+      "Post hike-day announcement",
+    );
+    expect(hikeDays(g)).toEqual([]);
+
+    e2e.discord.clearChannelFailure(g.channels.news);
+    const id = idStarting(play.shown(panel), "hb:hike-day:post:");
+    await Promise.all([g.owner.click(panel, id), g.owner.click(panel, id)]);
+    await eventually(async () => {
+      await g.owner.click(panel, ROUND_IDS.refresh);
+      expect(messageText(play.shown(panel))).toContain(
+        `**Hike-day announcement:** posted in <#${g.channels.news}>.`,
+      );
+    });
+    expect(hikeDays(g)).toHaveLength(1);
+    expect(buttonLabels(play.shown(panel))).not.toContain(
+      "Post hike-day announcement",
+    );
   });
 });
