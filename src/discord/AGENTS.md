@@ -109,8 +109,9 @@
 
 1. When Discord answers a read with 404 as its "no" (Get Guild Member for
    a user who is not a member, code 10007), catch `DiscordApiError` and
-   check `status` (and `code` when one 404 is not like another). Treat only that answer as "no"; report every other
-   error as a failure, never as "no" or "yes":
+   check `status` (and `code` when one 404 is not like another). Treat
+   only that answer as "no"; report every other error as a failure, never
+   as "no" or "yes":
 
    ```ts
    try {
