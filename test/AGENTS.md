@@ -258,7 +258,8 @@ Run `npm test` for the whole suite before opening a pull request.
    ```
 
 5. Fix the cause in your checkout, delete the scratch worktree, commit the
-   fix, and run step 2 again from your checkout; no run may fail:
+   fix, and run step 2 again from your checkout, checking that no run
+   fails:
 
    ```sh
    git worktree remove --force ~/hikebot-flake
