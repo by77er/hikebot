@@ -1,6 +1,8 @@
+import { DEFAULT_TIMEZONE } from "../polls/dates";
+
 /**
  * The guild's settings, one row in the `guild_settings` table of its
- * GuildHike database. Every value is null until it is set.
+ * GuildHike database. Every value but `timezone` is null until it is set.
  */
 export interface GuildSettings {
   /** Members with this role may use the admin panel, besides the owner. */
@@ -15,6 +17,11 @@ export interface GuildSettings {
   ownerId: string | null;
   /** When `ownerId` was fetched, in milliseconds since the epoch. */
   ownerFetchedAt: number | null;
+  /**
+   * The IANA time zone hikes are planned in: the one an admin set, or
+   * `DEFAULT_TIMEZONE` until then.
+   */
+  timezone: string;
 }
 
 /** The settings an admin picks in the panel. */
@@ -35,6 +42,7 @@ interface Row extends Record<string, SqlStorageValue> {
   forum_channel_id: string | null;
   owner_id: string | null;
   owner_fetched_at: number | null;
+  timezone: string | null;
 }
 
 /**
@@ -57,7 +65,7 @@ export class GuildConfig {
     const row = this.storage.sql
       .exec<Row>(
         `SELECT admin_role_id, vote_channel_id, announce_channel_id,
-           forum_channel_id, owner_id, owner_fetched_at
+           forum_channel_id, owner_id, owner_fetched_at, timezone
          FROM guild_settings WHERE id = 1`,
       )
       .one();
@@ -68,6 +76,7 @@ export class GuildConfig {
       forumChannelId: row.forum_channel_id,
       ownerId: row.owner_id,
       ownerFetchedAt: row.owner_fetched_at,
+      timezone: row.timezone ?? DEFAULT_TIMEZONE,
     };
   }
 
@@ -76,6 +85,18 @@ export class GuildConfig {
     this.storage.sql.exec(
       `UPDATE guild_settings SET ${COLUMNS[field]} = ? WHERE id = 1`,
       value,
+    );
+    return this.get();
+  }
+
+  /**
+   * Sets the time zone, an IANA name the caller has checked with
+   * `normalizeTimeZone`. Returns the settings after the change.
+   */
+  setTimezone(timezone: string): GuildSettings {
+    this.storage.sql.exec(
+      "UPDATE guild_settings SET timezone = ? WHERE id = 1",
+      timezone,
     );
     return this.get();
   }

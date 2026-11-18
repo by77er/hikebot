@@ -83,6 +83,11 @@ export const migrations: readonly Migration[] = [
       INSERT INTO guild_settings (id) VALUES (1);
     `,
   },
+  {
+    // An IANA time zone name; null means the default, America/Los_Angeles.
+    name: "0003_guild_timezone",
+    sql: "ALTER TABLE guild_settings ADD COLUMN timezone TEXT",
+  },
 ];
 
 /**
