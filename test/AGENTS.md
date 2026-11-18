@@ -219,6 +219,15 @@ Run `npm test` for the whole suite before opening a pull request.
    gh run download <run-id> --dir ~/flake-ci
    ```
 
+   If the log comes back empty or the download is refused, read the failed
+   tests from the annotation of the rule "The tests pass", which lists the
+   `FAIL` lines; take the job id from the run's jobs:
+
+   ```sh
+   gh api repos/by77er/hikebot/actions/runs/<run-id>/jobs --jq '.jobs[] | select(.conclusion=="failure") | .id'
+   gh api repos/by77er/hikebot/check-runs/<job-id>/annotations --jq '.[] | select(.title=="The tests pass") | .message' | grep FAIL
+   ```
+
 2. Run `npm test` 15 times in a row, then 15 times with every CPU kept busy,
    keeping each run's full output in a directory outside the checkout. Each
    failed run prints its number:
