@@ -1,0 +1,28 @@
+{
+  "pages": [
+    {
+      "name": "home",
+      "path": "/",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "not-found",
+      "path": "/no-such-page",
+      "status": 404,
+      "seed": "empty",
+      "user": null
+    }
+  ],
+  "excluded": [
+    {
+      "route": "/assets/*",
+      "reason": "Static files such as the stylesheet, not pages; every page's screenshot shows them in use."
+    },
+    {
+      "route": "/healthz",
+      "reason": "The plain-text health line for deploy checks and monitoring, not a page."
+    }
+  ]
+}

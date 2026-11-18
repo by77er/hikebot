@@ -6,7 +6,8 @@
  * also answers `HEAD`, with the same status and headers and no body. A path
  * with no route gets the `notFound` response; a path whose route lacks the
  * method gets the `methodNotAllowed` response, with `Allow` listing the
- * methods it has.
+ * methods it has. `paths` lists the routes of a method, so a test can check
+ * that every page has screenshots.
  */
 
 export type WebHandler = (
@@ -47,6 +48,13 @@ export class WebRouter {
     methods.set(method, handler);
     this.routes.set(path, methods);
     return this;
+  }
+
+  /** The paths with a route for `method`, in the order they were added. */
+  paths(method: WebMethod): string[] {
+    return [...this.routes]
+      .filter(([, methods]) => methods.has(method))
+      .map(([path]) => path);
   }
 
   async handle(

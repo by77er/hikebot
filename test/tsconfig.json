@@ -9,5 +9,5 @@
     "../src",
     "../worker-configuration.d.ts"
   ],
-  "exclude": ["./e2e"]
+  "exclude": ["./e2e", "./screenshots"]
 }

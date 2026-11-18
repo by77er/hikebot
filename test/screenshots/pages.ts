@@ -1,0 +1,66 @@
+/**
+ * The page list in `pages.json`: every page `npm run screenshots` takes,
+ * with the seeded state and signed-in user it needs, and the GET routes that
+ * are not pages, each with the reason. The coverage test in
+ * `test/web/screenshot-pages.test.ts` checks it against the web router.
+ */
+import { readFileSync } from "node:fs";
+
+export interface ScreenshotPage {
+  /** Lower-case words joined by single hyphens; names the PNG files. */
+  name: string;
+  /** The path the browser opens, such as `/` or `/no-such-page`. */
+  path: string;
+  /** The HTTP status the page must answer with. */
+  status: number;
+  /** A key of `SEEDS` in `seeds.ts`: the data the Worker holds first. */
+  seed: string;
+  /** The member signed in when the page is opened, or null for nobody. */
+  user: string | null;
+}
+
+export interface ExcludedRoute {
+  route: string;
+  reason: string;
+}
+
+export interface PageList {
+  pages: ScreenshotPage[];
+  excluded: ExcludedRoute[];
+}
+
+export const PAGES_FILE = new URL("./pages.json", import.meta.url);
+
+export function readPageList(): PageList {
+  return JSON.parse(readFileSync(PAGES_FILE, "utf8")) as PageList;
+}
+
+export const VIEWPORTS = {
+  phone: { width: 390, height: 844, isMobile: true, hasTouch: true },
+  desktop: { width: 1280, height: 800, isMobile: false, hasTouch: false },
+} as const;
+
+export const SCHEMES = ["light", "dark"] as const;
+
+export type ViewportName = keyof typeof VIEWPORTS;
+export type Scheme = (typeof SCHEMES)[number];
+
+/** `<page>--<viewport>--<scheme>.png`, as in `docs/screenshots/`. */
+export function screenshotFile(
+  page: string,
+  viewport: ViewportName,
+  scheme: Scheme,
+): string {
+  return `${page}--${viewport}--${scheme}.png`;
+}
+
+/** Every file the page list produces, sorted. */
+export function screenshotFiles(list: PageList): string[] {
+  return list.pages
+    .flatMap((page) =>
+      (Object.keys(VIEWPORTS) as ViewportName[]).flatMap((viewport) =>
+        SCHEMES.map((scheme) => screenshotFile(page.name, viewport, scheme)),
+      ),
+    )
+    .sort();
+}
