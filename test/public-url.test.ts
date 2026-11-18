@@ -32,12 +32,19 @@ describe("absoluteUrl", () => {
     );
   });
 
-  it.each(["calendar", "//evil.example/x", "https://evil.example/", ""])(
-    "refuses %j, which is not a path from the root",
-    (path) => {
-      expect(() =>
-        absoluteUrl({ PUBLIC_URL: "https://hiking.bitcru.sh" }, path),
-      ).toThrow(/single "\/"/);
-    },
-  );
+  it.each([
+    "calendar",
+    "//evil.example/x",
+    "https://evil.example/",
+    "",
+    "/\\evil.example/x",
+    "/\t/evil.example/x",
+    "/\n/evil.example",
+    "/\r/evil.example",
+    "/a\u0000b",
+  ])("refuses %j, which is not a path from the root", (path) => {
+    expect(() =>
+      absoluteUrl({ PUBLIC_URL: "https://hiking.bitcru.sh" }, path),
+    ).toThrow(/single "\/"/);
+  });
 });
