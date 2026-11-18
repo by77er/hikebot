@@ -178,6 +178,39 @@ Run `npm test` for the whole suite before opening a pull request.
    `src/polls/AGENTS.md` describes.
 6. Run the file: `npx vitest run test/<dir>/<file>.test.ts`.
 
+## Test a Durable Object alarm
+
+1. Do what sets the alarm, for example send a vote through the Worker, with
+   `fetch` replaced by a spy as "Test a follow-up job" says. Check that the
+   alarm is set and that nothing was sent yet:
+
+   ```ts
+   import { runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
+
+   const stub = env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName("<guild id>"));
+   expect(
+     await runInDurableObject(stub, (_instance, state) =>
+       state.storage.getAlarm(),
+     ),
+   ).not.toBeNull();
+   expect(fetchSpy).not.toHaveBeenCalled();
+   ```
+
+2. Run the alarm at once instead of waiting for it. `runDurableObjectAlarm`
+   returns true if an alarm was set and ran, false if none was set:
+
+   ```ts
+   expect(await runDurableObjectAlarm(stub)).toBe(true);
+   expect(fetchSpy).toHaveBeenCalledTimes(1);
+   expect(await runDurableObjectAlarm(stub)).toBe(false);
+   ```
+
+3. Run the file: `npx vitest run test/features/poll-ui.test.ts -t "debounced refresh"`.
+
+In an end-to-end scenario the alarm fires on its own a few seconds later;
+wait for what it changes with `eventually` or `waitForMessage`, as "Write an
+end-to-end scenario" says.
+
 ## Run the end-to-end suite
 
 1. Run the suite, with or without a `.dev.vars` in the checkout. It needs no
