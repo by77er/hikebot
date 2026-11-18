@@ -2,7 +2,9 @@
  * Harness self-tests that need the bot to keep state and call Discord. They
  * run the probe Worker (`test/e2e/probe/worker.ts`): the real Worker and
  * `GuildHike` with one extra `/e2e-probe` command whose follow-ups call the
- * fake through the real `DiscordApi`.
+ * fake through the real `DiscordApi`. The last block checks that the probe
+ * Worker, too, gets the harness's secrets whatever `.dev.vars` or `.env`
+ * holds.
  */
 import { describe, expect, it } from "vitest";
 import { messageText, waitForOriginalResponse } from "./harness/helpers";
@@ -12,6 +14,10 @@ import {
   type Actor,
   type Interaction,
 } from "./harness/interactions";
+import {
+  itGetsTheHarnessSecrets,
+  useCheckoutWithOtherSecrets,
+} from "./harness/local-secrets";
 import { BOT_TOKEN, useE2E } from "./harness/worker";
 
 const e2e = useE2E({ probe: true });
@@ -148,3 +154,11 @@ describe("the bot's REST client against the fake Discord API", () => {
     expect(await probeOutcome(actor, "owner")).toBe("Owner 410000000000000777");
   });
 });
+
+describe.each([".dev.vars", ".env"])(
+  "the probe Worker with other values in %s and the environment",
+  (secretsFile) => {
+    const root = useCheckoutWithOtherSecrets(secretsFile);
+    itGetsTheHarnessSecrets(useE2E({ probe: true, root }));
+  },
+);
