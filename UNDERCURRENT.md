@@ -226,8 +226,9 @@ let text = "";
 process.stdin.on("data", (chunk) => (text += chunk)).on("end", () => {
   const options = JSON.parse(text).compilerOptions ?? {};
   const family = ["noImplicitAny", "strictNullChecks", "strictFunctionTypes", "strictBindCallApply", "strictPropertyInitialization", "strictBuiltinIteratorReturn", "noImplicitThis", "useUnknownInCatchVariables", "alwaysStrict"];
-  const problems = family.filter((name) => options[name] === false).map((name) => `"${name}": false`);
-  if (options.strict !== true) problems.unshift(`"strict" is not true`);
+  const problems = options.strict === true
+    ? family.filter((name) => options[name] === false).map((name) => `"${name}": false`)
+    : [`"strict" is not true`];
   if (problems.length > 0) {
     console.error(`${process.env.FILE}: ${problems.join(", ")}. Set "strict": true, remove the options that turn part of it off, and fix the type errors tsc reports instead.`);
     process.exit(1);
