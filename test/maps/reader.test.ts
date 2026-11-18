@@ -237,6 +237,39 @@ describe("MapReader.tile", () => {
     expect(await map.attribution()).toBe("© Second");
   });
 
+  it("reads the manifest again after a failed read, keeping the last one meanwhile", async () => {
+    await putSample("builds/test/region.pmtiles");
+    await putManifest(manifestOf([sampleArchive()]));
+    let failing = false;
+    const bucket = {
+      get: (key: string, options?: R2GetOptions) =>
+        failing
+          ? Promise.reject(new Error("R2 is unavailable"))
+          : env.MAPS.get(key, options),
+    } as unknown as R2Bucket;
+    const clock = manualClock();
+    const map = reader(bucket, clock.now);
+    expect(await map.attribution()).toBe(SAMPLE.attribution);
+
+    failing = true;
+    clock.advance(MANIFEST_TTL_MS);
+    expect(await map.attribution()).toBe(SAMPLE.attribution);
+
+    failing = false;
+    await putManifest(manifestOf([sampleArchive()], { attribution: "© New" }));
+    clock.advance(1);
+    expect(await map.attribution()).toBe("© New");
+  });
+
+  it("returns nothing when the bucket cannot be read", async () => {
+    const bucket = {
+      get: () => Promise.reject(new Error("R2 is unavailable")),
+    } as unknown as R2Bucket;
+    const { z, x, y } = tileAt(lon, lat, SAMPLE.maxzoom);
+
+    expect(await reader(bucket).tile(z, x, y)).toBeUndefined();
+  });
+
   it("never keeps the manifest longer than five minutes", async () => {
     const clock = manualClock();
     const map = new MapReader(env.MAPS, {

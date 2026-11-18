@@ -130,7 +130,10 @@ export class MapReader {
     if (this.manifest && at - this.manifest.readAt < this.manifestTtlMs) {
       return this.manifest.value;
     }
-    const value = await this.readManifest();
+    const read = await this.readManifest();
+    // A failed read keeps what was there; the next call tries again.
+    if (!read.ok) return this.manifest?.value;
+    const { value } = read;
     this.manifest = { value, readAt: at };
     const keys = new Set(value?.archives.map((archive) => archive.key));
     for (const [key, archive] of this.archives) {
@@ -141,15 +144,21 @@ export class MapReader {
     return value;
   }
 
-  private async readManifest(): Promise<MapManifest | undefined> {
+  /** `ok` is false when the bucket could not be read at all. */
+  private async readManifest(): Promise<
+    { ok: true; value: MapManifest | undefined } | { ok: false }
+  > {
     try {
       const object = await this.bucket.get(MANIFEST_KEY);
-      return object ? parseManifest(await object.text()) : undefined;
+      return {
+        ok: true,
+        value: object ? parseManifest(await object.text()) : undefined,
+      };
     } catch (error) {
       console.warn(
         `map manifest unreadable: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return undefined;
+      return { ok: false };
     }
   }
 }
