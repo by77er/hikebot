@@ -1,0 +1,276 @@
+import { runInDurableObject } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import {
+  ComponentType,
+  InteractionResponseType,
+  type APIMessageComponentInteraction,
+} from "discord-api-types/v10";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { POLL_IDS } from "../../src/features/poll-ui";
+import { GuildConfig } from "../../src/guild/config";
+import type { WebView } from "../../src/guild/web-view";
+import { PollStore, type PollView } from "../../src/polls/store";
+import {
+  callWorker,
+  componentInteraction,
+  createSigner,
+  signedRequest,
+  type Signer,
+} from "../helpers";
+import { discordFetch, type DiscordGuild } from "../guild/web-view-helpers";
+
+const OWNER = "400000000000000001";
+const ANA = "400000000000000002";
+const BEN = "400000000000000003";
+const VOTE = "300000000000000001";
+const NEWS = "300000000000000002";
+const FORUM = "300000000000000003";
+const MESSAGE = "700000000000000001";
+
+let signer: Signer;
+beforeAll(async () => {
+  signer = await createSigner();
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+let counter = 0;
+
+/** A fresh guild with its channels set, and Discord answering for it. */
+async function setUp() {
+  counter++;
+  const guildId = `20000000000000${String(2000 + counter)}`;
+  const guild: DiscordGuild = {
+    id: guildId,
+    ownerId: OWNER,
+    members: { [OWNER]: [], [ANA]: [], [BEN]: [] },
+    channels: { [VOTE]: "votes", [NEWS]: "news", [FORUM]: "hikes" },
+  };
+  vi.spyOn(globalThis, "fetch").mockImplementation(discordFetch(guild));
+  const stub = env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(guildId));
+  await runInDurableObject(stub, (_instance, state) => {
+    const config = new GuildConfig(state.storage);
+    config.set("voteChannelId", VOTE);
+    config.set("announceChannelId", NEWS);
+    config.set("forumChannelId", FORUM);
+  });
+  /** Runs `body` on the guild's poll store. */
+  const store = <T>(body: (store: PollStore) => T) =>
+    runInDurableObject(stub, (_instance, state) =>
+      body(new PollStore(state.storage)),
+    );
+  /** The view `userId` gets. */
+  const view = async (userId: string): Promise<WebView> => {
+    const result = await stub.webView({ guildId, userId });
+    if (result.kind !== "view") throw new Error(`no view: ${result.kind}`);
+    return result.view;
+  };
+  /** `userId` picks `labels` in the poll's Vote select, through the Worker. */
+  const vote = async (poll: PollView, userId: string, labels: string[]) => {
+    const values = labels.map((label) =>
+      String(poll.options.find((o) => o.label === label)?.id),
+    );
+    const response = await callWorker(
+      signer,
+      await signedRequest(signer, choose(guildId, poll, userId, values)),
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json<{ type: number }>()).type).toBe(
+      InteractionResponseType.UpdateMessage,
+    );
+  };
+  return { guildId, store, view, vote };
+}
+
+/** The Vote select's submit, listing every option of `poll`. */
+function choose(
+  guildId: string,
+  poll: PollView,
+  userId: string,
+  values: string[],
+): APIMessageComponentInteraction {
+  const interaction = componentInteraction(POLL_IDS.choose(poll.id), guildId);
+  Object.assign(interaction, {
+    member: { user: { id: userId }, roles: [] },
+    message: {
+      id: "800000000000000001",
+      components: [
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.StringSelect,
+              custom_id: POLL_IDS.choose(poll.id),
+              options: poll.options.map((o) => ({
+                label: o.label,
+                value: String(o.id),
+              })),
+            },
+          ],
+        },
+      ],
+    },
+  });
+  Object.assign(interaction.data, {
+    component_type: ComponentType.StringSelect,
+    values,
+  });
+  return interaction;
+}
+
+/** Starts a location vote on `labels`, its message posted. */
+function startLocationVote(store: PollStore, labels: string[]): PollView {
+  const round = store.startRound(
+    OWNER,
+    labels.map((label) => ({ label, proposedBy: OWNER })),
+  );
+  const id = round.locationPoll?.id ?? 0;
+  store.setPollMessage(id, VOTE, MESSAGE);
+  return store.getPoll(id) as PollView;
+}
+
+describe("the web view's round", () => {
+  it("is null with no round, as is the planned hike, and the log is empty", async () => {
+    const g = await setUp();
+    const view = await g.view(ANA);
+    expect(view.round).toBeNull();
+    expect(view.plannedHike).toBeNull();
+    expect(view.log).toEqual({
+      entries: [],
+      page: 1,
+      pageSize: 10,
+      pages: 1,
+      total: 0,
+    });
+  });
+
+  it("shows an open location vote with the counts and each viewer's own votes", async () => {
+    const g = await setUp();
+    const poll = await g.store((s) =>
+      startLocationVote(s, ["Ridge", "Lake", "Canyon"]),
+    );
+    await g.vote(poll, ANA, ["Lake", "Canyon"]);
+    await g.vote(poll, OWNER, ["Lake"]);
+
+    const ana = await g.view(ANA);
+    const ids = Object.fromEntries(poll.options.map((o) => [o.label, o.id]));
+    expect(ana.round).toEqual({
+      roundId: poll.roundId,
+      step: "location_vote_open",
+      location: null,
+      vote: {
+        pollId: poll.id,
+        kind: "location",
+        options: [
+          {
+            optionId: ids.Lake,
+            label: "Lake",
+            details: null,
+            dateValue: null,
+            proposedBy: OWNER,
+            votes: 2,
+            viewerVoted: true,
+          },
+          {
+            optionId: ids.Canyon,
+            label: "Canyon",
+            details: null,
+            dateValue: null,
+            proposedBy: OWNER,
+            votes: 1,
+            viewerVoted: true,
+          },
+          {
+            optionId: ids.Ridge,
+            label: "Ridge",
+            details: null,
+            dateValue: null,
+            proposedBy: OWNER,
+            votes: 0,
+            viewerVoted: false,
+          },
+        ],
+        voterCount: 2,
+        closesAt: null,
+        messageUrl: `https://discord.com/channels/${g.guildId}/${VOTE}/${MESSAGE}`,
+      },
+    });
+
+    const ben = await g.view(BEN);
+    expect(
+      ben.round?.vote?.options.map((o) => [o.label, o.votes, o.viewerVoted]),
+    ).toEqual([
+      ["Lake", 2, false],
+      ["Canyon", 1, false],
+      ["Ridge", 0, false],
+    ]);
+    expect(ben.round?.vote?.voterCount).toBe(2);
+  });
+
+  it("has no message link before the poll's message is posted", async () => {
+    const g = await setUp();
+    await g.store((s) =>
+      s.startRound(OWNER, [{ label: "Ridge", proposedBy: OWNER }]),
+    );
+    expect((await g.view(ANA)).round?.vote?.messageUrl).toBeNull();
+  });
+
+  it("shows the decided location once the location vote closes", async () => {
+    const g = await setUp();
+    const poll = await g.store((s) => startLocationVote(s, ["Ridge", "Lake"]));
+    await g.vote(poll, ANA, ["Lake"]);
+    await g.store((s) => s.closePoll(poll.id, OWNER));
+    expect((await g.view(ANA)).round).toEqual({
+      roundId: poll.roundId,
+      step: "location_decided",
+      location: { label: "Lake", details: null },
+      vote: null,
+    });
+  });
+
+  it("shows an open date vote in date order, with the decided location", async () => {
+    const g = await setUp();
+    const where = await g.store((s) => startLocationVote(s, ["Lake"]));
+    const when = await g.store((s) => {
+      s.closePoll(where.id, OWNER);
+      const poll = s.startDatePoll(where.roundId, OWNER, [
+        "2030-06-15",
+        "2030-06-08 09:00",
+        "2030-06-22",
+      ]);
+      s.setPollMessage(poll.id, VOTE, "700000000000000002");
+      return s.getPoll(poll.id) as PollView;
+    });
+    await g.vote(when, ANA, ["Sat, 15 Jun 2030 · 11:00"]);
+    await g.vote(when, BEN, [
+      "Sat, 15 Jun 2030 · 11:00",
+      "Sat, 22 Jun 2030 · 11:00",
+    ]);
+
+    const round = (await g.view(ANA)).round;
+    expect(round).toMatchObject({
+      step: "date_vote_open",
+      location: { label: "Lake", details: null },
+      vote: {
+        pollId: when.id,
+        kind: "date",
+        voterCount: 2,
+        closesAt: null,
+        messageUrl: `https://discord.com/channels/${g.guildId}/${VOTE}/700000000000000002`,
+      },
+    });
+    expect(
+      round?.vote?.options.map((o) => [
+        o.dateValue,
+        o.label,
+        o.votes,
+        o.viewerVoted,
+      ]),
+    ).toEqual([
+      ["2030-06-08 09:00", "Sat, 8 Jun 2030 · 09:00", 0, false],
+      ["2030-06-15 11:00", "Sat, 15 Jun 2030 · 11:00", 2, true],
+      ["2030-06-22 11:00", "Sat, 22 Jun 2030 · 11:00", 1, false],
+    ]);
+  });
+});

@@ -321,3 +321,69 @@ must survive a restart of the object. It runs from the object's alarm.
    npx vitest run test/guild/schema.test.ts
    npm test
    ```
+
+## Add a field to the web view
+
+The example adds the trail's distance to the planned hike; use your field,
+section and test file.
+
+1. Find the function that builds the section, and the file it is in:
+
+   ```sh
+   grep -n "Section(source)" src/guild/web-view.ts
+   grep -rn "export function .*Section(" src/guild src/features
+   ```
+
+2. In that file, add the field to the section's interface, with a comment
+   saying what it is and what `null` means. Use plain data only (strings,
+   numbers, booleans, `null`, arrays and plain objects): the view crosses
+   the Durable Object RPC boundary and must survive `structuredClone`.
+
+   ```ts
+   export interface WebPlannedHike {
+     // ...
+     /** The trail's length in kilometres, null when nobody gave one. */
+     distanceKm: number | null;
+   }
+   ```
+
+3. Fill it in the builder from the `source` argument: `source.store` (the
+   `PollStore`), `source.storage` for a feature's own reader,
+   `source.settings`, `source.now`. Read through the store or the feature's
+   existing function, never with SQL of your own; if no reader exists, add
+   one to the store first ("Add a column or table for polls" in
+   `src/polls/AGENTS.md`). The read writes nothing.
+
+   ```ts
+   distanceKm: trailDistance(source.storage, hike.roundId),
+   ```
+
+4. In the section's test file (`test/features/planned-hike-section.test.ts`
+   here; `test/features/round-section.test.ts`,
+   `test/features/hike-log.test.ts` or `test/guild/web-view.test.ts` for the
+   others), set up the state through the feature's own handlers or store
+   operations, then expect the field in the view:
+
+   ```ts
+   it("shows the trail's distance", async () => {
+     const { view } = await viewAfter((store) => {
+       const round = completeRound(store, "Ridge", "2030-06-15");
+       setTrailDistance(store, round, 12.5);
+     });
+     expect(view.plannedHike?.distanceKm).toBe(12.5);
+   });
+   ```
+
+5. Describe the field in the section's entry under "Web pages for a server"
+   in `docs/design.md`.
+6. Run the section's tests and the read's own tests, which check that the
+   view survives cloning and that the read writes nothing:
+
+   ```sh
+   npx vitest run test/features/planned-hike-section.test.ts test/guild/web-view.test.ts
+   ```
+
+To add a whole section, write `trailSection(source: WebViewSource)` and its
+interface beside the feature that owns the data (`src/features/trail.ts`),
+then add the field to `WebView` and one line to `buildWebView` in
+`src/guild/web-view.ts`, and test it as in step 4.

@@ -88,8 +88,9 @@ export class RoundPlayer {
   constructor(private readonly e2e: E2E) {}
 
   /**
-   * A guild with an owner, 12 members, and a text, an announcement and a
-   * forum channel. `n` (0-99) keeps each test's ids apart.
+   * A guild with an owner, 12 members (also members on the fake Discord
+   * API, without roles), and a text, an announcement and a forum channel.
+   * `n` (0-99) keeps each test's ids apart.
    */
   guild(n: number): TestGuild {
     const pad = String(n).padStart(2, "0");
@@ -115,13 +116,14 @@ export class RoundPlayer {
       guildId,
       type: ChannelType.GuildForum,
     });
+    const members = Array.from({ length: 12 }, (_, i) => id("4", i + 1));
+    for (const userId of members) discord.addMember(guildId, userId);
     return {
       guildId,
       channels,
       owner: new Member(this.e2e.client, actor(id("4", 0))),
-      members: Array.from(
-        { length: 12 },
-        (_, i) => new Member(this.e2e.client, actor(id("4", i + 1))),
+      members: members.map(
+        (userId) => new Member(this.e2e.client, actor(userId)),
       ),
     };
   }

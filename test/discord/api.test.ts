@@ -13,7 +13,9 @@ import {
   DiscordApi,
   DiscordApiError,
   discordApi,
+  channelUrl,
   eventUrl,
+  guildIconUrl,
   type DiscordApiOptions,
 } from "../../src/discord/api";
 
@@ -144,6 +146,20 @@ describe("DiscordApi routes", () => {
       auth: true,
     },
     {
+      name: "getGuildMember",
+      call: (api) => api.getGuildMember("40", "60"),
+      method: "GET",
+      url: `${base}/guilds/40/members/60`,
+      auth: true,
+    },
+    {
+      name: "getGuildChannels",
+      call: (api) => api.getGuildChannels("40"),
+      method: "GET",
+      url: `${base}/guilds/40/channels`,
+      auth: true,
+    },
+    {
       name: "editOriginalInteractionResponse",
       call: (api) => api.editOriginalInteractionResponse("50", "tok", message),
       method: "PATCH",
@@ -192,6 +208,19 @@ describe("DiscordApi routes", () => {
     expect((await api.getGuild("40")).owner_id).toBe("7");
     expect(sent[0]?.body).toBeUndefined();
     expect(sent[0]?.headers.get("Content-Type")).toBeNull();
+  });
+
+  it("getGuildMember surfaces Unknown Member as a 404 DiscordApiError", async () => {
+    const { api } = client([
+      Response.json(
+        { message: "Unknown Member", code: 10007 },
+        { status: 404 },
+      ),
+    ]);
+    const error = await failure(api.getGuildMember("40", "60"));
+    expect(error.status).toBe(404);
+    expect(error.code).toBe(10007);
+    expect(error.route).toBe("/guilds/40/members/60");
   });
 
   it("sends JSON bodies", async () => {
@@ -459,5 +488,22 @@ describe("allowed_mentions", () => {
 describe("eventUrl", () => {
   it("links a guild's scheduled event", () => {
     expect(eventUrl("40", "60")).toBe("https://discord.com/events/40/60");
+  });
+});
+
+describe("channelUrl", () => {
+  it("links a channel, and a message in it", () => {
+    expect(channelUrl("40", "50")).toBe("https://discord.com/channels/40/50");
+    expect(channelUrl("40", "50", "60")).toBe(
+      "https://discord.com/channels/40/50/60",
+    );
+  });
+});
+
+describe("guildIconUrl", () => {
+  it("links the icon on Discord's CDN", () => {
+    expect(guildIconUrl("40", "abc")).toBe(
+      "https://cdn.discordapp.com/icons/40/abc.png",
+    );
   });
 });

@@ -1,8 +1,8 @@
 /**
  * A fake Discord REST API on a local HTTP port. The Worker under test reaches
  * it through DISCORD_API_BASE. It implements the routes the bot uses, keeps
- * guilds, channels, messages, threads, scheduled events and interaction
- * responses in memory so
+ * guilds, their members, channels, messages, threads, scheduled events and
+ * interaction responses in memory so
  * tests can assert on what Discord would now show, and refuses what Discord
  * refuses: a missing bot token (401) and any payload that breaks a rule in
  * `validate.ts` (400 naming the rule).
@@ -44,6 +44,8 @@ export type ChannelFailure = keyof typeof CHANNEL_FAILURES;
 export interface FakeGuild {
   id: string;
   name: string;
+  /** The icon's hash, null without one. */
+  icon: string | null;
   owner_id: string;
 }
 
@@ -145,6 +147,8 @@ export class FakeDiscord {
   commands: unknown[] = [];
 
   private readonly guilds = new Map<string, FakeGuild>();
+  /** Each guild's members: role ids by user id. */
+  private readonly members = new Map<string, Map<string, string[]>>();
   private readonly channels = new Map<string, FakeChannel>();
   private readonly messages = new Map<string, FakeMessage>();
   private readonly events = new Map<string, FakeScheduledEvent[]>();
@@ -197,14 +201,39 @@ export class FakeDiscord {
 
   // Configuration.
 
-  addGuild(guild: { id: string; ownerId: string; name?: string }): FakeGuild {
+  /** Adds a guild; its owner is a member, without roles unless added. */
+  addGuild(guild: {
+    id: string;
+    ownerId: string;
+    name?: string;
+    icon?: string | null;
+  }): FakeGuild {
     const stored = {
       id: guild.id,
       name: guild.name ?? `Guild ${guild.id}`,
+      icon: guild.icon ?? null,
       owner_id: guild.ownerId,
     };
     this.guilds.set(guild.id, stored);
+    const members = this.members.get(guild.id) ?? new Map<string, string[]>();
+    if (!members.has(guild.ownerId)) members.set(guild.ownerId, []);
+    this.members.set(guild.id, members);
     return stored;
+  }
+
+  /**
+   * Makes `userId` a member of the guild holding `roleIds`, replacing the
+   * roles they held. Get Guild Member answers 404 for anyone else.
+   */
+  addMember(guildId: string, userId: string, roleIds: string[] = []): void {
+    const members = this.members.get(guildId) ?? new Map<string, string[]>();
+    members.set(userId, [...roleIds]);
+    this.members.set(guildId, members);
+  }
+
+  /** Takes `userId` out of the guild, as when they leave or are kicked. */
+  removeMember(guildId: string, userId: string): void {
+    this.members.get(guildId)?.delete(userId);
   }
 
   addChannel(channel: {
@@ -641,6 +670,14 @@ export class FakeDiscord {
     if (match && method === "POST") {
       return this.createScheduledEvent(match[1] ?? "", body);
     }
+    match = /^\/guilds\/([^/]+)\/members\/([^/]+)$/.exec(path);
+    if (match && method === "GET") {
+      return this.getGuildMember(match[1] ?? "", match[2] ?? "");
+    }
+    match = /^\/guilds\/([^/]+)\/channels$/.exec(path);
+    if (match && method === "GET") {
+      return this.getGuildChannels(match[1] ?? "");
+    }
     match = /^\/guilds\/([^/]+)$/.exec(path);
     if (match && method === "GET") {
       const guild = this.guilds.get(match[1] ?? "");
@@ -764,6 +801,47 @@ export class FakeDiscord {
     events.push(event);
     this.events.set(guildId, events);
     return { status: 200, body: event };
+  }
+
+  /**
+   * Get Guild Member: the member with their role ids, or 404 Unknown Member
+   * (10007) for a user who is not one.
+   * https://docs.discord.com/developers/resources/guild#get-guild-member
+   */
+  private getGuildMember(guildId: string, userId: string): Reply {
+    if (!this.guilds.has(guildId)) {
+      return discordError(404, 10004, "Unknown Guild");
+    }
+    const roles = this.members.get(guildId)?.get(userId);
+    if (roles === undefined) return discordError(404, 10007, "Unknown Member");
+    return {
+      status: 200,
+      body: {
+        user: { id: userId, username: `user-${userId}`, discriminator: "0" },
+        nick: null,
+        roles,
+        joined_at: "2026-01-01T00:00:00.000Z",
+        deaf: false,
+        mute: false,
+        flags: 0,
+      },
+    };
+  }
+
+  /**
+   * Get Guild Channels: the guild's channels, without threads.
+   * https://docs.discord.com/developers/resources/guild#get-guild-channels
+   */
+  private getGuildChannels(guildId: string): Reply {
+    if (!this.guilds.has(guildId)) {
+      return discordError(404, 10004, "Unknown Guild");
+    }
+    return {
+      status: 200,
+      body: [...this.channels.values()].filter(
+        (c) => c.guild_id === guildId && c.parent_id === undefined,
+      ),
+    };
   }
 
   private editOriginal(
@@ -924,7 +1002,7 @@ function guildObject(guild: FakeGuild): Record<string, unknown> {
     id: guild.id,
     name: guild.name,
     owner_id: guild.owner_id,
-    icon: null,
+    icon: guild.icon,
     roles: [],
     emojis: [],
     features: [],

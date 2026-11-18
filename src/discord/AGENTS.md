@@ -104,3 +104,29 @@
   `parseCustomId(interaction.data.custom_id)?.arg`.
 - Check the result in a test with `toEqual` against the builders, as in
   `test/guild/guild-hike.test.ts`.
+
+## Read something that may not exist
+
+1. When Discord answers a read with 404 as its "no" (Get Guild Member for
+   a user who is not a member, code 10007), catch `DiscordApiError` and
+   check `status` (and `code` when one 404 is not like another). Treat
+   only that answer as "no"; report every other error as a failure, never
+   as "no" or "yes":
+
+   ```ts
+   try {
+     return (await api.getGuildMember(guildId, userId)).roles;
+   } catch (error) {
+     if (error instanceof DiscordApiError && error.status === 404) return null;
+     throw error;
+   }
+   ```
+
+2. Test both answers and a 500 with `fakeFetch` in
+   `test/discord/api.test.ts`, or with `discordFor` in
+   `test/guild/web-view-helpers.ts` for code inside the guild object, then
+   run them:
+
+   ```sh
+   npx vitest run test/discord/api.test.ts test/guild/web-view.test.ts
+   ```

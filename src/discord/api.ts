@@ -1,6 +1,8 @@
 import type {
   APIAllowedMentions,
   RESTError,
+  RESTGetAPIGuildChannelsResult,
+  RESTGetAPIGuildMemberResult,
   RESTGetAPIGuildResult,
   RESTPatchAPIChannelMessageJSONBody,
   RESTPatchAPIChannelMessageResult,
@@ -26,6 +28,27 @@ export const DEFAULT_DISCORD_API_BASE = "https://discord.com/api/v10";
  */
 export function eventUrl(guildId: string, eventId: string): string {
   return `https://discord.com/events/${guildId}/${eventId}`;
+}
+
+/**
+ * The link to a channel or thread, or to a message in it when `messageId` is
+ * given, which opens it in Discord. A link, not an API route.
+ */
+export function channelUrl(
+  guildId: string,
+  channelId: string,
+  messageId?: string,
+): string {
+  const path = `${guildId}/${channelId}`;
+  return `https://discord.com/channels/${messageId === undefined ? path : `${path}/${messageId}`}`;
+}
+
+/**
+ * The guild's icon on Discord's image CDN, from the `icon` hash `getGuild`
+ * returns. A link, not an API route.
+ */
+export function guildIconUrl(guildId: string, iconHash: string): string {
+  return `https://cdn.discordapp.com/icons/${guildId}/${iconHash}.png`;
 }
 
 const USER_AGENT = "DiscordBot (https://github.com/by77er/hikebot, 0.0.0)";
@@ -169,6 +192,30 @@ export class DiscordApi {
     return this.call({
       method: "GET",
       path: `/guilds/${guildId}`,
+      auth: true,
+    });
+  }
+
+  /**
+   * The guild's member `userId`, with their role ids. Discord answers 404
+   * (code 10007, Unknown Member) when the user is not a member.
+   */
+  getGuildMember(
+    guildId: string,
+    userId: string,
+  ): Promise<RESTGetAPIGuildMemberResult> {
+    return this.call({
+      method: "GET",
+      path: `/guilds/${guildId}/members/${userId}`,
+      auth: true,
+    });
+  }
+
+  /** The guild's channels, without threads. */
+  getGuildChannels(guildId: string): Promise<RESTGetAPIGuildChannelsResult> {
+    return this.call({
+      method: "GET",
+      path: `/guilds/${guildId}/channels`,
       auth: true,
     });
   }

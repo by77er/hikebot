@@ -8,6 +8,12 @@ import { registerFeatures, runAlarm } from "../features";
 import { loadCalendarFeed } from "../features/calendar-feed";
 import { Router } from "./router";
 import { applyMigrations } from "./schema";
+import {
+  readWebView,
+  WebViewCache,
+  type WebViewRequest,
+  type WebViewResult,
+} from "./web-view";
 
 /** What `handleInteraction` returns to the Worker over RPC. */
 export interface InteractionOutcome {
@@ -24,6 +30,7 @@ export interface InteractionOutcome {
 export class GuildHike extends DurableObject<Env> {
   readonly router: Router;
   private readonly followUps = new Map<string, () => Promise<void>>();
+  private readonly webViewCache = new WebViewCache();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -75,5 +82,18 @@ export class GuildHike extends DurableObject<Env> {
     this.followUps.delete(interactionId);
     await job();
     return true;
+  }
+
+  /**
+   * The web pages' read of this guild for one signed-in user: not a member,
+   * Discord unavailable, or everything the server's page shows. See
+   * `readWebView`.
+   */
+  webView(request: WebViewRequest): Promise<WebViewResult> {
+    return readWebView(
+      { env: this.env, storage: this.ctx.storage },
+      this.webViewCache,
+      request,
+    );
   }
 }
