@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   commands:
+    name: ${{ github.event.pull_request.draft && 'commands (draft, not run)' || 'commands' }}
     if: github.event_name == 'push' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
@@ -37,6 +38,7 @@ jobs:
           all: "true"
           rules-from: head
   semantic:
+    name: ${{ github.event.pull_request.draft && 'semantic (draft, not run)' || 'semantic' }}
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
@@ -49,6 +51,7 @@ jobs:
           typesafe-api-key: ${{ secrets.TYPESAFE_API_KEY }}
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
   review:
+    name: ${{ github.event.pull_request.draft && 'review (draft, not run)' || 'review' }}
     if: ${{ !cancelled() && github.event_name == 'pull_request' && !github.event.pull_request.draft }}
     needs: [commands, semantic]
     runs-on: ubuntu-latest
