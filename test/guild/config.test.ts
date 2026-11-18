@@ -102,6 +102,42 @@ describe("GuildConfig", () => {
     expect(settings.forumChannelId).toBe("31");
   });
 
+  it("sets and clears the home area, which survives a restart", async () => {
+    const stub = stubFor("config-home-area");
+    const seattle = {
+      text: "Seattle, Washington",
+      name: "Seattle, King County, Washington",
+      lat: 47.6038321,
+      lon: -122.330062,
+    };
+    await runInDurableObject(stub, (_instance, state) => {
+      const config = new GuildConfig(state.storage);
+      expect(config.setHomeArea(seattle)).toEqual({
+        ...empty,
+        homeArea: seattle,
+      });
+      config.set("voteChannelId", "12");
+      expect(config.get().homeArea).toEqual(seattle);
+    });
+    await evictDurableObject(stub);
+    const kept = await runInDurableObject(stub, (_instance, state) => {
+      const config = new GuildConfig(state.storage);
+      const before = config.get();
+      expect(config.setHomeArea(null)).toEqual({
+        ...empty,
+        voteChannelId: "12",
+      });
+      return before;
+    });
+    expect(kept.homeArea).toEqual(seattle);
+    await evictDurableObject(stub);
+    const cleared = await runInDurableObject(stub, (_instance, state) =>
+      new GuildConfig(state.storage).get(),
+    );
+    expect(cleared.homeArea).toBeNull();
+    expect(cleared.voteChannelId).toBe("12");
+  });
+
   it("keeps each guild's settings apart", async () => {
     await runInDurableObject(stubFor("config-guild-a"), (_instance, state) => {
       new GuildConfig(state.storage).set("adminRoleId", "41");

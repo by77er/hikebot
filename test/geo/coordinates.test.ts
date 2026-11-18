@@ -59,6 +59,8 @@ describe("parseCoordinates", () => {
       [47.4875, -121.7234],
     ],
     ["the edges of the ranges", "-90.00, 180.00", [-90, 180]],
+    ["a bare pair with one decimal", " 47.5, -121.8 ", [47.5, -121.8]],
+    ["a bare pair of whole degrees", "47,-121", [47, -121]],
   ])("reads %s", (_name, text, [lat, lon]) => {
     expect(parseCoordinates(text)).toEqual({ lat, lon });
   });
@@ -73,7 +75,8 @@ describe("parseCoordinates", () => {
     ["geo: out of range", "geo:47.48,-200.5"],
     ["#map out of range", "https://www.openstreetmap.org/#map=15/95.1/10.2"],
     ["small whole numbers", "Trail 3, 5 miles"],
-    ["one decimal each", "Loop 2.5, 3.5 hours"],
+    ["one decimal each, inside text", "Loop 2.5, 3.5 hours"],
+    ["a bare pair out of range", "95, 10"],
     ["a lone number", "47.4875"],
     ["a name", "Mount Si"],
     ["an empty string", ""],

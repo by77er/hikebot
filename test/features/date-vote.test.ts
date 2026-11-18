@@ -390,6 +390,62 @@ describe("the date announcement", () => {
       "[Hike thread](https://discord.com/channels/1/2)",
     ]);
   });
+
+  it("shows the decided location's place after its details when it has a point, with the attribution last", () => {
+    const poll = datePoll({ status: "closed", winnerOptionId: 12 });
+    const located = round(poll);
+    const location = located.locationPoll;
+    const [ridge] = location.options;
+    if (ridge === undefined) throw new Error("no location option");
+    const view = renderAnnouncement(
+      {
+        poll,
+        round: {
+          ...located,
+          locationPoll: {
+            ...location,
+            options: [
+              {
+                ...ridge,
+                place: {
+                  status: "found",
+                  point: { lat: 47.4875, lon: -121.7234 },
+                  name: "Ridge Trail, King County",
+                  attempts: 1,
+                },
+              },
+            ],
+          },
+        },
+        guildId: GUILD,
+        timeZone: LA,
+      },
+      DATE_POLL,
+      [],
+    );
+    const lines = text(view).split("\n");
+    expect(lines.slice(0, 5)).toEqual([
+      "## Hike planned",
+      "**Where:** Ridge Trail",
+      "https://example.com/ridge",
+      "📍 Ridge Trail, King County · [OpenStreetMap](https://www.openstreetmap.org/?mlat=47.4875&mlon=-121.7234#map=13/47.4875/-121.7234) · [Google Maps](https://www.google.com/maps/search/?api=1&query=47.4875,-121.7234)",
+      "**When:** Sat, 5 Dec 2026 · 09:00 (<t:1796490000:R>)",
+    ]);
+    expect(lines.at(-1)).toBe("-# © OpenStreetMap contributors");
+  });
+
+  it("shows no place line while the decided location has no point", () => {
+    const poll = datePoll({ status: "closed", winnerOptionId: 12 });
+    const shown = text(
+      renderAnnouncement(
+        { poll, round: round(poll), guildId: GUILD, timeZone: LA },
+        DATE_POLL,
+        [],
+      ),
+    );
+    expect(shown).not.toContain("📍");
+    expect(shown).not.toContain("OpenStreetMap");
+  });
 });
 
 describe("the When line", () => {

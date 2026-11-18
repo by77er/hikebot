@@ -56,9 +56,12 @@ const PATTERNS: readonly { re: RegExp; lat: number; lon: number }[] = [
   },
 ];
 
+/** A text that is nothing but `lat, lon`, with any number of decimals. */
+const PAIR = new RegExp(`^\\s*(${NUMBER})\\s*,\\s*(${NUMBER})\\s*$`);
+
 /**
- * Plain decimal `lat, lon` with at least two decimals each, so "Trail 3, 5
- * miles" is not read as a point.
+ * Plain decimal `lat, lon` inside other text, with at least two decimals
+ * each, so "Trail 3, 5 miles" is not read as a point.
  */
 const DECIMAL =
   /(?<![\w.:/@=-])([-+]?\d{1,2}\.\d{2,})\s*,\s*([-+]?\d{1,3}\.\d{2,})(?![\w.])/;
@@ -83,7 +86,7 @@ export function parseCoordinates(text: string): Point | null {
     const match = re.exec(text);
     if (match) return point(match[lat], match[lon]);
   }
-  const match = DECIMAL.exec(text);
+  const match = PAIR.exec(text) ?? DECIMAL.exec(text);
   return match ? point(match[1], match[2]) : null;
 }
 

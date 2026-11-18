@@ -1620,8 +1620,9 @@ and the decided hike links to the map wherever it is shown. The code is in
 `src/features/locate.ts`, `map-pin.ts` and `home-area.ts`.
 
 **Coordinates the proposer wrote win.** `parseCoordinates(text)`
-(`src/geo/coordinates.ts`) reads decimal `lat, lon` (two decimals or more
-each, so "Trail 3, 5 miles" is not a point), a `geo:` address, and the
+(`src/geo/coordinates.ts`) reads decimal `lat, lon` (a text that is only
+the pair may have any decimals; inside other text each needs two or more,
+so "Trail 3, 5 miles" is not a point), a `geo:` address, and the
 common map links: Google Maps `!3d<lat>!4d<lon>` (the place), `?q=` /
 `?query=` and `/@lat,lon` (the view); OpenStreetMap `mlat`/`mlon` (the
 marker) and `#map=z/lat/lon`; Apple Maps `ll=`. A latitude beyond ±90 or a
