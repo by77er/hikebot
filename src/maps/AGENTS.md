@@ -75,9 +75,10 @@
 
 ## Draw a map picture in a feature
 
-1. Ask the `MapPainter` Durable Object for the picture; it draws it once and
-   then answers from the bucket. Leave out `zoom`, `width`, `height` and
-   `units` for the default 1200 by 800 picture at zoom 12 in metric units:
+1. Ask the `MapPainter` Durable Object for the picture through
+   `mapPainter(env).picture(...)`. Pass `zoom`, `width`, `height`,
+   `pixelRatio` or `units` only to override `DEFAULT_PICTURE` in
+   `src/maps/picture.ts`:
 
    ```ts
    import { mapPainter } from "../maps/map-painter";

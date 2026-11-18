@@ -242,7 +242,10 @@ export const FURNITURE = {
   frame: 1,
 } as const;
 
-/** The value of `stops` at `zoom`. */
+/**
+ * The value of `stops` at `zoom`: linear between the two stops round it, the
+ * first or last stop's value beyond them, and 0 when there are no stops.
+ */
 export function atZoom(stops: ZoomStops, zoom: number): number {
   const first = stops[0];
   if (!first) return 0;
