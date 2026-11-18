@@ -184,7 +184,7 @@ describe("the hike thread", () => {
 
   it("shortens a location of the longest length in the title and keeps the date whole", async () => {
     const g = play.guild(4);
-    const location = `${"Long Ridge Traverse ".repeat(4)}`.slice(0, 79) + "X";
+    const location = "Long Ridge Traverse ".repeat(4).slice(0, 79) + "X";
     expect(location).toHaveLength(80);
     const { panel } = await upToDateVote(g, location);
     await play.closeVote(g.owner, panel, "date vote");
