@@ -34,6 +34,7 @@ import {
 import { CADENCE_JOB } from "../../src/features/cadence-state";
 import type { HikeDayStatus } from "../../src/features/hike-day-state";
 import type { HikeEventStatus } from "../../src/features/hike-event-state";
+import type { MapPictureStatus } from "../../src/features/map-picture-state";
 import type { HikeThreadStatus } from "../../src/features/hike-thread-state";
 import type { OptionView, PollView, RoundView } from "../../src/polls/store";
 import {
@@ -668,6 +669,112 @@ describe("renderAdminPanel", () => {
           POLL_CONTROL_IDS.startLocationVote,
           POLL_CONTROL_IDS.createHikeThread(finished.id),
           POLL_CONTROL_IDS.createHikeEvent(finished.id),
+          POLL_CONTROL_IDS.setMapPin(7),
+          ADMIN_PANEL_IDS.settings,
+          ADMIN_PANEL_IDS.refresh,
+        ]);
+        expectWithinLimits(renderAdminPanel(state, "x".repeat(300)));
+      });
+    });
+
+    describe("and its map picture", () => {
+      const withPicture = (mapPicture: MapPictureStatus) => {
+        const state = {
+          settings: COMPLETE,
+          round: null,
+          finished: { ...finished, threadId: "900000000000000001" },
+          thread: {
+            state: "created",
+            threadId: "900000000000000001",
+          } as const,
+          mapPicture,
+        };
+        return {
+          buttons: actionButtons(state).map((b) => b.custom_id),
+          shown: text(asNodes(renderAdminPanel(state))),
+          view: renderAdminPanel(state, "x".repeat(300)),
+        };
+      };
+
+      it("says it is shown, with no Show map picture", () => {
+        const { buttons, shown } = withPicture({
+          state: "shown",
+          key: "pictures/a.png",
+        });
+        expect(shown).toContain(
+          "**Map picture:** on the hike thread and event.",
+        );
+        expect(buttons).not.toContain(
+          POLL_CONTROL_IDS.showMapPicture(finished.id),
+        );
+      });
+
+      it("says nothing and offers nothing when there is nothing to draw", () => {
+        const { buttons, shown } = withPicture({ state: "none" });
+        expect(shown).not.toContain("Map picture");
+        expect(buttons).toEqual([
+          POLL_CONTROL_IDS.startLocationVote,
+          POLL_CONTROL_IDS.setMapPin(7),
+          ADMIN_PANEL_IDS.settings,
+          ADMIN_PANEL_IDS.refresh,
+        ]);
+      });
+
+      it("shows why it failed and offers Show map picture for that round", () => {
+        const reason = `Could not show the map picture on the hike thread: ${"r".repeat(400)}. Click Show map picture to try again.`;
+        const { buttons, shown, view } = withPicture({
+          state: "failed",
+          reason,
+        });
+        expect(shown).toContain(`**Map picture:** not shown. ${reason}`);
+        expect(buttons).toEqual([
+          POLL_CONTROL_IDS.startLocationVote,
+          POLL_CONTROL_IDS.showMapPicture(finished.id),
+          POLL_CONTROL_IDS.setMapPin(7),
+          ADMIN_PANEL_IDS.settings,
+          ADMIN_PANEL_IDS.refresh,
+        ]);
+        expectWithinLimits(view);
+      });
+
+      it("offers Show map picture when it was never shown for the pin", () => {
+        const { buttons, shown } = withPicture({ state: "missing" });
+        expect(shown).toContain(
+          "**Map picture:** not shown. Click Show map picture to draw it.",
+        );
+        expect(buttons).toContain(POLL_CONTROL_IDS.showMapPicture(finished.id));
+      });
+
+      it("says a cut-off run is not confirmed and offers Show map picture", () => {
+        const { buttons, shown } = withPicture({ state: "unconfirmed" });
+        expect(shown).toContain(
+          "**Map picture:** not confirmed: showing it was cut off, so the hike thread and event may or may not show it. Click Show map picture to show it again.",
+        );
+        expect(buttons).toContain(POLL_CONTROL_IDS.showMapPicture(finished.id));
+      });
+
+      it("offers no button while it is being drawn", () => {
+        const { buttons, shown } = withPicture({ state: "showing" });
+        expect(shown).toContain("**Map picture:** being drawn.");
+        expect(buttons).not.toContain(
+          POLL_CONTROL_IDS.showMapPicture(finished.id),
+        );
+      });
+
+      it("keeps every retry and the panel within Discord's limits when all failed", () => {
+        const state = {
+          settings: COMPLETE,
+          round: null,
+          finished,
+          thread: { state: "failed", reason: "t".repeat(500) } as const,
+          event: { state: "failed", reason: "e".repeat(500) } as const,
+          mapPicture: { state: "failed", reason: "m".repeat(500) } as const,
+        };
+        expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
+          POLL_CONTROL_IDS.startLocationVote,
+          POLL_CONTROL_IDS.createHikeThread(finished.id),
+          POLL_CONTROL_IDS.createHikeEvent(finished.id),
+          POLL_CONTROL_IDS.showMapPicture(finished.id),
           POLL_CONTROL_IDS.setMapPin(7),
           ADMIN_PANEL_IDS.settings,
           ADMIN_PANEL_IDS.refresh,
@@ -1632,6 +1739,10 @@ describe("the admin panel", () => {
       [
         POLL_CONTROL_IDS.createHikeEvent(1),
         (g) => click(POLL_CONTROL_IDS.createHikeEvent(1), g, STRANGER),
+      ],
+      [
+        POLL_CONTROL_IDS.showMapPicture(1),
+        (g) => click(POLL_CONTROL_IDS.showMapPicture(1), g, STRANGER),
       ],
       [
         POLL_CONTROL_IDS.announce(1),
