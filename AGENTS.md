@@ -34,6 +34,24 @@ the repository root unless a step says otherwise.
    node --version
    ```
 
+   If `node` is missing or older, and nodejs.org cannot be reached, install
+   Node 24 and npm from the npm registry into `~/.local/node`. The
+   `node-linux-x64` package holds only `node`, so npm comes from its own
+   package:
+
+   ```sh
+   mkdir -p ~/.local/node/lib/node_modules/npm
+   curl -fsSL https://registry.npmjs.org/node-linux-x64/-/node-linux-x64-24.22.3.tgz | tar -xz -C ~/.local/node --strip-components=1
+   curl -fsSL https://registry.npmjs.org/npm/-/npm-11.6.2.tgz | tar -xz -C ~/.local/node/lib/node_modules/npm --strip-components=1
+   ln -sf ../lib/node_modules/npm/bin/npm-cli.js ~/.local/node/bin/npm
+   ln -sf ../lib/node_modules/npm/bin/npx-cli.js ~/.local/node/bin/npx
+   export PATH="$HOME/.local/node/bin:$PATH"
+   node --version
+   npm --version
+   ```
+
+   Each new shell needs the `export PATH` line again.
+
 2. Install the dependencies and create the local secrets file. The example
    values are enough for the tests and for `GET /`:
 

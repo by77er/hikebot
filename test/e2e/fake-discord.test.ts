@@ -13,7 +13,7 @@ import {
   InteractionType,
   MessageFlags,
 } from "discord-api-types/v10";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { FakeDiscord } from "./harness/fake-discord";
 import { messageText } from "./harness/helpers";
 import {
@@ -372,6 +372,38 @@ describe("edits, follow-ups and threads are checked too", () => {
       await call("POST", followUp, v2(row(button("hb:a:b", x(81)))), null),
       RULES.buttonLabel,
     );
+  });
+
+  it("holds webhook requests for an interaction until its response is recorded", async () => {
+    const token = "fake-test-sending-token";
+    discord.sendingInteraction(token);
+    const original = `/webhooks/${APPLICATION_ID}/${token}/messages/@original`;
+    const edit = call("PATCH", original, v2(text("Done")), null);
+    await vi.waitFor(() => {
+      expect(discord.heldRequests).toBe(1);
+    });
+    discord.recordInteractionResponse(
+      { token, guild_id: GUILD, channel_id: TEXT_CHANNEL },
+      {
+        type: InteractionResponseType.DeferredChannelMessageWithSource,
+        data: { flags: MessageFlags.Ephemeral },
+      },
+    );
+    expect(await edit).toMatchObject({ status: 200 });
+    expect(messageText(discord.originalResponse(token) ?? {})).toBe("Done");
+    expect(discord.heldRequests).toBe(0);
+  });
+
+  it("answers held webhook requests with Unknown Webhook when the interaction failed", async () => {
+    const token = "fake-test-failed-token";
+    discord.sendingInteraction(token);
+    const followUp = `/webhooks/${APPLICATION_ID}/${token}?wait=true`;
+    const post = call("POST", followUp, v2(text("More")), null);
+    await vi.waitFor(() => {
+      expect(discord.heldRequests).toBe(1);
+    });
+    discord.sentInteraction(token);
+    expect(await post).toMatchObject({ status: 404, body: { code: 10015 } });
   });
 
   it("refuses a thread name over 100 characters", async () => {

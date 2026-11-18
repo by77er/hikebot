@@ -3,8 +3,13 @@
  * `createTestHarness`, next to a fake Discord API, once per test file. Each
  * start gets fresh in-memory Durable Object storage, a newly generated
  * signing key pair, a dummy bot token and application id, and
- * DISCORD_API_BASE pointing at the fake.
+ * DISCORD_API_BASE pointing at the fake. These go in as the harness's
+ * `vars` and `secrets`, which override whatever `.dev.vars`, `.env` files or
+ * the environment hold, so the suite runs the same in any checkout.
  */
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import {
@@ -22,10 +27,10 @@ const PROBE_ENTRY = fileURLToPath(
   new URL("../probe/worker.ts", import.meta.url),
 );
 
-type InlineConfig = Extract<
+type WorkerInput = Extract<
   TestHarnessOptions["workers"][number],
-  { config: unknown }
->["config"];
+  { configPath: unknown }
+>;
 
 export const BOT_TOKEN = "e2e-bot-token";
 export const APPLICATION_ID = "100000000000000001";
@@ -47,6 +52,12 @@ export interface E2EOptions {
    * Feature scenarios leave this off and test the real bundle.
    */
   probe?: boolean;
+  /**
+   * Returns the directory whose `wrangler.jsonc` the Worker starts from,
+   * called when the Worker starts. Defaults to the repository root. For
+   * harness self-tests that need a checkout with other local files.
+   */
+  root?: () => string;
 }
 
 /**
@@ -60,7 +71,11 @@ export function useE2E(options: E2EOptions = {}): E2E {
   let started: E2E | undefined;
   // Kept apart from `started` so afterAll stops whatever began, even when
   // the start failed or timed out half-way.
-  let running: { harness?: TestHarness; discord?: FakeDiscord } = {};
+  let running: {
+    harness?: TestHarness;
+    discord?: FakeDiscord;
+    probeDir?: string;
+  } = {};
   const get = (): E2E => {
     if (!started) throw new Error("the e2e Worker has not started");
     return started;
@@ -80,14 +95,14 @@ export function useE2E(options: E2EOptions = {}): E2E {
       DISCORD_BOT_TOKEN: BOT_TOKEN,
     };
     const vars = { DISCORD_API_BASE: discord.apiBase };
-    const harness = createTestHarness({
-      root: ROOT,
-      workers: [
-        options.probe
-          ? { config: probeConfig({ ...vars, ...secrets }) }
-          : { configPath: CONFIG_PATH, vars, secrets },
-      ],
-    });
+    const root = options.root?.() ?? ROOT;
+    let configPath = join(root, CONFIG_PATH);
+    if (options.probe) {
+      running.probeDir = await mkdtemp(join(tmpdir(), "hikebot-e2e-probe-"));
+      configPath = await writeProbeConfig(configPath, running.probeDir);
+    }
+    const worker: WorkerInput = { configPath, vars, secrets };
+    const harness = createTestHarness({ root, workers: [worker] });
     running.harness = harness;
     const { url } = await harness.listen();
     started = {
@@ -121,13 +136,14 @@ export function useE2E(options: E2EOptions = {}): E2E {
   });
 
   afterAll(async () => {
-    const { harness, discord } = running;
+    const { harness, discord, probeDir } = running;
     running = {};
     started = undefined;
     try {
       await harness?.close();
     } finally {
       await discord?.close();
+      if (probeDir) await rm(probeDir, { recursive: true, force: true });
     }
   });
 
@@ -158,26 +174,36 @@ interface ProbeSource {
   durable_objects: object;
   migrations: object[];
   vars: Record<string, string>;
+  secrets?: object;
 }
 
 /**
- * The repository's Worker config with the probe entry point as `main`.
- * Secrets go in as vars because an inline config takes no secrets.
+ * Writes the Worker config at `configPath` with the probe entry point as
+ * `main` to `dir`, and returns the new file's path. The probe runs from a
+ * file rather than an inline config because only a file-based worker takes
+ * the harness's `secrets`; an inline config's vars lose to `.dev.vars`.
  */
-function probeConfig(vars: Record<string, string>): InlineConfig {
+async function writeProbeConfig(
+  configPath: string,
+  dir: string,
+): Promise<string> {
   // Wrangler's own reader, so the probe gets the same bindings and
   // migrations as the real Worker. Its return type comes from a package
   // Wrangler does not ship, so it is narrowed here.
   const config = unstable_readConfig({
-    config: `${ROOT}/${CONFIG_PATH}`,
+    config: configPath,
   }) as unknown as ProbeSource;
-  return {
+  const probeConfig = {
     name: config.name,
     main: PROBE_ENTRY,
     compatibility_date: config.compatibility_date,
     compatibility_flags: config.compatibility_flags,
     durable_objects: config.durable_objects,
     migrations: config.migrations,
-    vars: { ...config.vars, ...vars },
+    vars: config.vars,
+    secrets: config.secrets,
   };
+  const path = join(dir, "wrangler.json");
+  await writeFile(path, JSON.stringify(probeConfig, null, 2));
+  return path;
 }
