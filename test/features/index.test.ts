@@ -1,9 +1,6 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import {
-  ApplicationCommandOptionType,
-  type APIChatInputApplicationCommandInteraction,
-} from "discord-api-types/v10";
+import { ApplicationCommandOptionType } from "discord-api-types/v10";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ephemeralNotice } from "../../src/discord/responses";
 import { ADMIN_PANEL_IDS } from "../../src/features/admin-panel";
@@ -34,7 +31,7 @@ describe("registerFeatures", () => {
     const command = asMember(
       commandInteraction("hike", "features-registered"),
       STRANGER,
-    ) as APIChatInputApplicationCommandInteraction;
+    );
     Object.assign(command.data, {
       options: [
         { type: ApplicationCommandOptionType.Subcommand, name: "admin" },
