@@ -29,6 +29,9 @@ const SCHEDULED_EVENT_OBJECT = `${SCHEDULED_EVENTS}#guild-scheduled-event-object
 const EVENT_FIELD_REQUIREMENTS = `${SCHEDULED_EVENTS}#guild-scheduled-event-object-field-requirements-by-entity-type`;
 const EVENT_METADATA = `${SCHEDULED_EVENTS}#guild-scheduled-event-object-guild-scheduled-event-entity-metadata`;
 const EVENT_PERMISSIONS = `${SCHEDULED_EVENTS}#guild-scheduled-event-permissions-requirements`;
+const OAUTH2 = `${DOCS}/topics/oauth2`;
+const AUTHORIZATION_CODE_GRANT = `${OAUTH2}#authorization-code-grant`;
+const CURRENT_USER_GUILDS = `${DOCS}/resources/user#get-current-user-guilds`;
 
 /** A rule the fake enforces. `docs` is where the limit is stated. */
 export interface Rule {
@@ -210,6 +213,61 @@ export const RULES = {
   createEventsPermission: rule(
     "scheduled-event-needs-create-events",
     EVENT_PERMISSIONS,
+  ),
+  /**
+   * The authorization URL takes "`response_type`: `code`" for the
+   * authorization code grant.
+   */
+  oauthResponseType: rule(
+    "oauth2-response-type-code",
+    AUTHORIZATION_CODE_GRANT,
+  ),
+  /**
+   * "All calls to the OAuth2 endpoints require either HTTP Basic
+   * authentication or `client_id` and `client_secret` supplied in the form
+   * data body." The authorize page also needs the application's `client_id`.
+   */
+  oauthClientCredentials: rule(
+    "oauth2-client-credentials",
+    AUTHORIZATION_CODE_GRANT,
+  ),
+  /**
+   * `redirect_uri` is "whatever URL you registered when creating your
+   * application, url-encoded"; Discord shows "Invalid OAuth2 redirect_uri"
+   * for any other.
+   */
+  oauthRegisteredRedirectUri: rule(
+    "oauth2-redirect-uri-registered",
+    AUTHORIZATION_CODE_GRANT,
+  ),
+  /**
+   * The token URL "will **only** accept a content type of
+   * `application/x-www-form-urlencoded`."
+   */
+  oauthFormBody: rule("oauth2-form-body", AUTHORIZATION_CODE_GRANT),
+  /** `grant_type` "must be set to `authorization_code`". */
+  oauthGrantType: rule("oauth2-grant-type", AUTHORIZATION_CODE_GRANT),
+  /**
+   * "The client MUST NOT use the authorization code more than once" (RFC
+   * 6749, which Discord's OAuth2 implements); Discord answers
+   * `invalid_grant` to a code it did not issue or already exchanged.
+   */
+  oauthCodeSingleUse: rule(
+    "oauth2-code-used-once",
+    "https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2",
+  ),
+  /**
+   * The exchange's `redirect_uri` is "the `redirect_uri` associated with
+   * this authorization, usually from your authorization URL".
+   */
+  oauthRedirectUriMatches: rule(
+    "oauth2-redirect-uri-matches",
+    AUTHORIZATION_CODE_GRANT,
+  ),
+  /** `limit`: "max number of guilds to return (1-200)". */
+  currentUserGuildsLimit: rule(
+    "current-user-guilds-limit-1-200",
+    CURRENT_USER_GUILDS,
   ),
 } as const;
 
