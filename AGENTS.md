@@ -305,8 +305,10 @@ them by hand, for example for your own test application:
 
 1. Make the new value where the secrets table in `README.md` says it comes
    from (for `DISCORD_BOT_TOKEN`, Bot, Reset Token in the Discord developer
-   portal). The table also says what rotating each one does; rotating
-   `SIGNING_SECRET` signs everyone out and changes every calendar address.
+   portal). Read that table's line for the secret first: it says what
+   rotating it breaks. For `SIGNING_SECRET`, tell the group before you
+   rotate it, because everyone is signed out and every calendar address
+   changes.
 2. Replace the GitHub Actions secret, typing the value at the prompt (or
    under Settings, Secrets and variables, Actions on GitHub). Each deploy
    sets the five Worker secrets (the three `DISCORD_*` ones,
