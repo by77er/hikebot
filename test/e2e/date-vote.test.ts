@@ -467,4 +467,72 @@ describe("the default dates and proposed dates", () => {
       shownAs(late),
     ]);
   });
+
+  it("on the weekly schedule, prefills the weekends after the planned close and takes members' dates only in the 14 days after it", async () => {
+    const g = play.guild(10);
+    const [ana] = g.members as [Member];
+    const panel = await decided(g);
+    await g.owner.click(panel, "hb:admin:settings");
+    await g.owner.click(panel, "hb:admin:cadence");
+    expect(messageText(play.shown(panel))).toContain("The schedule is on.");
+    await g.owner.click(panel, "hb:admin:back");
+
+    // A date vote opened today closes in 2 days at 09:00: the window is the
+    // 14 days after that day.
+    const today = todayInLosAngeles();
+    const first = plusDays(today, 3);
+    const last = plusDays(today, 16);
+    const form = await g.owner.click(panel, ROUND_IDS.startDate);
+    const field = findComponent(
+      form.type === InteractionResponseType.Modal ? form.data.components : [],
+      ROUND_IDS.dates,
+    );
+    const days = String(field?.value)
+      .split("\n")
+      .map((line) => line.slice(0, 10));
+    expect(days).toHaveLength(4);
+    for (const day of days) {
+      expect(["Sat", "Sun"]).toContain(WEEKDAYS[utcDay(day).getUTCDay()]);
+      expect(day >= first && day <= last).toBe(true);
+    }
+    const before = e2e.discord.channelMessages(g.channels.text).length;
+    await g.owner.submitModal(
+      form,
+      { [ROUND_IDS.dates]: String(field?.value) },
+      panel,
+    );
+    await eventually(() => {
+      expect(messageText(play.shown(panel))).toContain(
+        `The date vote is open in <#${g.channels.text}>.`,
+      );
+    });
+    const poll = e2e.discord.channelMessages(g.channels.text)[before];
+    if (!poll) throw new Error("the date poll was not posted");
+
+    const refused = await play.proposeDate(ana, poll, today);
+    expect(refused.form).toMatchObject({
+      data: {
+        components: [
+          {
+            description: `${first} to ${last}, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time defaults to 11:00.`,
+          },
+        ],
+      },
+    });
+    expectEphemeral(
+      ana,
+      `is outside this round's dates. Propose a day from ${first} to ${last}: the 14 days after the date vote closes.`,
+    );
+    await play.proposeDate(ana, poll, plusDays(last, 1));
+    expectEphemeral(ana, "is outside this round's dates.");
+
+    await play.proposeDate(ana, poll, `${first} 08:30`);
+    expectEphemeral(
+      ana,
+      `Added **${shownAs(first, "08:30")}** to the date vote.`,
+    );
+    await eventually(() => {
+      expect(shownDates(play.shown(poll))).toHaveLength(5);
+    });
+  });
 });
