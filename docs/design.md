@@ -352,9 +352,10 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   with one Label and short text input (`hb:admin:timezone-name`, up to 64
   characters) prefilled with the current zone. A submit is read by
   `normalizeTimeZone` (`src/polls/dates.ts`): an IANA name in any case
-  (`america/denver`) is stored in the runtime's canonical spelling
-  (`America/Denver`), a link name typed with its capitals (`Asia/Kolkata`)
-  as typed, and the aliases PT/PST/PDT, MT/MST/MDT, CT/CST/CDT and
+  (`america/denver`) is stored in its canonical spelling (`America/Denver`),
+  a link as the zone it links to (`US/Pacific` as `America/Los_Angeles`;
+  the runtime's older names such as `Asia/Calcutta` as the current
+  `Asia/Kolkata`), and the aliases PT/PST/PDT, MT/MST/MDT, CT/CST/CDT and
   ET/EST/EDT become `America/Los_Angeles`, `America/Denver`,
   `America/Chicago` and `America/New_York`, UTC and GMT `UTC`. A valid zone
   is saved and the Settings view redrawn with "Time zone set to <zone>.";
@@ -498,8 +499,6 @@ library, and take the current time as a parameter:
 - `clockIn(timeZone, now)`: the weekday and time there, `Wed 11:42`.
 - `normalizeTimeZone(input)`: the zone's stored name, or null (see "Admin
   panel").
-- `HIKE_DURATION_HOURS` (4): how long a hike is taken to last, from its
-  start.
 
 ## Round lifecycle
 

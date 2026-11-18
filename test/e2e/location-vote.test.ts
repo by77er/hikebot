@@ -567,7 +567,7 @@ describe("suggesting a past location again", () => {
       first,
       "Alpine Lake",
       "2030-06-08\n2030-06-15",
-      "Sat, 8 Jun 2030",
+      "Sat, 8 Jun 2030 · 11:00",
     );
 
     // The admin cannot put Alpine Lake on the next vote.
@@ -579,7 +579,7 @@ describe("suggesting a past location again", () => {
     );
     expectEphemeral(
       g.owner,
-      "Nothing was started. Remove this location and try again:\n- **Alpine Lake** was the hike on Sat, 8 Jun 2030. It can be suggested again after 2 more hikes.",
+      "Nothing was started. Remove this location and try again:\n- **Alpine Lake** was the hike on Sat, 8 Jun 2030 · 11:00. It can be suggested again after 2 more hikes.",
     );
 
     // Round 2: Propose a location offers Bear Creek and Cedar Falls.
@@ -628,7 +628,7 @@ describe("suggesting a past location again", () => {
     await cy.submitModal(typed, { [ID.name]: "Alpine Lake" });
     expectEphemeral(
       cy,
-      "**Alpine Lake** was the hike on Sat, 8 Jun 2030. It can be suggested again after 2 more hikes.",
+      "**Alpine Lake** was the hike on Sat, 8 Jun 2030 · 11:00. It can be suggested again after 2 more hikes.",
     );
     await play.finishRound(
       g,
@@ -636,7 +636,7 @@ describe("suggesting a past location again", () => {
       second,
       "Cedar Falls",
       "2030-07-06\n2030-07-07",
-      "Sat, 6 Jul 2030",
+      "Sat, 6 Jul 2030 · 11:00",
     );
 
     // Round 3: Alpine Lake rests one more hike.
@@ -653,7 +653,7 @@ describe("suggesting a past location again", () => {
       third,
       "Bear Creek",
       "2030-08-03\n2030-08-04",
-      "Sat, 3 Aug 2030",
+      "Sat, 3 Aug 2030 · 11:00",
     );
 
     // Round 4: two hikes later, Alpine Lake is offered again.

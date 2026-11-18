@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_HIKE_TIME,
   DEFAULT_TIMEZONE,
-  HIKE_DURATION_HOURS,
   clockIn,
   hikeStart,
   normalizeTimeZone,
@@ -64,10 +63,9 @@ describe("parseDateOption", () => {
 });
 
 describe("the constants", () => {
-  it("default to Pacific time, 11:00 and four hours", () => {
+  it("default to Pacific time and 11:00", () => {
     expect(DEFAULT_TIMEZONE).toBe("America/Los_Angeles");
     expect(DEFAULT_HIKE_TIME).toBe("11:00");
-    expect(HIKE_DURATION_HOURS).toBe(4);
   });
 });
 
@@ -141,9 +139,14 @@ describe("normalizeTimeZone", () => {
     ["  Europe/Berlin ", "Europe/Berlin"],
     ["EUROPE/BERLIN", "Europe/Berlin"],
     ["Asia/Kolkata", "Asia/Kolkata"],
-    ["asia/calcutta", "Asia/Calcutta"],
-    ["US/Pacific", "US/Pacific"],
-    ["us/pacific", "America/Los_Angeles"],
+    ["asia/kolkata", "Asia/Kolkata"],
+    ["asia/kolKata", "Asia/Kolkata"],
+    ["asia/calcutta", "Asia/Kolkata"],
+    ["Europe/Kyiv", "Europe/Kyiv"],
+    ["europe/kiev", "Europe/Kyiv"],
+    ["America/Argentina/Buenos_Aires", "America/Argentina/Buenos_Aires"],
+    ["US/Pacific", "America/Los_Angeles"],
+    ["Us/Pacific", "America/Los_Angeles"],
     ["PT", "America/Los_Angeles"],
     ["pst", "America/Los_Angeles"],
     ["PDT", "America/Los_Angeles"],

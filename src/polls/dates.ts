@@ -4,9 +4,6 @@ export const DEFAULT_TIMEZONE = "America/Los_Angeles";
 /** The start time of a date typed without one, `HH:MM`. */
 export const DEFAULT_HIKE_TIME = "11:00";
 
-/** How long a hike is taken to last, from its start. */
-export const HIKE_DURATION_HOURS = 4;
-
 export interface ParsedDate {
   /** `YYYY-MM-DD HH:MM`; sorts chronologically as text. */
   value: string;
@@ -105,13 +102,34 @@ export function normalizeTimeZone(input: string): string | null {
   } catch {
     return null;
   }
-  if (resolved.toLowerCase() === name.toLowerCase()) return resolved;
-  // A link such as Asia/Kolkata resolves to its runtime's name for the zone
-  // (Asia/Calcutta): keep the link when it was typed with its capitals.
-  const typedWithCase =
-    name !== name.toLowerCase() && name !== name.toUpperCase();
-  return typedWithCase ? name : resolved;
+  return CURRENT_NAMES[resolved] ?? resolved;
 }
+
+/**
+ * The current IANA names of zones the runtime's ICU still calls by an older
+ * name: it resolves `Asia/Kolkata` (and `asia/calcutta`) to `Asia/Calcutta`.
+ */
+const CURRENT_NAMES: Record<string, string> = {
+  "Africa/Asmera": "Africa/Asmara",
+  "America/Buenos_Aires": "America/Argentina/Buenos_Aires",
+  "America/Catamarca": "America/Argentina/Catamarca",
+  "America/Cordoba": "America/Argentina/Cordoba",
+  "America/Coral_Harbour": "America/Atikokan",
+  "America/Godthab": "America/Nuuk",
+  "America/Indianapolis": "America/Indiana/Indianapolis",
+  "America/Jujuy": "America/Argentina/Jujuy",
+  "America/Louisville": "America/Kentucky/Louisville",
+  "America/Mendoza": "America/Argentina/Mendoza",
+  "Asia/Calcutta": "Asia/Kolkata",
+  "Asia/Katmandu": "Asia/Kathmandu",
+  "Asia/Rangoon": "Asia/Yangon",
+  "Asia/Saigon": "Asia/Ho_Chi_Minh",
+  "Atlantic/Faeroe": "Atlantic/Faroe",
+  "Europe/Kiev": "Europe/Kyiv",
+  "Pacific/Enderbury": "Pacific/Kanton",
+  "Pacific/Ponape": "Pacific/Pohnpei",
+  "Pacific/Truk": "Pacific/Chuuk",
+};
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
 

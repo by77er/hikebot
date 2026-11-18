@@ -482,18 +482,23 @@ describe("restingRefusal", () => {
     {
       label: "Eagle Peak",
       key: "eagle peak",
-      hikedOn: "Sat, 5 Dec 2026",
+      hikedOn: "Sat, 5 Dec 2026 · 11:00",
       hikesLeft: 2,
     },
-    { label: "Lake", key: "lake", hikedOn: "Sat, 9 Jan 2027", hikesLeft: 1 },
+    {
+      label: "Lake",
+      key: "lake",
+      hikedOn: "Sat, 9 Jan 2027 · 11:00",
+      hikesLeft: 1,
+    },
   ];
 
   it("names each resting line, compared as labelKey does", () => {
     expect(restingRefusal(["Ridge", " eagle  PEAK", "lake"], resting)).toBe(
       [
         "Nothing was started. Remove these locations and try again:",
-        "- **Eagle Peak** was the hike on Sat, 5 Dec 2026. It can be suggested again after 2 more hikes.",
-        "- **Lake** was the hike on Sat, 9 Jan 2027. It can be suggested again after 1 more hike.",
+        "- **Eagle Peak** was the hike on Sat, 5 Dec 2026 · 11:00. It can be suggested again after 2 more hikes.",
+        "- **Lake** was the hike on Sat, 9 Jan 2027 · 11:00. It can be suggested again after 1 more hike.",
       ].join("\n"),
     );
     expect(restingRefusal(["Lake"], resting)).toContain(
@@ -651,7 +656,7 @@ describe("suggesting a past location again", () => {
     const { pollId } = await secondRound(guild);
     const reply = await send(proposeSubmit(guild, pollId, "ridge"));
     expect(text(reply.data.components)).toBe(
-      "**Ridge** was the hike on Sat, 5 Dec 2026. It can be suggested again after 2 more hikes.",
+      "**Ridge** was the hike on Sat, 5 Dec 2026 · 11:00. It can be suggested again after 2 more hikes.",
     );
   });
 
@@ -670,7 +675,7 @@ describe("suggesting a past location again", () => {
     const reply = await send(startSubmit(guild, "Lake\nRIDGE"));
     expect(reply.type).toBe(InteractionResponseType.ChannelMessageWithSource);
     expect(text(reply.data.components)).toBe(
-      "Nothing was started. Remove this location and try again:\n- **Ridge** was the hike on Sat, 5 Dec 2026. It can be suggested again after 2 more hikes.",
+      "Nothing was started. Remove this location and try again:\n- **Ridge** was the hike on Sat, 5 Dec 2026 · 11:00. It can be suggested again after 2 more hikes.",
     );
     expect(await activeRound(guild)).toBeNull();
   });

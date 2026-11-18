@@ -911,7 +911,7 @@ describe("the location cooldown", () => {
         {
           label: "Eagle Peak",
           key: "eagle peak",
-          hikedOn: "Sat, 5 Dec 2026",
+          hikedOn: "Sat, 5 Dec 2026 · 11:00",
           hikesLeft: 2,
         },
       ]);
@@ -927,7 +927,7 @@ describe("the location cooldown", () => {
           }),
         ),
       ).toBe(
-        "**Eagle Peak** was the hike on Sat, 5 Dec 2026. It can be suggested again after 2 more hikes.",
+        "**Eagle Peak** was the hike on Sat, 5 Dec 2026 · 11:00. It can be suggested again after 2 more hikes.",
       );
       store.closePoll(twoPoll, "u-admin");
       store.cancelRound(two.id, "u-admin");
@@ -946,8 +946,8 @@ describe("the location cooldown", () => {
       expect(
         store.restingLocations().map((r) => [r.label, r.hikesLeft, r.hikedOn]),
       ).toEqual([
-        ["Lake", 2, "Sat, 9 Jan 2027"],
-        ["Eagle Peak", 1, "Sat, 5 Dec 2026"],
+        ["Lake", 2, "Sat, 9 Jan 2027 · 11:00"],
+        ["Eagle Peak", 1, "Sat, 5 Dec 2026 · 11:00"],
       ]);
 
       // Round 4: Eagle Peak has one more hike to rest.
@@ -958,7 +958,7 @@ describe("the location cooldown", () => {
           store.addOption(fourPoll, { label: "Eagle Peak", proposedBy: "u1" }),
         ),
       ).toBe(
-        "**Eagle Peak** was the hike on Sat, 5 Dec 2026. It can be suggested again after 1 more hike.",
+        "**Eagle Peak** was the hike on Sat, 5 Dec 2026 · 11:00. It can be suggested again after 1 more hike.",
       );
       store.cancelRound(four.id, "u-admin");
       playRound(store, locations("Ridge"), "Ridge", "2027-02-06");
@@ -1003,9 +1003,13 @@ describe("the location cooldown", () => {
       "**Ridge** was the hike. It can be suggested again after 1 more hike.",
     );
     expect(
-      cooldownMessage({ ...resting, hikedOn: "Sun, 6 Dec 2026", hikesLeft: 2 }),
+      cooldownMessage({
+        ...resting,
+        hikedOn: "Sun, 6 Dec 2026 · 11:00",
+        hikesLeft: 2,
+      }),
     ).toBe(
-      "**Ridge** was the hike on Sun, 6 Dec 2026. It can be suggested again after 2 more hikes.",
+      "**Ridge** was the hike on Sun, 6 Dec 2026 · 11:00. It can be suggested again after 2 more hikes.",
     );
   });
 });

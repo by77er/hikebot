@@ -168,7 +168,7 @@ describe("/hike log", () => {
         "Sat, 15 Jun 2030 · 09:00 · **Ridge**",
         "Steep",
         "Thread: <#600000000000000001>",
-        "Fri, 1 Mar 2030 · **Lake**",
+        "Fri, 1 Mar 2030 · 11:00 · **Lake**",
       ].join("\n"),
     );
   });
