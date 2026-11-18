@@ -1,14 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
+  CADENCE_WINDOW_DAYS,
   DEFAULT_HIKE_TIME,
   DEFAULT_TIMEZONE,
   addDays,
+  cadenceDateCandidates,
+  cadenceDateVoteClose,
+  cadenceWindow,
   clockIn,
   defaultDateCandidates,
   hikeStart,
+  nextCadenceInstant,
+  nextDailyInstant,
   normalizeTimeZone,
   parseDateOption,
+  previousCadenceInstant,
   todayIn,
+  weekdayOf,
 } from "../../src/polls/dates";
 
 describe("parseDateOption", () => {
@@ -256,6 +264,272 @@ describe("defaultDateCandidates", () => {
     );
     expect(defaultDateCandidates(todayIn("America/Los_Angeles", now))[0]).toBe(
       "2026-11-21 11:00",
+    );
+  });
+});
+
+/**
+ * The schedule's time functions, in Los Angeles across both of its 2026
+ * clock changes (8 March, clocks forward; 1 November, clocks back) and in
+ * Kolkata, which has none. 09:00 is 17:00 UTC in Los Angeles in winter and
+ * 16:00 UTC in summer, and 03:30 UTC in Kolkata all year.
+ */
+const LA = "America/Los_Angeles";
+const KOLKATA = "Asia/Kolkata";
+const WED_0900 = { weekday: 3, time: "09:00" };
+const utc = (iso: string) => Date.parse(`${iso}Z`);
+
+describe("weekdayOf", () => {
+  it.each([
+    ["2026-11-18", 3],
+    ["2026-11-22", 0],
+    ["2026-11-21", 6],
+    ["2028-02-29", 2],
+  ])("%s is day %i", (day, weekday) => {
+    expect(weekdayOf(day)).toBe(weekday);
+  });
+});
+
+describe("nextCadenceInstant", () => {
+  it.each([
+    // [zone, cadence, after, next]
+    [
+      "a week before spring",
+      LA,
+      WED_0900,
+      "2026-03-04T17:00",
+      "2026-03-11T16:00",
+    ],
+    [
+      "the day before, spring",
+      LA,
+      WED_0900,
+      "2026-03-10T12:00",
+      "2026-03-11T16:00",
+    ],
+    [
+      "a minute before, spring",
+      LA,
+      WED_0900,
+      "2026-03-11T15:59",
+      "2026-03-11T16:00",
+    ],
+    [
+      "at the instant, spring",
+      LA,
+      WED_0900,
+      "2026-03-11T16:00",
+      "2026-03-18T16:00",
+    ],
+    [
+      "a week before autumn",
+      LA,
+      WED_0900,
+      "2026-10-28T16:00",
+      "2026-11-04T17:00",
+    ],
+    [
+      "on the change, autumn",
+      LA,
+      WED_0900,
+      "2026-11-01T09:30",
+      "2026-11-04T17:00",
+    ],
+    // 21:00 Wednesday in LA is Thursday in UTC; the next Wednesday is local.
+    [
+      "late on the day, in UTC tomorrow",
+      LA,
+      WED_0900,
+      "2026-11-19T05:00",
+      "2026-11-25T17:00",
+    ],
+    [
+      "a Sunday cadence over spring",
+      LA,
+      { weekday: 0, time: "09:00" },
+      "2026-03-01T17:00",
+      "2026-03-08T16:00",
+    ],
+    [
+      "a Sunday cadence over autumn",
+      LA,
+      { weekday: 0, time: "09:00" },
+      "2026-10-25T16:00",
+      "2026-11-01T17:00",
+    ],
+    // 02:30 does not exist on 8 March 2026: it is read as 03:30 PDT.
+    [
+      "a skipped time",
+      LA,
+      { weekday: 0, time: "02:30" },
+      "2026-03-07T00:00",
+      "2026-03-08T10:30",
+    ],
+    // 01:30 happens twice on 1 November 2026: the first, still PDT.
+    [
+      "a repeated time",
+      LA,
+      { weekday: 0, time: "01:30" },
+      "2026-10-31T00:00",
+      "2026-11-01T08:30",
+    ],
+    [
+      "no clock change, spring",
+      KOLKATA,
+      WED_0900,
+      "2026-03-04T03:30",
+      "2026-03-11T03:30",
+    ],
+    [
+      "no clock change, autumn",
+      KOLKATA,
+      WED_0900,
+      "2026-10-28T03:30",
+      "2026-11-04T03:30",
+    ],
+    [
+      "no clock change, a minute before",
+      KOLKATA,
+      WED_0900,
+      "2026-11-04T03:29",
+      "2026-11-04T03:30",
+    ],
+  ])("%s", (_name, zone, cadence, after, next) => {
+    expect(nextCadenceInstant(cadence, zone, utc(after))).toBe(utc(next));
+  });
+
+  it("keeps 09:00 local every week through a year in Los Angeles", () => {
+    let at = utc("2026-01-01T00:00");
+    for (let week = 0; week < 53; week++) {
+      at = nextCadenceInstant(WED_0900, LA, at);
+      expect(clockIn(LA, at)).toBe("Wed 09:00");
+    }
+  });
+});
+
+describe("previousCadenceInstant", () => {
+  it.each([
+    ["at the instant", LA, WED_0900, "2026-03-11T16:00", "2026-03-11T16:00"],
+    [
+      "a minute before, over spring",
+      LA,
+      WED_0900,
+      "2026-03-11T15:59",
+      "2026-03-04T17:00",
+    ],
+    [
+      "a minute before, over autumn",
+      LA,
+      WED_0900,
+      "2026-11-04T16:59",
+      "2026-10-28T16:00",
+    ],
+    [
+      "the Saturday after",
+      LA,
+      WED_0900,
+      "2026-11-07T20:00",
+      "2026-11-04T17:00",
+    ],
+    [
+      "no clock change",
+      KOLKATA,
+      WED_0900,
+      "2026-03-11T03:29",
+      "2026-03-04T03:30",
+    ],
+  ])("%s", (_name, zone, cadence, at, previous) => {
+    expect(previousCadenceInstant(cadence, zone, utc(at))).toBe(utc(previous));
+  });
+});
+
+describe("nextDailyInstant", () => {
+  it.each([
+    ["into spring", LA, "2026-03-07T17:00", "2026-03-08T16:00"],
+    ["into autumn", LA, "2026-10-31T16:00", "2026-11-01T17:00"],
+    ["later the same day", LA, "2026-11-20T08:00", "2026-11-20T17:00"],
+    ["no clock change", KOLKATA, "2026-03-07T03:30", "2026-03-08T03:30"],
+  ])("%s", (_name, zone, after, next) => {
+    expect(nextDailyInstant("09:00", zone, utc(after))).toBe(utc(next));
+  });
+});
+
+describe("cadenceDateVoteClose", () => {
+  it.each([
+    // [name, zone, opened, days, closes]
+    ["two days, winter", LA, "2026-03-04T17:00", 2, "2026-03-06T17:00"],
+    ["three days over spring", LA, "2026-03-05T17:00", 3, "2026-03-08T16:00"],
+    ["three days over autumn", LA, "2026-10-30T16:00", 3, "2026-11-02T17:00"],
+    ["one day", LA, "2026-11-18T17:00", 1, "2026-11-19T17:00"],
+    // 23:30 on Wednesday in LA is Thursday in UTC: days count from Wednesday.
+    [
+      "opened late, in UTC the next day",
+      LA,
+      "2026-03-05T07:30",
+      2,
+      "2026-03-06T17:00",
+    ],
+    ["no clock change", KOLKATA, "2026-03-04T03:30", 2, "2026-03-06T03:30"],
+  ])("%s", (_name, zone, opened, days, closes) => {
+    expect(cadenceDateVoteClose(utc(opened), "09:00", days, zone)).toBe(
+      utc(closes),
+    );
+  });
+});
+
+describe("cadenceWindow", () => {
+  it.each([
+    ["a Friday close", LA, "2026-03-06T17:00", "2026-03-07", "2026-03-20"],
+    ["a close over autumn", LA, "2026-10-30T16:00", "2026-10-31", "2026-11-13"],
+    [
+      "a close late in the local day",
+      LA,
+      "2026-11-21T07:00",
+      "2026-11-21",
+      "2026-12-04",
+    ],
+    [
+      "no clock change",
+      KOLKATA,
+      "2026-03-06T03:30",
+      "2026-03-07",
+      "2026-03-20",
+    ],
+  ])("%s", (_name, zone, closes, first, last) => {
+    expect(cadenceWindow(utc(closes), zone)).toEqual({ first, last });
+    expect(addDays(first, CADENCE_WINDOW_DAYS - 1)).toBe(last);
+  });
+});
+
+describe("cadenceDateCandidates", () => {
+  it.each([
+    [
+      "a Friday close: two whole weekends",
+      LA,
+      "2026-03-06T17:00",
+      ["2026-03-07", "2026-03-08", "2026-03-14", "2026-03-15"],
+    ],
+    [
+      "a Saturday close: the Sunday, a weekend, the last Saturday",
+      LA,
+      "2026-03-07T17:00",
+      ["2026-03-08", "2026-03-14", "2026-03-15", "2026-03-21"],
+    ],
+    [
+      "a Sunday close over autumn",
+      LA,
+      "2026-11-01T17:00",
+      ["2026-11-07", "2026-11-08", "2026-11-14", "2026-11-15"],
+    ],
+    [
+      "no clock change",
+      KOLKATA,
+      "2026-11-20T03:30",
+      ["2026-11-21", "2026-11-22", "2026-11-28", "2026-11-29"],
+    ],
+  ])("%s", (_name, zone, closes, days) => {
+    expect(cadenceDateCandidates(utc(closes), zone)).toEqual(
+      days.map((day) => `${day} ${DEFAULT_HIKE_TIME}`),
     );
   });
 });

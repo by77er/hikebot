@@ -549,6 +549,33 @@ describe("proposeDate", () => {
     );
   });
 
+  it("takes only the days of a window when one is given, and says which", async () => {
+    await withStore(
+      (store) => {
+        const poll = openDatePoll(store);
+        const window = { first: "2026-11-21", last: "2026-12-04" };
+        const propose = (line: string) =>
+          store.proposeDate(poll.id, "u-member", line, LA, window);
+        // Today and tomorrow are inside the usual month, not the window.
+        expectCode(() => propose("2026-11-18"), "date_outside_window");
+        expectCode(() => propose("2026-11-20 23:59"), "date_outside_window");
+        expectCode(() => propose("2026-12-05"), "date_outside_window");
+        expect(store.getPoll(poll.id)?.options.length).toBe(2);
+        expect(propose("2026-11-21 08:00").dateValue).toBe("2026-11-21 08:00");
+        expect(propose("2026-11-25").dateValue).toBe("2026-11-25 11:00");
+        expect(propose("2026-12-04 18:00").dateValue).toBe("2026-12-04 18:00");
+        try {
+          propose("2026-12-05");
+        } catch (error) {
+          expect(isPollError(error) ? error.message : "").toBe(
+            "Sat, 5 Dec 2026 · 11:00 is outside this round's dates. Propose a day from 2026-11-21 to 2026-12-04: the 14 days after the date vote closes.",
+          );
+        }
+      },
+      { now: () => NOW },
+    );
+  });
+
   it("refuses a date that is not one, the same date and time, and a full poll, changing nothing", async () => {
     await withStore(
       (store) => {
