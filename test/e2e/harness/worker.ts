@@ -10,7 +10,7 @@
  */
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import {
@@ -179,13 +179,15 @@ interface ProbeSource {
   compatibility_flags?: string[];
   durable_objects: object;
   migrations: object[];
+  assets?: { directory?: string; binding?: string };
   vars: Record<string, string>;
   secrets?: object;
 }
 
 /**
  * Writes the Worker config at `configPath` with the probe entry point as
- * `main` to `dir`, and returns the new file's path. The probe runs from a
+ * `main` to `dir`, and returns the new file's path. The static assets
+ * directory is made absolute, so the probe serves the checkout's `public/`. The probe runs from a
  * file rather than an inline config because only a file-based worker takes
  * the harness's `secrets`; an inline config's vars lose to `.dev.vars`.
  */
@@ -206,6 +208,10 @@ async function writeProbeConfig(
     compatibility_flags: config.compatibility_flags,
     durable_objects: config.durable_objects,
     migrations: config.migrations,
+    assets: config.assets && {
+      ...config.assets,
+      directory: resolve(dirname(configPath), config.assets.directory ?? "."),
+    },
     vars: config.vars,
     secrets: config.secrets,
   };
