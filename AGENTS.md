@@ -305,16 +305,14 @@ them by hand, for example for your own test application:
 
 1. Make the new value where the secrets table in `README.md` says it comes
    from (for `DISCORD_BOT_TOKEN`, Bot, Reset Token in the Discord developer
-   portal). Read that table's line for the secret first: it says what
-   rotating it breaks. For `SIGNING_SECRET`, tell the group before you
-   rotate it, because everyone is signed out and every calendar address
-   changes.
+   portal). Read that table's line for the secret first, and if it says
+   rotating signs people out or changes their links, tell the group before
+   you go on.
 2. Replace the GitHub Actions secret, typing the value at the prompt (or
-   under Settings, Secrets and variables, Actions on GitHub). Each deploy
-   sets the five Worker secrets (the three `DISCORD_*` ones,
-   `DISCORD_CLIENT_SECRET` and `SIGNING_SECRET`) from these GitHub secrets,
-   so a value set with `npx wrangler secret put` for one of them is replaced
-   at the next deploy:
+   under Settings, Secrets and variables, Actions on GitHub). Set it there
+   and not with `npx wrangler secret put`: each deploy sets every secret in
+   `secrets.required` of `wrangler.jsonc` from the GitHub secret of the same
+   name, replacing a value put by hand:
 
    ```sh
    gh secret set DISCORD_BOT_TOKEN
