@@ -2,7 +2,7 @@ hikebot is a Discord bot on Cloudflare Workers and Durable Objects. These rules
 govern the whole repository. Read `docs/design.md` for the design they enforce.
 
 ## Files are formatted with Prettier
-only: *.{ts,js,json,jsonc,md}
+only: *.{ts,tsx,js,json,jsonc,md,css}
 
 Run `npm run format` and commit the result.
 
@@ -280,14 +280,16 @@ process.stdin.on("data", (chunk) => (text += chunk)).on("end", () => {
 ```
 
 ## A source change comes with tests
-only: src/**/*.ts
+only: src/**/*.{ts,tsx}
 
 A change that adds or changes what code under `src/` does adds or updates a
 test under `test/` in the same pull request, one that fails without the
 change. Put the tests for `src/<dir>/<file>.ts` in `test/<dir>/<file>.test.ts`
 and follow `test/AGENTS.md` to write them. A change that keeps behaviour as it
 is, such as a comment, a rename, formatting or a refactor the existing tests
-already cover, needs no new test.
+already cover, needs no new test. Put the tests for a page in
+`src/web/pages/<file>.tsx` in `test/web/`, as "Test a page" in
+`src/web/AGENTS.md` says.
 
 ```diff good
 --- a/src/polls/dates.ts
@@ -523,7 +525,7 @@ exit 1
 ```
 
 ## The deployed Worker never refers to the tests or the probe
-only: {src/**/*.ts,wrangler.jsonc}
+only: {src/**/*.{ts,tsx},wrangler.jsonc}
 
 `wrangler deploy` bundles `src/` from `wrangler.jsonc`, and anything they
 reach ships to production. The probe Worker under `test/e2e/probe/` adds the
