@@ -117,6 +117,77 @@ so a name or title from Discord or a form cannot inject markup.
   The stylesheet is a neutral baseline (system fonts, a readable line
   length).
 
+## Web pages for a server
+
+A page about a server reads it in one call, `readGuild(env, guildId,
+userId, { page, pageSize })` (`src/web/guild.ts`), which calls the RPC
+method `webView` on the guild's `GuildHike` through the `GUILD_HIKE`
+binding. Nothing under `src/web/` opens the object's storage; the read is
+built inside the object by `readWebView` (`src/guild/web-view.ts`), from
+the existing stores and feature functions, and writes nothing but caches.
+
+**Who may see a server.** Only its members. The read asks Discord with the
+bot's token, `GET /guilds/{guild.id}/members/{user.id}`
+(`getGuildMember`): a 404 means the user is not a member. The answer is a
+discriminated result, and only a member's carries anything about the
+server:
+
+- `{ kind: "not_member" }`: Discord answered 404, or the guild or user id
+  is not a snowflake (`readGuild` then asks no one and wakes no object).
+- `{ kind: "unavailable" }`: Discord answered anything else, or could not
+  be reached, for the membership, the server or the owner. It is never
+  read as "not a member" or as "allowed"; the failure is logged.
+- `{ kind: "view", view }`: the view below.
+
+Whether the viewer is an admin is decided by the rule in "Admin
+permission", with the roles from their membership.
+
+**The view** is plain serialisable data (no class instances, `null` for
+"none"), in sections, each built by its own function from one
+`WebViewSource`:
+
+- `server` (`serverSection`, `src/guild/web-view.ts`): id, name, and the
+  icon's URL on Discord's CDN (null without an icon).
+- `viewer` (`viewerSection`, same file): user id and `isAdmin`.
+- `settings` (`settingsSection`, same file): the time zone, and the vote,
+  announcement and forum channels as id and name (null when not set; a null
+  name when the server no longer has the channel). The admin role is left
+  out.
+- `round` (`roundSection`, `src/features/round-section.ts`): the active
+  round, or null. Its step (`location_vote_open`, `location_decided`,
+  `date_vote_open`), the decided location, and while a vote is open: its
+  poll id and kind; its options in the poll message's order (locations by
+  votes, dates by date), each with label, details, date, proposer, vote
+  count and whether the viewer voted for it; the number of voters;
+  `closesAt` (null: a vote closes when an admin closes it); and a link to
+  the poll's message (null until posted).
+- `plannedHike` (`plannedHikeSection`,
+  `src/features/planned-hike-section.ts`): the newest hike in the log while
+  its start plus `HIKE_DURATION_HOURS` is after now, else null. Location,
+  details and proposer; the start as an instant and as the wall-clock date
+  and time in the guild's time zone, which it names, with the date's label;
+  links to its thread and its Discord event (null when there is none).
+- `log` (`hikeLogSection`, `src/features/hike-log.ts`): one page of the
+  hike log as "Hike log" defines it, newest first: entries (location, date,
+  thread and event links, when it completed), `page` (clamped to
+  `1..pages`, as the log's buttons are), `pageSize` (1-50, default 10),
+  `pages` and `total`.
+
+**Caches.** The guild object keeps, in memory only (`WebViewCache`):
+
+- each user's membership and roles, including a "not a member" answer, for
+  60 seconds (`MEMBER_CACHE_MS`); an error is not cached;
+- the server's name, icon and channel names (`GET /guilds/{guild.id}` and
+  `GET /guilds/{guild.id}/channels`) for an hour, as long as the owner.
+  That fetch also refreshes the owner id cached in `guild_settings`, the one
+  write the read makes.
+
+A restart of the object (a deploy, or eviction when idle) empties the
+in-memory caches, so the next read asks Discord again; the owner cache in
+storage survives it. A member who leaves can still read the server for up
+to 60 seconds, and a renamed server or channel shows its old name for up to
+an hour.
+
 ## GuildHike and the handler registry
 
 `GuildHike` (`src/guild/guild-hike.ts`, `extends DurableObject` from
@@ -330,13 +401,15 @@ The e2e harness (`test/e2e/harness/`) has five parts:
   submit, an update to a modal not opened from a message), flags a message
   or deferred response cannot set, or data that breaks the rules below.
 - A fake Discord API on `node:http` with the routes the bot uses: create and
-  edit message, start forum thread, get guild, create guild scheduled
-  event, edit original interaction response, create follow-up and bulk
-  overwrite global commands. As on
+  edit message, start forum thread, get guild, get guild member, get guild
+  channels, create guild scheduled event, edit original interaction
+  response, create follow-up and bulk overwrite global commands. As on
   Discord, after an interaction is answered with an update or a deferred
   update, its original response is the message its component (or the modal's
   button) was on. It keeps
-  guilds (with owner), channels (with type), threads, messages, scheduled
+  guilds (with owner and icon), their members (with role ids; the owner is
+  always one, and a scenario adds others with `addMember`), channels (with
+  type), threads, messages, scheduled
   events and interaction replies in memory, so tests assert on what the
   channel shows. Tests can make a channel fail as Discord does (403/50013
   missing permissions, 403/50001 missing access, 404/10003 unknown
@@ -406,26 +479,34 @@ subcommand gets the "no longer available" notice.
 
 ## Admin permission
 
-`checkAdmin` (`src/guild/permissions.ts`) decides who may use the admin
-panel: the guild owner, or a member whose `interaction.member.roles` holds
-the configured admin role. Until an admin role is set, only the owner gets
-in. An interaction without a guild or member is refused.
+One rule decides who is an admin, for Discord interactions and web pages
+alike: `decideAdmin` (`src/guild/permissions.ts`), from the user id, their
+role ids and the time. A user is an admin if they own the guild or hold the
+configured admin role. Until an admin role is set, only the owner is.
 
 The owner id comes from `GET /guilds/{guild.id}` (`getGuild`) and is cached
 in `guild_settings` with the time it was fetched. A cached id is trusted for
-an hour, measured with the interaction's snowflake timestamp; after that it
-is fetched again before it decides anything, so after an ownership transfer
-the new owner gets in and the former owner is refused. A member with the
-admin role is let in without a lookup, so a check makes at most one REST
-call. If the lookup fails, the panel stays closed and the member gets an
-ephemeral reply with Discord's error.
+an hour (`OWNER_CACHE_MS`); after that it is fetched again before it decides
+anything, so after an ownership transfer the new owner is an admin and the
+former owner is not. A holder of the admin role is an admin without a
+lookup, so a decision makes at most one REST call. If the lookup fails,
+nothing is decided.
 
-Everyone else gets an ephemeral Components V2 reply saying the panel is
-limited to the server owner and the admin role (and, when no role is set,
-that only the owner can use it). `adminOnly(handler)` wraps a command,
-component or modal handler in this check; every admin control's handler is
-registered through it, so a member who replays an admin `custom_id` is
-refused like one who runs the command.
+- **Interactions.** `checkAdmin` decides for the member who sent the
+  interaction, with the roles in `interaction.member.roles` and the
+  interaction's snowflake timestamp as the time. An interaction without a
+  guild or member is refused. If the owner lookup fails, the panel stays
+  closed and the member gets an ephemeral reply with Discord's error.
+  Everyone else who is not an admin gets an ephemeral Components V2 reply
+  saying the panel is limited to the server owner and the admin role (and,
+  when no role is set, that only the owner can use it). `adminOnly(handler)`
+  wraps a command, component or modal handler in this check; every admin
+  control's handler is registered through it, so a member who replays an
+  admin `custom_id` is refused like one who runs the command.
+- **Web pages.** The web read (see "Web pages for a server") decides for
+  the signed-in user, with the roles Discord gives for their membership and
+  the store's clock as the time. If the owner lookup fails, the page gets
+  "Discord unavailable", never a guess.
 
 ## Guild settings
 
