@@ -353,7 +353,9 @@ const saveDateProposal: ModalHandler = async (interaction, context) => {
       interaction.member?.user.id ?? interaction.user?.id ?? "",
       typed,
       settings.timezone,
-      (poll && cadenceDateWindow(poll, settings)) ?? undefined,
+      poll === null
+        ? undefined
+        : (cadenceDateWindow(poll, settings) ?? undefined),
     );
     await scheduleRefresh(context.storage, pollId, store.now());
     return {

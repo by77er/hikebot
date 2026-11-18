@@ -385,11 +385,6 @@ function refuseResting(
 }
 
 /**
- * Rounds, polls, options and votes in a GuildHike's SQLite storage. Every
- * operation that writes more than one row runs in one `transactionSync`, so
- * a failure leaves nothing behind.
- */
-/**
  * Which days a member may propose, from `first` to `last`, ending a
  * refusal; with a `window`, those are the round's (`CADENCE_WINDOW_DAYS`
  * after the date vote closes), and they may all have passed.
@@ -401,6 +396,11 @@ function proposeDays(first: string, last: string, window: boolean): string {
     : `This round's dates, up to ${last}, have passed.`;
 }
 
+/**
+ * Rounds, polls, options and votes in a GuildHike's SQLite storage. Every
+ * operation that writes more than one row runs in one `transactionSync`, so
+ * a failure leaves nothing behind.
+ */
 export class PollStore {
   private readonly sql: SqlStorage;
   /** The store's clock, for callers that schedule work relative to it. */

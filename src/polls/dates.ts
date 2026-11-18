@@ -56,9 +56,7 @@ export function parseDateOption(line: string): ParsedDate | null {
   if (month < 1 || month > 12) return null;
   if (day < 1 || day > daysInMonth(year, month)) return null;
 
-  const date = new Date(0);
-  date.setUTCFullYear(year, month - 1, day);
-  const weekday = WEEKDAYS[date.getUTCDay()] ?? "";
+  const weekday = WEEKDAYS[weekdayOf(`${y}-${m}-${d}`)] ?? "";
   const time =
     hh !== undefined && mm !== undefined ? `${hh}:${mm}` : DEFAULT_HIKE_TIME;
   if (Number(time.slice(0, 2)) > 23 || Number(time.slice(3)) > 59) return null;
@@ -262,11 +260,8 @@ export function addDays(day: string, days: number): string {
  * today, so a weekend in progress is not offered.
  */
 export function defaultDateCandidates(today: string): string[] {
-  const [y = 0, m = 1, d = 1] = today.split("-").map(Number);
-  const date = new Date(0);
-  date.setUTCFullYear(y, m - 1, d);
   // Saturday is 6; a Saturday today waits a whole week.
-  const toSaturday = 6 - date.getUTCDay() || 7;
+  const toSaturday = 6 - weekdayOf(today) || 7;
   return [0, 1, 7, 8].map(
     (offset) => `${addDays(today, toSaturday + offset)} ${DEFAULT_HIKE_TIME}`,
   );
