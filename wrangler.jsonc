@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hikebot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-17",
+  "observability": {
+    "enabled": true,
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GUILD_HIKE",
+        "class_name": "GuildHike",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GuildHike"],
+    },
+  ],
+  // Values are set with `wrangler secret put` and locally in .dev.vars.
+  "secrets": {
+    "required": [
+      "DISCORD_PUBLIC_KEY",
+      "DISCORD_APPLICATION_ID",
+      "DISCORD_BOT_TOKEN",
+    ],
+  },
+}

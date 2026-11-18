@@ -1,0 +1,5 @@
+package-lock.json
+worker-configuration.d.ts
+.wrangler
+# Prettier would put a blank line between a rule heading and its `only:` line.
+UNDERCURRENT.md
