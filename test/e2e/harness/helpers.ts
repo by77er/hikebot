@@ -108,6 +108,28 @@ export function waitForMessage(
   }, options);
 }
 
+/**
+ * Waits until the original response to the interaction with `token` (after
+ * any follow-up edits) satisfies `match`, and returns it. Use it for a
+ * deferred reply that a follow-up job edits.
+ */
+export function waitForOriginalResponse(
+  discord: FakeDiscord,
+  token: string,
+  match: (message: FakeMessage) => boolean,
+  options: { timeout?: number } = {},
+): Promise<FakeMessage> {
+  return eventually(() => {
+    const original = discord.originalResponse(token);
+    if (!original || !match(original)) {
+      throw new Error(
+        `the original response is ${original ? JSON.stringify(messageText(original)) : "missing"}`,
+      );
+    }
+    return original;
+  }, options);
+}
+
 /** A guild member who uses the bot through the interaction client. */
 export class Member {
   constructor(
