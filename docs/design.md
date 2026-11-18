@@ -431,24 +431,26 @@ for example to schedule an alarm. Every operation that writes more than one row 
 `transactionSync`, so a failure leaves no partial rows. A refusal throws
 `PollError` with a `code` and a message a member can read.
 
-| Operation                                           | Does                                                                                                                           | Refuses with                                                                                                                                                         |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `startRound(userId, initialLocations)`              | creates a `location_voting` round and its open location poll with the given options (may be none)                              | `round_active`, `location_on_cooldown`, plus the option codes below                                                                                                  |
-| `addOption(pollId, { label, details, proposedBy })` | adds an option; on a date poll the label is parsed as a date and stored as its display label                                   | `poll_not_found`, `poll_closed`, `invalid_label`, `invalid_details`, `invalid_date`, `too_many_options`, `duplicate_option`, `location_on_cooldown` (location polls) |
-| `setVotes(pollId, userId, optionIds)`               | replaces the member's votes in the poll with exactly that set; empty clears them                                               | `poll_not_found`, `poll_closed`, `unknown_option`                                                                                                                    |
-| `closePoll(pollId, userId)`                         | picks the winner (below), closes the poll, and moves the round to `location_decided` (location poll) or `complete` (date poll) | `poll_not_found`, `poll_closed`, `no_options`, `invalid_state`                                                                                                       |
-| `startDatePoll(roundId, userId, dates)`             | from `location_decided` only: opens the date poll with 2-25 distinct dates, sorted chronologically; round -> `date_voting`     | `round_not_found`, `invalid_state`, `invalid_date`, `duplicate_option`, `too_few_options`, `too_many_options`                                                        |
-| `withdrawDatePoll(pollId)`                          | deletes an open date poll with its options and votes; round `date_voting` -> `location_decided`                                | `poll_not_found`, `poll_closed`, `invalid_state`                                                                                                                     |
-| `withdrawLocationRound(pollId, userId)`             | from `location_voting` with this location poll open only: closes it without a winner; round -> `cancelled`                     | `poll_not_found`, `poll_closed`, `invalid_state`                                                                                                                     |
-| `cancelRound(roundId, userId)`                      | closes any open poll without a winner; round -> `cancelled`                                                                    | `round_not_found`, `invalid_state` (already ended)                                                                                                                   |
-| `setPollMessage(pollId, channelId, messageId)`      | records the poll's Discord message                                                                                             | `poll_not_found`                                                                                                                                                     |
-| `setRoundThread(roundId, threadId)`                 | records the hike's forum thread                                                                                                | `round_not_found`                                                                                                                                                    |
+| Operation                                           | Does                                                                                                                               | Refuses with                                                                                                                                                         |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `startRound(userId, initialLocations)`              | creates a `location_voting` round and its open location poll with the given options (may be none)                                  | `round_active`, `location_on_cooldown`, plus the option codes below                                                                                                  |
+| `addOption(pollId, { label, details, proposedBy })` | adds an option; on a date poll the label is parsed as a date and stored as its display label                                       | `poll_not_found`, `poll_closed`, `invalid_label`, `invalid_details`, `invalid_date`, `too_many_options`, `duplicate_option`, `location_on_cooldown` (location polls) |
+| `setVotes(pollId, userId, optionIds)`               | replaces the member's votes in the poll with exactly that set; empty clears them                                                   | `poll_not_found`, `poll_closed`, `unknown_option`                                                                                                                    |
+| `closePoll(pollId, userId)`                         | picks the winner (below), closes the poll, and moves the round to `location_decided` (location poll) or `complete` (date poll)     | `poll_not_found`, `poll_closed`, `no_options`, `invalid_state`                                                                                                       |
+| `startDatePoll(roundId, userId, dates)`             | from `location_decided` only: opens the date poll with 2-25 distinct dates, sorted chronologically; round -> `date_voting`         | `round_not_found`, `invalid_state`, `invalid_date`, `duplicate_option`, `too_few_options`, `too_many_options`                                                        |
+| `proposeDate(pollId, userId, line, timeZone)`       | adds a member's date to an open date poll, its day from today to `MAX_PROPOSAL_DAYS_AHEAD` (31) days ahead in the zone, at `now()` | `poll_not_found`, `poll_closed`, `invalid_state` (not a date poll), `invalid_date`, `date_in_past`, `date_too_far`, `too_many_options`, `duplicate_option`           |
+| `withdrawDatePoll(pollId)`                          | deletes an open date poll with its options and votes; round `date_voting` -> `location_decided`                                    | `poll_not_found`, `poll_closed`, `invalid_state`                                                                                                                     |
+| `withdrawLocationRound(pollId, userId)`             | from `location_voting` with this location poll open only: closes it without a winner; round -> `cancelled`                         | `poll_not_found`, `poll_closed`, `invalid_state`                                                                                                                     |
+| `cancelRound(roundId, userId)`                      | closes any open poll without a winner; round -> `cancelled`                                                                        | `round_not_found`, `invalid_state` (already ended)                                                                                                                   |
+| `setPollMessage(pollId, channelId, messageId)`      | records the poll's Discord message                                                                                                 | `poll_not_found`                                                                                                                                                     |
+| `setRoundThread(roundId, threadId)`                 | records the hike's forum thread                                                                                                    | `round_not_found`                                                                                                                                                    |
 
 Reads return null when there is nothing to return:
 `getPoll(pollId, viewerId?)`, `getRound(roundId, viewerId?)`,
 `getActiveRound(viewerId?)` and `getLastRound(viewerId?)` (the most recently
 started round), and `getOption(optionId)`, an option of any poll. A poll
-read model has its options in creation order, each with its vote count, the
+read model has its options in date order (a location poll's, which have no
+date, in creation order), each with its vote count, the
 number of distinct voters, and `viewerVotes`, the viewer's current votes. A
 round read model includes its location and date polls.
 
@@ -518,6 +520,13 @@ library, and take the current time as a parameter:
   first occurrence (01:30 PDT, 08:30 UTC). Half-hour zones such as
   `Asia/Kolkata` work the same way.
 - `todayIn(timeZone, now)`: the calendar day in the zone, `YYYY-MM-DD`.
+- `addDays(day, n)`: the calendar day `n` days after `day`.
+- `defaultDateCandidates(today)`: the date vote's default candidates, the
+  Saturday and Sunday of the next two weekends at 11:00
+  (`2026-11-21 11:00`, `2026-11-22 11:00`, `2026-11-28 11:00`,
+  `2026-11-29 11:00` for Wednesday 18 November 2026). The first Saturday is
+  the first one strictly after today, so on a Saturday or a Sunday the
+  weekend in progress is not offered.
 - `clockIn(timeZone, now)`: the weekday and time there, `Wed 11:42`.
 - `normalizeTimeZone(input)`: the zone's stored name, or null (see "Admin
   panel").
@@ -539,8 +548,9 @@ member's current choices; submitting replaces their votes for that poll.
 Individual voters are not shown. A poll has at most 25 options (Discord's
 select limit). During the location vote, members add options with a Propose a
 location button: a new one in a modal, or one from an earlier round picked
-again from a select. Date options are entered by the admin as
-`YYYY-MM-DD` or `YYYY-MM-DD HH:MM`, a wall-clock time in the guild's time
+again from a select. Date options are entered by the admin when starting
+the date vote, and by members with a Propose a date button while it runs,
+as `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`, a wall-clock time in the guild's time
 zone (11:00 when no time is typed), and shown with the weekday and the time.
 
 The poll message, the vote flow, the refresh and the close and cancel flows
@@ -550,7 +560,8 @@ the decided location), instructions, nouns, whether options show their
 proposer, the order of the options (by votes or by date), the buttons after
 Vote, the announcement's heading and opening lines, and its close steps
 (see "Closing"). The location vote's wording and its own controls (start,
-propose) are in `src/features/location-vote.ts`, the date vote's (start) in
+propose) are in `src/features/location-vote.ts`, the date vote's (start,
+propose) in
 `src/features/date-vote.ts`; `registerFeatures` passes the wordings by kind
 to `registerPollUi`.
 
@@ -564,9 +575,9 @@ were added (`rankOptions` in `src/polls/tally.ts`); date options in
 chronological order whatever their votes (`chronological`). The location
 vote's heading is "Where should we hike?", the date vote's "When should we
 hike <decided location>?". Then the number of members who have
-voted, and while open the buttons **Vote** (`hb:poll:vote:<poll id>`) and,
-for the location vote, **Propose a location**
-(`hb:location:propose:<poll id>`). With no options it says so and invites a
+voted, and while open the buttons **Vote** (`hb:poll:vote:<poll id>`) and
+**Propose a location** (`hb:location:propose:<poll id>`) on the location
+vote or **Propose a date** (`hb:date:propose:<poll id>`) on the date vote. With no options it says so and invites a
 proposal. Details are shortened, all to the same cap with "…", so that the
 message's text stays within 4000 characters; with 25 options at the longest
 label (80) and details (300) it has 33 components and fits.
@@ -580,7 +591,9 @@ was cancelled." and has no buttons.
 ### Vote
 
 **Vote** answers with an ephemeral message holding a string select
-(`hb:poll:choose:<poll id>`) of every option, `min_values` 0 and
+(`hb:poll:choose:<poll id>`) of every option, in the poll message's order
+for dates (chronological, wherever a date was added) and in the order they
+were added for locations, `min_values` 0 and
 `max_values` the number of options, each option preselected when the member
 voted for it. With no options it answers "There are no locations to vote for
 yet. Propose one first." Submitting replaces the member's votes among the
@@ -612,6 +625,29 @@ full poll ("This vote already has 25 locations…"), a closed poll and a
 resting location (the cooldown message) each get their own ephemeral answer,
 whether typed or picked from a stale select (which is replaced by the
 answer); a full or closed poll is refused already at the buttons.
+
+### Propose a date
+
+**Propose a date** opens a modal (`hb:date:propose:<poll id>`) with one
+required short field, "Date" (up to 16 characters), whose help text names
+the days a member may propose, today to 31 days ahead in the guild's time
+zone (`2026-11-18 to 2026-12-19, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time
+defaults to 11:00.`). A valid submit adds the date through `proposeDate`
+with the member as proposer and no votes, keeps every vote already cast,
+confirms ephemerally ("Added **Sat, 5 Dec 2026 · 11:00** to the date vote.")
+and marks the poll for a refresh. The window is judged when the proposal is
+submitted, with the store's clock: a day before today ("…is in the past:
+today is <day> in <zone>. Propose a day from <today> to <last>.") and a day
+more than `MAX_PROPOSAL_DAYS_AHEAD` (31) days after today ("…is more than 31
+days away. Propose a day from <today> to <last>, or ask an admin to plan
+further ahead.") are refused; today and the 31st day are accepted. Text that
+is not a date gets the accepted formats; the same date and time as an
+option gets "**X** is already on the vote. Vote for it instead, or propose
+another time that day." (the same day at another time is another option);
+a full poll ("This vote already has 25 dates…") and a closed poll are
+refused at the button and at the modal. A refusal changes nothing. The
+month limit applies to members' proposals only, not to the admin's
+starting list. Date options show no proposer.
 
 ### Live updates
 
@@ -665,14 +701,19 @@ what they did:
 
 Once the location is decided, **Start date vote** opens a modal
 (`hb:date:start`) with one required paragraph, "Candidate dates (one per
-line)" (up to 1000 characters), whose placeholder shows both formats,
-`2026-12-05 (starts at 11:00) or 2026-12-05 09:00`, and whose help text says
+line)" (up to 1000 characters), prefilled with the next two weekends after
+today in the guild's time zone, one per line (`defaultDateCandidates`, see
+"Date options"), so starting the vote on them takes one click. The admin
+can edit the list before submitting. Its placeholder shows both formats,
+`2026-12-05 (starts at 11:00) or 2026-12-05 09:00`, and its help text says
 the time defaults to 11:00. `parseCandidateDates` reads it with the store's
 clock and the guild's time zone: blank lines are dropped and a repeated date
 counts once (a date without a time and the same date at 11:00 are one).
 Every line must parse with `parseDateOption`; no date may fall on a calendar
 day before today in the guild's time zone (`todayIn`; today is accepted at
-any time of day); and there must be 2 to 25 different dates. Otherwise
+any time of day); and there must be 2 to 25 different dates. There is no
+limit on how far ahead the admin's dates may be, so an organiser can plan
+beyond the month members may propose in. Otherwise
 nothing starts and the admin gets an ephemeral message listing each
 offending line by number (as typed, cut to 40 characters; the first 25 such
 lines, then a count of the rest; a past date with "today is <day> in
@@ -687,7 +728,8 @@ follow-up takes the poll back with `withdrawDatePoll`, so the round stays
 `location_decided` with **Start date vote** offered again, and the panel
 names the channel and Discord's error.
 
-The date vote has only a **Vote** button: members cannot propose dates.
+While the date vote runs, members add dates with **Propose a date** (see
+"Propose a date").
 
 ## Closing
 
