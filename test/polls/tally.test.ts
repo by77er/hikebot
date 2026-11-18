@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { defaultRandom, pickWinner, randomIndex } from "../../src/polls/tally";
+import {
+  defaultRandom,
+  pickWinner,
+  randomIndex,
+  rankOptions,
+} from "../../src/polls/tally";
 import { sequence } from "./helpers";
 
 describe("randomIndex", () => {
@@ -85,5 +90,18 @@ describe("pickWinner", () => {
     for (const id of [1, 2, 3]) {
       expect(Math.abs((wins.get(id) ?? 0) - draws / 3)).toBeLessThan(600);
     }
+  });
+});
+
+describe("rankOptions", () => {
+  it("puts the most votes first and keeps ties in the order they were added", () => {
+    const options = [
+      { id: 3, votes: 1 },
+      { id: 1, votes: 1 },
+      { id: 2, votes: 4 },
+      { id: 4, votes: 0 },
+    ];
+    expect(rankOptions(options).map((o) => o.id)).toEqual([2, 1, 3, 4]);
+    expect(options.map((o) => o.id)).toEqual([3, 1, 2, 4]);
   });
 });

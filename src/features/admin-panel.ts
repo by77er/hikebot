@@ -6,6 +6,7 @@ import {
   type APIButtonComponentWithCustomId,
   type APIMessageComponentInteraction,
   type APIMessageTopLevelComponent,
+  type RESTPatchAPIWebhookWithTokenMessageJSONBody,
 } from "discord-api-types/v10";
 import {
   actionRow,
@@ -14,6 +15,7 @@ import {
   container,
   customId,
   ephemeralReply,
+  messageBody,
   roleSelect,
   separator,
   textDisplay,
@@ -27,6 +29,13 @@ import {
 } from "../guild/config";
 import { ephemeralNotice } from "../discord/responses";
 import { adminOnly } from "../guild/permissions";
+import {
+  PollStore,
+  type PollKind,
+  type PollView,
+  type RoundView,
+} from "../polls/store";
+import { rankOptions } from "../polls/tally";
 import type {
   CommandHandler,
   ComponentHandler,
@@ -39,6 +48,8 @@ import { UNAVAILABLE_MESSAGE } from "../guild/router";
 /** Everything the panel shows. Later features add their state here. */
 export interface AdminPanelState {
   settings: GuildSettings;
+  /** The active round (neither complete nor cancelled), if any. */
+  round: RoundView | null;
 }
 
 export const ADMIN_PANEL_IDS = {
@@ -50,6 +61,20 @@ export const ADMIN_PANEL_IDS = {
   announceChannel: customId("admin", "announce-channel"),
   forumChannel: customId("admin", "forum-channel"),
 } as const;
+
+/** The panel's poll controls; their handlers live with the poll features. */
+export const POLL_CONTROL_IDS = {
+  startLocationVote: customId("location", "start"),
+  closePoll: (pollId: number) => customId("poll", "close", String(pollId)),
+  cancelRound: (roundId: number) =>
+    customId("round", "cancel", String(roundId)),
+} as const;
+
+/** How the panel names each kind of poll. */
+export const POLL_NAMES: Record<PollKind, string> = {
+  location: "location vote",
+  date: "date vote",
+};
 
 const NOT_SET = "not set";
 
@@ -87,7 +112,10 @@ const CHANNEL_SETTINGS = [
 export function loadAdminPanelState(
   storage: DurableObjectStorage,
 ): AdminPanelState {
-  return { settings: new GuildConfig(storage).get() };
+  return {
+    settings: new GuildConfig(storage).get(),
+    round: new PollStore(storage).getActiveRound(),
+  };
 }
 
 /**
@@ -96,6 +124,42 @@ export function loadAdminPanelState(
  * Refresh, each registered through `adminOnly`.
  */
 export function actionButtons(
+  state: AdminPanelState,
+): APIButtonComponentWithCustomId[] {
+  return [...pollButtons(state), ...settingsButtons(state)];
+}
+
+function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
+  const { round } = state;
+  if (round === null) {
+    return setupComplete(state.settings)
+      ? [
+          button({
+            custom_id: POLL_CONTROL_IDS.startLocationVote,
+            label: "Start location vote",
+          }),
+        ]
+      : [];
+  }
+  const open = openPoll(round);
+  return [
+    ...(open === null
+      ? []
+      : [
+          button({
+            custom_id: POLL_CONTROL_IDS.closePoll(open.id),
+            label: `Close ${POLL_NAMES[open.kind]}`,
+          }),
+        ]),
+    button({
+      custom_id: POLL_CONTROL_IDS.cancelRound(round.id),
+      label: "Cancel round",
+      style: ButtonStyle.Danger,
+    }),
+  ];
+}
+
+function settingsButtons(
   state: AdminPanelState,
 ): APIButtonComponentWithCustomId[] {
   return [
@@ -142,11 +206,94 @@ export function renderAdminPanel(
       textDisplay(
         setupComplete(settings)
           ? "Setup is complete."
-          : "Setup is not complete: set the voting, announcements and hike threads channels under Settings.",
+          : `Setup is not complete: set the ${listing(missingSettings(settings))} under Settings.`,
       ),
+      ...roundSection(state),
       ...rows,
     ]),
   ];
+}
+
+/** The round's open poll, if it has one. */
+function openPoll(round: RoundView): PollView | null {
+  return (
+    [round.locationPoll, round.datePoll].find(
+      (poll): poll is PollView => poll?.status === "open",
+    ) ?? null
+  );
+}
+
+/** What the round is doing: the open vote's tallies, or the decided location. */
+function roundSection(state: AdminPanelState) {
+  const { round } = state;
+  if (round === null) {
+    return setupComplete(state.settings)
+      ? [
+          separator(),
+          textDisplay("No hike is being planned. Start a location vote."),
+        ]
+      : [];
+  }
+  const lines: string[] = [];
+  const open = openPoll(round);
+  if (open !== null) {
+    const name = POLL_NAMES[open.kind];
+    lines.push(
+      open.messageId === null || open.channelId === null
+        ? `**The ${name} is open**, but its message has not been posted.`
+        : `**The ${name} is open** in <#${open.channelId}>.`,
+    );
+    if (open.options.length === 0) {
+      lines.push("No options yet.");
+    } else {
+      lines.push(
+        ...rankOptions(open.options).map(
+          (option, i) =>
+            `${String(i + 1)}. ${option.label}: ${votes(option.votes)}`,
+        ),
+      );
+    }
+    lines.push(voters(open.voterCount));
+  }
+  const decided = round.locationPoll;
+  if (round.status !== "location_voting" && decided !== null) {
+    const winner = decided.options.find(
+      (option) => option.id === round.locationOptionId,
+    );
+    if (winner !== undefined) {
+      lines.unshift(
+        `**Location decided:** ${winner.label} (${votes(winner.votes)})${decided.tieBroken ? ", drawn at random from a tie" : ""}.`,
+      );
+    }
+  }
+  return [separator(), textDisplay(lines.join("\n"))];
+}
+
+function votes(n: number): string {
+  return n === 1 ? "1 vote" : `${String(n)} votes`;
+}
+
+function voters(n: number): string {
+  if (n === 0) return "No one has voted yet.";
+  return n === 1 ? "1 member has voted." : `${String(n)} members have voted.`;
+}
+
+/** The settings setup still needs, named as the panel shows them. */
+export function missingSettings(settings: GuildSettings): string[] {
+  return CHANNEL_SETTINGS.filter(
+    (channel) => settings[channel.field] === null,
+  ).map((channel) => channel.name.toLowerCase());
+}
+
+/**
+ * The status view as a message body, for a follow-up job that replaces a
+ * deferred panel update with `editOriginalInteractionResponse`.
+ */
+export function adminPanelBody(
+  storage: DurableObjectStorage,
+  notice?: string,
+): RESTPatchAPIWebhookWithTokenMessageJSONBody {
+  return messageBody(renderAdminPanel(loadAdminPanelState(storage), notice));
 }
 
 /** The settings view: one select per setting, each showing its value. */
@@ -319,6 +466,13 @@ function selected(
 ): string | null | undefined {
   if (interaction.data.component_type !== type) return undefined;
   return interaction.data.values[0] ?? null;
+}
+
+/** `a`, `a and b`, `a, b and c`. */
+export function listing(items: string[]): string {
+  return items.length <= 1
+    ? items.join("")
+    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1] ?? ""}`;
 }
 
 function channelMention(id: string | null): string {

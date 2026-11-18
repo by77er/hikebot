@@ -84,6 +84,10 @@ keeps its handlers in its own file under `src/features/` and adds one line to
 An unknown command or `custom_id` (for example a button on an old message)
 gets an ephemeral Components V2 reply: "This action is no longer available."
 
+`GuildHike.alarm()` hands the object's Durable Object alarm to `runAlarm`
+(`src/features/index.ts`), which runs the features' scheduled work: today the
+debounced refresh of poll messages, described under "Live updates".
+
 ## Deferred work
 
 Discord needs a response within 3 seconds, and some actions make several
@@ -190,7 +194,10 @@ The e2e harness (`test/e2e/harness/`) has four parts:
   or deferred response cannot set, or data that breaks the rules below.
 - A fake Discord API on `node:http` with the routes the bot uses: create and
   edit message, start forum thread, get guild, edit original interaction
-  response, create follow-up and bulk overwrite global commands. It keeps
+  response, create follow-up and bulk overwrite global commands. As on
+  Discord, after an interaction is answered with an update or a deferred
+  update, its original response is the message its component (or the modal's
+  button) was on. It keeps
   guilds (with owner), channels (with type), threads, messages and
   interaction replies in memory, so tests assert on what the channel shows.
   Tests can make a channel fail as Discord does (403/50013 missing
@@ -293,10 +300,22 @@ ephemeral Components V2 reply; its buttons and selects update that message
 in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
 
 - **Status view**: the bot's name, the admin role and the three channels as
-  mentions or "not set", whether setup is complete, and the action buttons.
-  `actionButtons(state)` returns the buttons for the current state: Settings
-  (primary until setup is complete) and Refresh. Poll controls are added
-  there, before Settings.
+  mentions or "not set", whether setup is complete (and if not, which
+  channels are still missing), the active round, and the action buttons.
+  `AdminPanelState` holds the settings and the active round.
+  `actionButtons(state)` returns the buttons for the current state: the poll
+  controls first, then Settings (primary until setup is complete) and
+  Refresh. The poll controls are **Start location vote** (`hb:location:start`)
+  when setup is complete and no round is active; while a poll is open,
+  **Close location vote** (`hb:poll:close:<poll id>`) and **Cancel round**
+  (`hb:round:cancel:<round id>`); once the location is decided, **Cancel
+  round**. With a round active the view lists the open vote's tallies (most
+  votes first) and voter count, or the decided location and whether it was
+  drawn from a tie.
+- **Confirmation view**: Close and Cancel round first replace the status view
+  with a question and a confirm button (`hb:poll:close-confirm:<poll id>`,
+  `hb:round:cancel-confirm:<round id>`) next to Back; only the confirm button
+  acts.
 - **Settings view**: a role select for the admin role and three channel
   selects, for voting (text channels), announcements (text and announcement
   channels) and hike threads (forum channels). Each shows the current value
@@ -346,7 +365,8 @@ times are milliseconds since the epoch.
 
 `new PollStore(storage, { now, random })` gives these operations. `now`
 defaults to `Date.now` and `random` to `crypto.getRandomValues`; tests inject
-both. Every operation that writes more than one row runs in one
+both. Features read the time through `store.now()`, the same clock,
+for example to schedule an alarm. Every operation that writes more than one row runs in one
 `transactionSync`, so a failure leaves no partial rows. A refusal throws
 `PollError` with a `code` and a message a member can read.
 
@@ -405,6 +425,84 @@ location button and modal. Date options are entered by the admin as
 `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` and shown as entered, with the weekday; no
 timezone conversion.
 
+The poll message, the vote flow, the refresh and the close and cancel flows
+are shared by every poll kind (`src/features/poll-ui.ts`). A kind supplies a
+`PollWording`: its heading, instructions, nouns, whether options show their
+proposer, the buttons after Vote and the announcement's heading. The
+location vote's wording and its own controls (start, propose) are in
+`src/features/location-vote.ts`; `registerFeatures` passes the wordings by
+kind to `registerPollUi`.
+
+### Poll message
+
+One Components V2 container: the heading and one line of instructions, then
+one Text Display per option, most votes first and ties in the order the
+options were added (`rankOptions` in `src/polls/tally.ts`), each with its vote
+count, its details and, for the location vote, "Proposed by" and the
+proposer's mention (which pings no one). Then the number of members who have
+voted, and while open the buttons **Vote** (`hb:poll:vote:<poll id>`) and,
+for the location vote, **Propose a location**
+(`hb:location:propose:<poll id>`). With no options it says so and invites a
+proposal. Details are shortened, all to the same cap with "…", so that the
+message's text stays within 4000 characters; with 25 options at the longest
+label (80) and details (300) it has 33 components and fits.
+
+Closed, the heading says "(closed)", the winner is marked with 🏆 and named
+under the heading with its votes, a tie broken at random adds "N options tied
+with X votes each; the winner was drawn at random.", and the buttons are
+gone. A poll closed without a winner (its round was cancelled) says "This vote
+was cancelled." and has no buttons.
+
+### Vote
+
+**Vote** answers with an ephemeral message holding a string select
+(`hb:poll:choose:<poll id>`) of every option, `min_values` 0 and
+`max_values` the number of options, each option preselected when the member
+voted for it. With no options it answers "There are no locations to vote for
+yet. Propose one first." Submitting replaces the member's votes among the
+options that select lists with the ones picked, keeping their votes for
+options added after it was shown, and updates the ephemeral message with
+what they now vote for (or that their votes are cleared) and a fresh select.
+
+### Propose a location
+
+**Propose a location** opens a modal (`hb:location:propose:<poll id>`) with
+Name (required, up to 80 characters) and Details (optional paragraph, up to
+300: a trail link, distance, notes). A valid submit adds the option through
+`addOption` and confirms ephemerally. A duplicate name ("**X** is already on
+the list."), a full poll ("This vote already has 25 locations…") and a closed
+poll each get their own ephemeral answer; a full or closed poll is refused
+already at the button.
+
+### Live updates
+
+A vote or proposal marks its poll for a refresh (a `poll-refresh:<poll id>`
+key in the object's storage, holding when it is due) and, unless the object
+already has an alarm, sets one `REFRESH_DELAY_MS` (2 seconds) after the
+store's clock. The alarm edits the message of every marked poll that is still
+open, so a burst of votes causes one edit. A failed edit is logged and
+dropped; the member's interaction never waits for it. Marks added while the
+alarm ran get an alarm of their own. Every edit of a poll message (refresh,
+close, cancel) runs through one queue per object (`queuePollEdit`), so an
+older render never lands after a newer one.
+
+Votes, proposals and stale selects that arrive after a close or cancel get an
+ephemeral "This vote has closed." (a stale select is replaced by it).
+
+## Starting the location vote
+
+**Start location vote** opens a modal (`hb:location:start`) with one
+optional paragraph, "Initial locations (one per line)". Lines are trimmed,
+blank lines dropped and duplicates (compared as `labelKey` does) collapsed; a
+line over 80 characters, or more than 25 locations, is refused with an
+ephemeral message naming the line or the count, and nothing starts. Otherwise
+the handler starts the round through `startRound` (recording the admin as
+proposer of the initial locations) and answers with a deferred update of the
+panel. The follow-up posts the poll message in the voting channel, records it
+with `setPollMessage` and redraws the panel. If Discord refuses the post, the
+follow-up cancels the round again, so no round is left active, and the panel
+names the channel and Discord's error.
+
 ## Closing
 
 Closing a poll picks the option with the most votes; ties are broken
@@ -412,3 +510,23 @@ uniformly at random and the result says so. The poll message is edited to
 show final results, and a message is posted in the configured announcements
 channel. Closing the date vote also creates a thread with the hike details in
 the configured forum channel.
+
+The confirm button closes the poll through `closePoll` before answering, so
+the result stands whatever Discord does next, and answers with a deferred
+update of the panel. Closing a poll without options is refused in the panel
+with an explanation, at the first click and at the confirmation. The
+follow-up edits the poll message to its final state, posts the announcement
+(heading "Hike location decided", the winner and its votes, its details, the
+tie note, and a link to the poll message) and redraws the panel, which now
+shows the decided location. If the edit or the announcement fails, the panel
+says which step failed, in which channel, and Discord's error.
+
+**Cancel round**, confirmed, cancels the round through `cancelRound` and
+answers with a deferred update; the follow-up rewrites the message of each
+poll that was open as cancelled, without buttons, and redraws the panel,
+which offers **Start location vote** again. A failed rewrite is named in the
+panel. No announcement is posted.
+
+Every admin control (start button and modal, close, cancel and their
+confirmations) is registered through `adminOnly`, so a member who replays its
+`custom_id` is refused.

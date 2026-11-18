@@ -22,10 +22,12 @@ import {
 } from "vitest";
 import {
   ADMIN_PANEL_IDS,
+  POLL_CONTROL_IDS,
   actionButtons,
   renderAdminPanel,
   renderAdminSettings,
 } from "../../src/features/admin-panel";
+import type { PollView, RoundView } from "../../src/polls/store";
 import { GuildConfig, type GuildSettings } from "../../src/guild/config";
 import {
   ADMIN_ONLY_MESSAGE,
@@ -218,7 +220,7 @@ function settingsOf(guildId: string): Promise<GuildSettings> {
 
 describe("renderAdminPanel", () => {
   it("shows every setting as not set, and setup as incomplete, for a new guild", () => {
-    const view = renderAdminPanel({ settings: EMPTY });
+    const view = renderAdminPanel({ settings: EMPTY, round: null });
     const shown = text(asNodes(view));
     expect(shown).toContain("hikebot admin");
     expect(shown).toContain(
@@ -238,6 +240,7 @@ describe("renderAdminPanel", () => {
   it("shows the settings that are set as mentions, and setup as incomplete while a channel is missing", () => {
     const view = renderAdminPanel({
       settings: { ...EMPTY, adminRoleId: ROLE, voteChannelId: TEXT },
+      round: null,
     });
     const shown = text(asNodes(view));
     expect(shown).toContain(`**Admin role:** <@&${ROLE}>`);
@@ -248,7 +251,7 @@ describe("renderAdminPanel", () => {
   });
 
   it("shows setup as complete once the three channels are set", () => {
-    const view = renderAdminPanel({ settings: COMPLETE });
+    const view = renderAdminPanel({ settings: COMPLETE, round: null });
     const shown = text(asNodes(view));
     expect(shown).toContain(`**Announcements channel:** <#${NEWS}>`);
     expect(shown).toContain(`**Hike threads channel:** <#${FORUM}>`);
@@ -260,21 +263,135 @@ describe("renderAdminPanel", () => {
   });
 
   it("offers Settings and Refresh as the actions", () => {
-    expect(actionButtons({ settings: EMPTY }).map((b) => b.custom_id)).toEqual([
+    expect(
+      actionButtons({ settings: EMPTY, round: null }).map((b) => b.custom_id),
+    ).toEqual([ADMIN_PANEL_IDS.settings, ADMIN_PANEL_IDS.refresh]);
+  });
+
+  it("names the settings setup still needs and offers no start", () => {
+    const view = renderAdminPanel({
+      settings: { ...EMPTY, voteChannelId: TEXT },
+      round: null,
+    });
+    expect(text(asNodes(view))).toContain(
+      "Setup is not complete: set the announcements channel and hike threads channel under Settings.",
+    );
+    expect(
+      find(asNodes(view), POLL_CONTROL_IDS.startLocationVote),
+    ).toBeUndefined();
+  });
+
+  it("offers Start location vote once setup is complete and no round is active", () => {
+    const state = { settings: COMPLETE, round: null };
+    expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
+      POLL_CONTROL_IDS.startLocationVote,
       ADMIN_PANEL_IDS.settings,
       ADMIN_PANEL_IDS.refresh,
     ]);
+    expect(text(asNodes(renderAdminPanel(state)))).toContain(
+      "No hike is being planned.",
+    );
+  });
+
+  it("shows the open vote's tallies with Close location vote and Cancel round, within limits", () => {
+    const poll = votingPoll(25);
+    const state = { settings: COMPLETE, round: votingRound(poll) };
+    expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
+      POLL_CONTROL_IDS.closePoll(poll.id),
+      POLL_CONTROL_IDS.cancelRound(7),
+      ADMIN_PANEL_IDS.settings,
+      ADMIN_PANEL_IDS.refresh,
+    ]);
+    const view = renderAdminPanel(state, "x".repeat(300));
+    const shown = text(asNodes(view));
+    expect(shown).toContain(`**The location vote is open** in <#${TEXT}>.`);
+    expect(shown).toContain(`1. ${"L".repeat(78)}24: 24 votes`);
+    expect(shown).toContain("30 members have voted.");
+    expectWithinLimits(view);
+  });
+
+  it("shows the decided location and Cancel round once the location vote is closed", () => {
+    const poll: PollView = {
+      ...votingPoll(2),
+      status: "closed",
+      winnerOptionId: 1,
+      tieBroken: true,
+      tiedOptionIds: [1, 2],
+    };
+    const state = {
+      settings: COMPLETE,
+      round: {
+        ...votingRound(poll),
+        status: "location_decided" as const,
+        locationOptionId: 1,
+      },
+    };
+    expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
+      POLL_CONTROL_IDS.cancelRound(7),
+      ADMIN_PANEL_IDS.settings,
+      ADMIN_PANEL_IDS.refresh,
+    ]);
+    expect(text(asNodes(renderAdminPanel(state)))).toContain(
+      `**Location decided:** ${"L".repeat(78)}00 (0 votes), drawn at random from a tie.`,
+    );
   });
 
   it("shows a notice above the settings", () => {
-    const view = renderAdminPanel({ settings: EMPTY }, "Saved.");
+    const view = renderAdminPanel({ settings: EMPTY, round: null }, "Saved.");
     expect(text(asNodes(view))).toContain("Saved.");
   });
 });
 
+/** An open location poll with `n` options at the longest label. */
+function votingPoll(n: number): PollView {
+  return {
+    id: 3,
+    roundId: 7,
+    kind: "location",
+    status: "open",
+    channelId: TEXT,
+    messageId: "700000000000000001",
+    winnerOptionId: null,
+    tieBroken: false,
+    tiedOptionIds: [],
+    openedBy: OWNER,
+    openedAt: 0,
+    closedBy: null,
+    closedAt: null,
+    options: Array.from({ length: n }, (_, i) => ({
+      id: i + 1,
+      pollId: 3,
+      label: `${"L".repeat(78)}${String(i).padStart(2, "0")}`,
+      details: "D".repeat(300),
+      dateValue: null,
+      proposedBy: OWNER,
+      createdAt: 0,
+      votes: i,
+    })),
+    voterCount: 30,
+    viewerVotes: [],
+  };
+}
+
+function votingRound(poll: PollView): RoundView {
+  return {
+    id: 7,
+    status: "location_voting",
+    locationOptionId: null,
+    dateOptionId: null,
+    threadId: null,
+    startedBy: OWNER,
+    startedAt: 0,
+    endedBy: null,
+    endedAt: null,
+    locationPoll: poll,
+    datePoll: null,
+  };
+}
+
 describe("renderAdminSettings", () => {
   it("has a role select and three channel selects without defaults for a new guild", () => {
-    const view = renderAdminSettings({ settings: EMPTY });
+    const view = renderAdminSettings({ settings: EMPTY, round: null });
     const nodes = asNodes(view);
     expect(find(nodes, ADMIN_PANEL_IDS.role)).toMatchObject({
       type: ComponentType.RoleSelect,
@@ -301,7 +418,10 @@ describe("renderAdminSettings", () => {
   });
 
   it("shows each current value as the select's default", () => {
-    const view = renderAdminSettings({ settings: COMPLETE }, "Saved.");
+    const view = renderAdminSettings(
+      { settings: COMPLETE, round: null },
+      "Saved.",
+    );
     const nodes = asNodes(view);
     expect(find(nodes, ADMIN_PANEL_IDS.role)).toMatchObject({
       default_values: [{ id: ROLE, type: "role" }],

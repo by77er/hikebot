@@ -3,7 +3,7 @@ import type {
   APIInteraction,
   APIInteractionResponse,
 } from "discord-api-types/v10";
-import { registerFeatures } from "../features";
+import { registerFeatures, runAlarm } from "../features";
 import { Router } from "./router";
 import { applyMigrations } from "./schema";
 
@@ -46,6 +46,11 @@ export class GuildHike extends DurableObject<Env> {
       response: result.response,
       followUp: result.followUp !== undefined,
     };
+  }
+
+  /** Runs the features' scheduled work, such as poll message refreshes. */
+  override async alarm(): Promise<void> {
+    await runAlarm({ env: this.env, storage: this.ctx.storage });
   }
 
   /**

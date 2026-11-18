@@ -187,7 +187,8 @@ function validateDate(
  */
 export class PollStore {
   private readonly sql: SqlStorage;
-  private readonly now: () => number;
+  /** The store's clock, for callers that schedule work relative to it. */
+  readonly now: () => number;
   private readonly random: RandomSource;
 
   constructor(
