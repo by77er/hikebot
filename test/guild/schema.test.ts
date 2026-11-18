@@ -31,6 +31,12 @@ function appliedNames(storage: DurableObjectStorage): string[] {
     .map((row) => row.name);
 }
 
+/** Takes the 0005_round_day_of columns back out of the rounds table. */
+function dropDayOf(storage: DurableObjectStorage): void {
+  storage.sql.exec("ALTER TABLE rounds DROP COLUMN day_of_channel_id");
+  storage.sql.exec("ALTER TABLE rounds DROP COLUMN day_of_message_id");
+}
+
 describe("migrations", () => {
   it("are applied by the constructor and tracked in _migrations", async () => {
     const names = await runInDurableObject(
@@ -186,8 +192,9 @@ describe("migrations", () => {
       // Take the database back to 0002_guild_settings, with settings in it.
       state.storage.sql.exec("ALTER TABLE guild_settings DROP COLUMN timezone");
       state.storage.sql.exec("ALTER TABLE rounds DROP COLUMN event_id");
+      dropDayOf(state.storage);
       state.storage.sql.exec(
-        "DELETE FROM _migrations WHERE name IN ('0003_guild_timezone', '0004_round_event')",
+        "DELETE FROM _migrations WHERE name IN ('0003_guild_timezone', '0004_round_event', '0005_round_day_of')",
       );
       state.storage.sql.exec(
         "UPDATE guild_settings SET vote_channel_id = '12', owner_id = '21' WHERE id = 1",
@@ -227,8 +234,9 @@ describe("migrations", () => {
     await runInDurableObject(stub, (_instance, state) => {
       // Take the database back to 0003_guild_timezone, with a hike in it.
       state.storage.sql.exec("ALTER TABLE rounds DROP COLUMN event_id");
+      dropDayOf(state.storage);
       state.storage.sql.exec(
-        "DELETE FROM _migrations WHERE name = '0004_round_event'",
+        "DELETE FROM _migrations WHERE name IN ('0004_round_event', '0005_round_day_of')",
       );
       state.storage.sql.exec(
         `INSERT INTO rounds (status, thread_id, started_by, started_at, ended_by, ended_at)
@@ -259,6 +267,53 @@ describe("migrations", () => {
           .exec<{ event_id: string }>("SELECT event_id FROM rounds")
           .one().event_id,
       ).toBe("71");
+    });
+  });
+
+  it("add the hike-day columns to a database at 0004, keeping its completed round", async () => {
+    const stub = stubFor("schema-round-day-of");
+    await runInDurableObject(stub, (_instance, state) => {
+      // Take the database back to 0004_round_event, with a hike in it.
+      dropDayOf(state.storage);
+      state.storage.sql.exec(
+        "DELETE FROM _migrations WHERE name = '0005_round_day_of'",
+      );
+      state.storage.sql.exec(
+        `INSERT INTO rounds (status, thread_id, event_id, started_by, started_at, ended_by, ended_at)
+         VALUES ('complete', '61', '71', '21', 1, '21', 2)`,
+      );
+      expect(appliedNames(state.storage)).toEqual(
+        shipped.slice(0, shipped.indexOf("0005_round_day_of")),
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(appliedNames(state.storage)).toEqual(shipped);
+      expect(
+        state.storage.sql.exec("SELECT * FROM rounds").toArray(),
+      ).toMatchObject([
+        {
+          status: "complete",
+          event_id: "71",
+          day_of_channel_id: null,
+          day_of_message_id: null,
+        },
+      ]);
+      state.storage.sql.exec(
+        "UPDATE rounds SET day_of_channel_id = '31', day_of_message_id = '81'",
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(
+        state.storage.sql
+          .exec("SELECT day_of_channel_id, day_of_message_id FROM rounds")
+          .one(),
+      ).toEqual({ day_of_channel_id: "31", day_of_message_id: "81" });
     });
   });
 

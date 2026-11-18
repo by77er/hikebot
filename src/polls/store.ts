@@ -71,6 +71,8 @@ export interface RoundView {
   threadId: string | null;
   /** The hike's Discord scheduled event, once created. */
   eventId: string | null;
+  /** The hike-day announcement, once posted. */
+  dayOf: { channelId: string; messageId: string } | null;
   startedBy: string;
   startedAt: number;
   endedBy: string | null;
@@ -142,6 +144,8 @@ type RoundRow = {
   date_option_id: number | null;
   thread_id: string | null;
   event_id: string | null;
+  day_of_channel_id: string | null;
+  day_of_message_id: string | null;
   started_by: string;
   started_at: number;
   ended_by: string | null;
@@ -850,6 +854,17 @@ export class PollStore {
     );
   }
 
+  /** Records where the round's hike-day announcement was posted. */
+  setRoundDayOf(roundId: number, channelId: string, messageId: string): void {
+    this.roundRow(roundId);
+    this.sql.exec(
+      "UPDATE rounds SET day_of_channel_id = ?, day_of_message_id = ? WHERE id = ?",
+      channelId,
+      messageId,
+      roundId,
+    );
+  }
+
   private insertId(query: string, ...bindings: unknown[]): number {
     return this.sql.exec<{ id: number }>(query, ...bindings).one().id;
   }
@@ -1021,6 +1036,13 @@ export class PollStore {
       dateOptionId: row.date_option_id,
       threadId: row.thread_id,
       eventId: row.event_id,
+      dayOf:
+        row.day_of_channel_id === null || row.day_of_message_id === null
+          ? null
+          : {
+              channelId: row.day_of_channel_id,
+              messageId: row.day_of_message_id,
+            },
       startedBy: row.started_by,
       startedAt: row.started_at,
       endedBy: row.ended_by,

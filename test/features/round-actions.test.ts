@@ -16,6 +16,11 @@ import {
 } from "../../src/features/admin-panel";
 import { pendingClose } from "../../src/features/close-flow-state";
 import { parseCandidateDates } from "../../src/features/date-vote";
+import {
+  claimHikeDay,
+  hikeDayStatus,
+  recordHikeDayFailure,
+} from "../../src/features/hike-day-state";
 import { hikeEventStatus } from "../../src/features/hike-event-state";
 import { hikeThreadStatus } from "../../src/features/hike-thread-state";
 import { parseInitialLocations } from "../../src/features/location-vote";
@@ -33,6 +38,7 @@ import {
   locationVoteRefusal,
   postVoteMessage,
   retryAnnouncement,
+  retryHikeDay,
   retryHikeEvent,
   retryHikeThread,
   startDateVote,
@@ -1053,6 +1059,89 @@ describe("retryHikeEvent", () => {
             "That hike is no longer the last one, so its event is not created from here.",
         },
       );
+    });
+  });
+});
+
+describe("retryHikeDay", () => {
+  it("posts a hike-day announcement that failed, once", async () => {
+    const discord = fakeDiscord();
+    await inGuild("actions-hike-day", async (context, store) => {
+      const poll = await completed(context, discord, /^$/);
+      const round = store.getLastRound();
+      if (round === null) throw new Error("no round");
+      expect(hikeDayStatus(context.storage, round, store.now())).toEqual({
+        state: "planned",
+      });
+      expect(retryHikeDay(context, OWNER, { roundId: poll.roundId })).toEqual({
+        ok: false,
+        code: "not_due",
+        message: "The hike-day announcement is not due, so it was not posted.",
+      });
+      recordHikeDayFailure(
+        context.storage,
+        round.id,
+        "actions-hike-day",
+        "Discord said no.",
+      );
+      const retried = done(
+        retryHikeDay(context, OWNER, { roundId: poll.roundId }),
+      );
+      expect(retryHikeDay(context, OWNER, { roundId: poll.roundId })).toEqual({
+        ok: false,
+        code: "posting",
+        message: "The hike-day announcement is being posted.",
+      });
+      expect(await retried.work()).toEqual([
+        `The hike-day announcement is posted in <#${NEWS}>.`,
+      ]);
+      const posts = discord.posts(NEWS);
+      expect(posts).toHaveLength(1);
+      expect(text(posts[0]?.body.components)).toContain(
+        "## Hike today: Ridge Trail",
+      );
+      expect(retryHikeDay(context, OWNER, { roundId: poll.roundId })).toEqual({
+        ok: false,
+        code: "posted",
+        message: `The hike-day announcement is already posted in <#${NEWS}>.`,
+      });
+    });
+  });
+
+  it("refuses a hike that is over", async () => {
+    const discord = fakeDiscord();
+    await inGuild("actions-hike-day-over", async (context, store) => {
+      const poll = await completed(context, discord, /^$/);
+      const round = store.getLastRound();
+      if (round === null) throw new Error("no round");
+      claimHikeDay(context.storage, round, "actions-hike-day-over", 0);
+      // 15:00 in Los Angeles on Sat 8 Jun 2030, when the 11:00 hike ends.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(Date.UTC(2030, 5, 8, 22));
+      try {
+        expect(retryHikeDay(context, OWNER, { roundId: poll.roundId })).toEqual(
+          {
+            ok: false,
+            code: "over",
+            message:
+              "The hike is over, so its hike-day announcement is not posted.",
+          },
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("refuses a round that is not the last completed one", async () => {
+    await inGuild("actions-hike-day-not-last", (context) => {
+      const poll = dateVoting(context);
+      expect(retryHikeDay(context, OWNER, { roundId: poll.roundId })).toEqual({
+        ok: false,
+        code: "not_last",
+        message:
+          "That hike is no longer the last one, so its hike-day announcement is not posted from here.",
+      });
     });
   });
 });

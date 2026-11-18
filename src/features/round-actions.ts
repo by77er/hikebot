@@ -30,6 +30,8 @@ import {
 } from "./announcement-state";
 import { recordPendingClose } from "./close-flow-state";
 import { DATE_POLL, parseCandidateDates } from "./date-vote";
+import { postHikeDay } from "./hike-day";
+import { claimHikeDay, hikeDayHours, hikeDayStatus } from "./hike-day-state";
 import { START_PASSED_MESSAGE, createHikeEvent } from "./hike-event";
 import { claimHikeEvent, hikeEventStatus } from "./hike-event-state";
 import { createHikeThread } from "./hike-thread";
@@ -810,6 +812,72 @@ export function retryHikeEvent(
         created.ok
           ? `The hike event is created: ${eventUrl(guildId, created.eventId)}`
           : created.reason,
+      ];
+    },
+  };
+}
+
+export type RetryHikeDayCode =
+  "not_last" | "posted" | "over" | "not_due" | "posting";
+
+/**
+ * Posts the hike-day announcement of the last round again, while it is
+ * complete, its announcement failed or was cut off, and its hike is not
+ * over. The post is claimed before this returns, so a second call while it
+ * runs, or after it was posted, posts nothing. Does not check that the
+ * actor is an admin: the caller must.
+ */
+export function retryHikeDay(
+  context: RoundContext,
+  _actor: string,
+  input: { roundId: number },
+): ActionOutcome<RetryHikeDayCode, { round: RoundView }> {
+  const { guildId, storage } = context;
+  const store = storeOf(context);
+  const round = store.getLastRound();
+  if (
+    round === null ||
+    round.id !== input.roundId ||
+    round.status !== "complete"
+  ) {
+    return refuse(
+      "not_last",
+      "That hike is no longer the last one, so its hike-day announcement is not posted from here.",
+    );
+  }
+  const now = store.now();
+  const status = hikeDayStatus(storage, round, now);
+  if (status.state === "posted") {
+    return refuse(
+      "posted",
+      `The hike-day announcement is already posted in <#${status.channelId}>.`,
+    );
+  }
+  const timeZone = new GuildConfig(storage).get().timezone;
+  if (!(hikeDayHours(round, timeZone).end > now)) {
+    return refuse(
+      "over",
+      "The hike is over, so its hike-day announcement is not posted.",
+    );
+  }
+  if (status.state === "none" || status.state === "planned") {
+    return refuse(
+      "not_due",
+      "The hike-day announcement is not due, so it was not posted.",
+    );
+  }
+  if (!claimHikeDay(storage, round, guildId, now)) {
+    return refuse("posting", "The hike-day announcement is being posted.");
+  }
+  return {
+    ok: true,
+    round,
+    work: async () => {
+      const posted = await postHikeDay(round.id, guildId, context);
+      return [
+        posted.ok
+          ? `The hike-day announcement is posted in <#${posted.channelId}>.`
+          : posted.reason,
       ];
     },
   };
