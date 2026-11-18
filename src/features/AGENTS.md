@@ -138,8 +138,7 @@ table, through a migration as "Add a column or table for polls" in
    location.
 
 2. Add it to what `pollWordings` returns in
-   `src/features/round-actions.ts`, which the round actions and the shared
-   poll controls read:
+   `src/features/round-actions.ts`:
 
    ```ts
    export function pollWordings(): PollWordings {
@@ -147,14 +146,12 @@ table, through a migration as "Add a column or table for polls" in
    }
    ```
 
-3. Write the kind's start as a round action, as "Add a round action" below
+3. Write the kind's start as a round action, as "Add a round action" above
    says: it opens the poll before it returns, and its `work` posts and
    records the poll message with `claimAndSend(context, poll.id, channelId)`
    and takes the poll back when Discord refuses, as `startDateVote` in
-   `src/features/round-actions.ts` does. **Post vote message** then repairs
-   a route vote whose message was lost, with no change. Register the kind's
-   own controls in a `registerRouteVote(router)` called from
-   `registerFeatures`.
+   `src/features/round-actions.ts` does. Register the kind's own controls
+   in a `registerRouteVote(router)` called from `registerFeatures`.
 4. Check that its poll message stays within Discord's limits by adding a
    case with 25 options at the longest label to the kind's tests, as "stays
    within Discord's limits with 25 dates" in
