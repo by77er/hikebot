@@ -191,8 +191,7 @@ function channelOf(poll: PollView, settings: GuildSettings): string {
 /**
  * Posts `text`, a notice from hikebot, in the announcements channel, if one
  * is set. A post Discord refuses throws, which ends the run's step; the
- * next run is already scheduled. `test/e2e/cadence.test.ts` checks each
- * notice as members see it.
+ * next run is already scheduled.
  */
 async function announce(context: HandlerContext, text: string): Promise<void> {
   const channelId = new GuildConfig(context.storage).get().announceChannelId;
