@@ -452,15 +452,17 @@ only: {.dev.vars,.dev.vars.*,.env,.env.*}
 
 `.dev.vars`, `.dev.vars.*`, `.env` and `.env.*` hold real values and are
 never tracked. Put the value in `.dev.vars` on your machine, which git
-ignores, or in the Worker's secrets with `npx wrangler secret put <NAME>`,
-and take the file out of git with `git rm --cached <file>`. If the file was
+ignores, or, for production, in the GitHub Actions secret of the same name
+that the deploy workflow sets on the Worker ("Add a Worker secret" in the
+root `AGENTS.md`), and take the file out of git with
+`git rm --cached <file>`. If the file was
 ever pushed, rotate every secret in it: deleting the file does not remove it
 from the history. `.dev.vars.example`, with dummy values, is the one file of
 this kind that is committed.
 
 ```sh
 case "$FILE" in */.dev.vars.example) exit 0 ;; esac
-echo "$FILE is a secrets file and must not be committed. Run git rm --cached on it, keep the values in .dev.vars on your machine (git-ignored) or set them with npx wrangler secret put <NAME>, and rotate every secret in it if it was ever pushed."
+echo "$FILE is a secrets file and must not be committed. Run git rm --cached on it, keep the values in .dev.vars on your machine (git-ignored) or, for production, in the GitHub Actions secrets the deploy workflow sets on the Worker, and rotate every secret in it if it was ever pushed."
 exit 1
 ```
 
