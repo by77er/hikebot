@@ -14,6 +14,7 @@ import type {
 import { discordApi, eventUrl } from "../discord/api";
 import {
   container,
+  mediaGallery,
   messageBody,
   parseCustomId,
   separator,
@@ -32,6 +33,7 @@ import {
 } from "../polls/store";
 import { POLL_CONTROL_IDS } from "./admin-panel";
 import type { MapPinHook } from "./map-pin";
+import { MAP_PICTURE_URL } from "./map-picture";
 import {
   claimHikeThread,
   clearHikeThreadAttempt,
@@ -121,8 +123,9 @@ function resultLine(
 }
 
 /**
- * The thread's first message: the location and its details, its place and
- * map links when it has a pin, who proposed it (a mention that pings no
+ * The thread's first message: the location and its details, the map
+ * picture (the message's `hike-map.png` attachment) while the round has
+ * one, its place and map links when it has a pin, who proposed it (a mention that pings no
  * one), the date with its start in the guild's time zone as a relative
  * timestamp, the link to the hike's scheduled event once it exists, the
  * result of both votes with links to their messages, and OpenStreetMap's
@@ -139,8 +142,9 @@ export function renderThreadMessage(
 ): APIMessageTopLevelComponent[] {
   const location = winnerOf(round.locationPoll);
   const date = winnerOf(round.datePoll);
-  const head = [`## ${location?.label ?? "?"}`];
-  if (location?.details) head.push(location.details);
+  const title = [`## ${location?.label ?? "?"}`];
+  if (location?.details) title.push(location.details);
+  const head: string[] = [];
   if (location?.place?.point) {
     head.push(placeLine(location.place.point, location.place.name));
   }
@@ -151,9 +155,22 @@ export function renderThreadMessage(
   if (round.eventId !== null) {
     head.push(`**Hike event:** ${eventUrl(guildId, round.eventId)}`);
   }
+  const top =
+    round.mapPictureKey === null
+      ? [textDisplay([...title, ...head].join("\n"))]
+      : [
+          textDisplay(title.join("\n")),
+          mediaGallery([
+            {
+              url: MAP_PICTURE_URL,
+              description: `Map of the area round ${location?.label ?? "the hike"}, with a pin where it is`,
+            },
+          ]),
+          textDisplay(head.join("\n")),
+        ];
   return [
     container([
-      textDisplay(head.join("\n")),
+      ...top,
       separator(),
       textDisplay(
         [
@@ -195,9 +212,10 @@ export async function createHikeThread(
         winnerOf(round.locationPoll)?.label ?? "Hike",
         winnerOf(round.datePoll)?.label ?? "?",
       ),
+      // Without the map picture, which is uploaded to the thread after.
       message: messageBody(
         renderThreadMessage(
-          round,
+          { ...round, mapPictureKey: null },
           guildId,
           timeZone,
           context.env.DISCORD_APPLICATION_ID,
@@ -205,6 +223,8 @@ export async function createHikeThread(
       ),
     });
     store.setRoundThread(round.id, thread.id);
+    // The picture shown on the event so far is not on this thread yet.
+    store.setRoundMapPicture(round.id, null);
     clearHikeThreadAttempt(context.storage, round.id);
     return { ok: true, threadId: thread.id };
   } catch (error) {

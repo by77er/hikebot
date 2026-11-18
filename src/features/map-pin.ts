@@ -32,6 +32,7 @@ import { formatPoint } from "../geo/links";
 import { isPollError } from "../polls/errors";
 import { PollStore, type OptionView, type RoundView } from "../polls/store";
 import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
+import { recordMapPinMoved } from "./map-picture-state";
 import { deferPanel, errorText, finishPanel } from "./poll-ui";
 
 export const MAP_PIN_IDS = {
@@ -87,16 +88,18 @@ function decided(round: RoundView): OptionView | null {
 
 /**
  * Stores `point` (null clears it) as the pin of round `roundId`'s decided
- * location and returns the change for the hooks, or null when that round
+ * location, noting that the map picture shown is of the old pin, and
+ * returns the change for the hooks, or null when that round
  * is no longer the one whose pin can be set.
  */
 export function storeMapPin(
-  store: PollStore,
+  storage: DurableObjectStorage,
   roundId: number,
   point: Point | null,
   guildId: string,
   timeZone: string,
 ): MapPinChange | null {
+  const store = new PollStore(storage);
   const round = pinnableRound(store);
   if (round === null || round.id !== roundId || !decided(round)) return null;
   try {
@@ -105,6 +108,8 @@ export function storeMapPin(
     if (isPollError(error)) return null;
     throw error;
   }
+  // Until the hooks show the new pin's picture, the panel offers to.
+  recordMapPinMoved(storage, round.id);
   const after = store.getRound(roundId);
   const location = after && decided(after);
   if (!after || !location) return null;
@@ -142,7 +147,7 @@ export async function setMapPin(
   hooks: readonly MapPinHook[],
 ): Promise<{ change: MapPinChange; notes: string[] } | null> {
   const change = storeMapPin(
-    new PollStore(context.storage),
+    context.storage,
     pin.roundId,
     pin.point,
     pin.guildId,
@@ -206,7 +211,7 @@ function savePin(hooks: readonly MapPinHook[]): ModalHandler {
       }
       const guildId = interaction.guild_id ?? "";
       const change = storeMapPin(
-        new PollStore(context.storage),
+        context.storage,
         roundArg(interaction),
         point,
         guildId,

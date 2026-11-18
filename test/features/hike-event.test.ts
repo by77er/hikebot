@@ -167,6 +167,7 @@ function hike(
     dateOptionId: 11,
     threadId,
     eventId: null,
+    mapPictureKey: null,
     dayOf: null,
     startedBy: OWNER,
     startedAt: 0,

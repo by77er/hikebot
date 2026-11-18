@@ -81,6 +81,7 @@ import {
 } from "./hike-day-state";
 import { hikeEventStatus, type HikeEventStatus } from "./hike-event-state";
 import { hikeThreadStatus, type HikeThreadStatus } from "./hike-thread-state";
+import { mapPictureStatus, type MapPictureStatus } from "./map-picture-state";
 import {
   voteMessageStatus,
   type VoteMessageStatus,
@@ -97,6 +98,8 @@ export interface AdminPanelState {
   thread?: HikeThreadStatus | null;
   /** Where the finished round's scheduled event stands. */
   event?: HikeEventStatus | null;
+  /** Where the finished round's map picture stands. */
+  mapPicture?: MapPictureStatus | null;
   /**
    * Where the finished round's hike-day announcement stands and when it
    * goes out; null once its hike is over without one.
@@ -164,6 +167,7 @@ export const POLL_CONTROL_IDS = {
   announce: (pollId: number) => customId("poll", "announce", String(pollId)),
   postVoteMessage: (pollId: number) => customId("poll", "post", String(pollId)),
   setMapPin: (roundId: number) => customId("pin", "set", String(roundId)),
+  showMapPicture: (roundId: number) => customId("map", "show", String(roundId)),
 } as const;
 
 /** How the panel names each kind of poll. */
@@ -224,6 +228,8 @@ export function loadAdminPanelState(
       finished === null
         ? null
         : hikeEventStatus(storage, finished, now, settings.timezone),
+    mapPicture:
+      finished === null ? null : mapPictureStatus(storage, finished, now),
     hikeDay:
       finished === null ? null : hikeDayState(storage, finished, now, settings),
     announcements: pollAnnouncements(storage, round ?? finished, now),
@@ -331,6 +337,20 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
             button({
               custom_id: POLL_CONTROL_IDS.createHikeEvent(finished.id),
               label: "Create hike event",
+              style: ButtonStyle.Secondary,
+            }),
+          ]
+        : []),
+      // Only while the map picture failed, was cut off or was never shown
+      // for the pin; never when there is nothing to draw.
+      ...(finished &&
+      (state.mapPicture?.state === "missing" ||
+        state.mapPicture?.state === "failed" ||
+        state.mapPicture?.state === "unconfirmed")
+        ? [
+            button({
+              custom_id: POLL_CONTROL_IDS.showMapPicture(finished.id),
+              label: "Show map picture",
               style: ButtonStyle.Secondary,
             }),
           ]
@@ -479,6 +499,7 @@ function roundSection(state: AdminPanelState) {
           pinLine(finished),
           ...threadLines(state.thread),
           ...eventLines(state.event),
+          ...mapPictureLines(state.mapPicture),
           ...hikeDayLines(state),
           ...announcementLines(state.announcements),
         ]
@@ -623,6 +644,31 @@ function eventLines(event: HikeEventStatus | null | undefined): string[] {
       return [
         "**Hike event:** not created. Click Create hike event to create it.",
       ];
+    default:
+      return [];
+  }
+}
+
+/**
+ * Where the last hike's map picture stands, for its summary; nothing when
+ * there is nothing to draw.
+ */
+function mapPictureLines(
+  picture: MapPictureStatus | null | undefined,
+): string[] {
+  switch (picture?.state) {
+    case "shown":
+      return ["**Map picture:** on the hike thread and event."];
+    case "showing":
+      return ["**Map picture:** being drawn."];
+    case "failed":
+      return [`**Map picture:** not shown. ${picture.reason}`];
+    case "unconfirmed":
+      return [
+        "**Map picture:** not confirmed: showing it was cut off, so the hike thread and event may or may not show it. Click Show map picture to show it again.",
+      ];
+    case "missing":
+      return ["**Map picture:** not shown. Click Show map picture to draw it."];
     default:
       return [];
   }

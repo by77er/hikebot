@@ -987,12 +987,35 @@ describe("transactions", () => {
   });
 });
 
+describe("setRoundMapPicture", () => {
+  it("records the picture's key on the round, and null takes it off", async () => {
+    const { shown, cleared } = await withStore((store) => {
+      const id = completeRound(store, "Ridge", "2030-06-15");
+      store.setRoundMapPicture(id, "pictures/ridge.png");
+      const shown = store.getRound(id)?.mapPictureKey;
+      store.setRoundMapPicture(id, null);
+      return { shown, cleared: store.getRound(id)?.mapPictureKey };
+    });
+    expect(shown).toBe("pictures/ridge.png");
+    expect(cleared).toBeNull();
+  });
+
+  it("refuses an unknown round", async () => {
+    await withStore((store) => {
+      expectCode(() => {
+        store.setRoundMapPicture(99, "pictures/x.png");
+      }, "round_not_found");
+    });
+  });
+});
+
 describe("listHikes", () => {
-  it("returns only completed rounds, with their location, date, thread, event and polls", async () => {
+  it("returns only completed rounds, with their location, date, thread, event, map picture and polls", async () => {
     const { hikes, total, rounds } = await withStore((store, storage) => {
       const id = completeRound(store, "Ridge", "2030-06-15 09:00", "Steep");
       store.setRoundThread(id, "600000000000000001");
       store.setRoundEvent(id, "700000000000000001");
+      store.setRoundMapPicture(id, "pictures/ridge.png");
       const round = store.getRound(id);
       store.setPollMessage(round?.locationPoll?.id ?? 0, "300", "701");
       store.setPollMessage(round?.datePoll?.id ?? 0, "300", "702");
@@ -1018,6 +1041,7 @@ describe("listHikes", () => {
         date: { value: "2030-06-15 09:00", label: "Sat, 15 Jun 2030 · 09:00" },
         threadId: "600000000000000001",
         eventId: "700000000000000001",
+        mapPictureKey: "pictures/ridge.png",
         completedAt: expect.any(Number) as number,
         locationPoll: { channelId: "300", messageId: "701" },
         datePoll: { channelId: "300", messageId: "702" },

@@ -42,6 +42,8 @@ import { claimHikeEvent, hikeEventStatus } from "./hike-event-state";
 import { createHikeThread } from "./hike-thread";
 import { claimHikeThread, hikeThreadStatus } from "./hike-thread-state";
 import { givenPlace, scheduleNewLookup } from "./locate";
+import { reshowMapPicture, showMapPicture } from "./map-picture";
+import { claimMapPicture, mapPictureStatus } from "./map-picture-state";
 import {
   LOCATION_POLL,
   parseInitialLocations,
@@ -767,16 +769,22 @@ export function retryHikeThread(
     ok: true,
     round,
     work: async () => {
+      const timeZone = new GuildConfig(context.storage).get().timezone;
       const created = await createHikeThread(
         round,
         context.guildId,
-        new GuildConfig(context.storage).get().timezone,
+        timeZone,
         context,
       );
+      if (!created.ok) return [created.reason];
       return [
-        created.ok
-          ? `The hike thread is open: <#${created.threadId}>.`
-          : created.reason,
+        `The hike thread is open: <#${created.threadId}>.`,
+        ...(await reshowMapPicture(
+          round.id,
+          context.guildId,
+          timeZone,
+          context,
+        )),
       ];
     },
   };
@@ -831,10 +839,73 @@ export function retryHikeEvent(
         timeZone,
         context,
       );
+      if (!created.ok) return [created.reason];
       return [
-        created.ok
-          ? `The hike event is created: ${eventUrl(guildId, created.eventId)}`
-          : created.reason,
+        `The hike event is created: ${eventUrl(guildId, created.eventId)}`,
+        ...(await reshowMapPicture(round.id, guildId, timeZone, context)),
+      ];
+    },
+  };
+}
+
+export type RetryMapPictureCode = "not_last" | "shown" | "none" | "showing";
+
+/**
+ * Draws the map picture of the last round again and shows it on its thread
+ * and event, while it is complete and its picture failed, was cut off, or
+ * was never shown for its pin. The run is claimed before this returns, so a
+ * second call while it runs shows nothing. Does not check that the actor
+ * is an admin: the caller must.
+ */
+export function retryMapPicture(
+  context: RoundContext,
+  _actor: string,
+  input: { roundId: number },
+): ActionOutcome<RetryMapPictureCode, { round: RoundView }> {
+  const store = storeOf(context);
+  const round = store.getLastRound();
+  if (
+    round === null ||
+    round.id !== input.roundId ||
+    round.status !== "complete"
+  ) {
+    return refuse(
+      "not_last",
+      "That hike is no longer the last one, so its map picture is not shown from here.",
+    );
+  }
+  const now = store.now();
+  const status = mapPictureStatus(context.storage, round, now);
+  if (status.state === "shown") {
+    return refuse(
+      "shown",
+      "The map picture is already on the hike thread and event.",
+    );
+  }
+  if (status.state === "none") {
+    return refuse(
+      "none",
+      "There is no map picture to show: the hike has no map pin, our map data does not cover it, or it has no thread or event.",
+    );
+  }
+  if (!claimMapPicture(context.storage, round, now)) {
+    return refuse("showing", "The map picture is being drawn.");
+  }
+  return {
+    ok: true,
+    round,
+    work: async () => {
+      const shown = await showMapPicture(
+        round.id,
+        context.guildId,
+        new GuildConfig(context.storage).get().timezone,
+        context,
+      );
+      if (!shown.ok) return [shown.reason];
+      return [
+        shown.key === null
+          ? "Our map data does not cover the hike's map pin, so there is no map picture."
+          : "The map picture is on the hike thread and event.",
       ];
     },
   };

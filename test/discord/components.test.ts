@@ -19,6 +19,7 @@ import {
   deferredUpdate,
   ephemeralReply,
   label,
+  mediaGallery,
   messageBody,
   modal,
   parseCustomId,
@@ -66,6 +67,41 @@ describe("message builders", () => {
       accessory: vote,
     });
     expect(section("one", vote).components).toEqual([textDisplay("one")]);
+  });
+
+  it("mediaGallery", () => {
+    expect(
+      mediaGallery([
+        { url: "attachment://hike-map.png", description: "Map of Ridge" },
+        { url: "https://example.com/a.png", spoiler: true },
+      ]),
+    ).toEqual({
+      type: ComponentType.MediaGallery,
+      items: [
+        {
+          media: { url: "attachment://hike-map.png" },
+          description: "Map of Ridge",
+        },
+        { media: { url: "https://example.com/a.png" }, spoiler: true },
+      ],
+    });
+  });
+
+  it("mediaGallery takes 1 to 10 items and alt text up to 1024 characters", () => {
+    const item = { url: "attachment://a.png" };
+    expect(
+      mediaGallery(Array.from({ length: 10 }, () => item)).items,
+    ).toHaveLength(10);
+    expect(() => mediaGallery([])).toThrow(/1 to 10 items/);
+    expect(() => mediaGallery(Array.from({ length: 11 }, () => item))).toThrow(
+      /1 to 10 items/,
+    );
+    expect(
+      mediaGallery([{ ...item, description: "x".repeat(1024) }]).items,
+    ).toHaveLength(1);
+    expect(() =>
+      mediaGallery([{ ...item, description: "x".repeat(1025) }]),
+    ).toThrow(/1024 characters/);
   });
 
   it("separator", () => {

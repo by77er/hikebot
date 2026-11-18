@@ -16,6 +16,8 @@ import {
   type APIInteractionResponseDeferredMessageUpdate,
   type APIInteractionResponseUpdateMessage,
   type APILabelComponent,
+  type APIMediaGalleryComponent,
+  type APIMediaGalleryItem,
   type APIMessageTopLevelComponent,
   type APIModalInteractionResponse,
   type APIModalInteractionResponseCallbackComponent,
@@ -33,6 +35,9 @@ import {
 
 /** Discord's limit on options in one select menu. */
 export const MAX_SELECT_OPTIONS = 25;
+/** Discord's limits on a media gallery's items and an item's alt text. */
+export const MAX_GALLERY_ITEMS = 10;
+export const MAX_MEDIA_DESCRIPTION = 1024;
 /** Discord's limit on a `custom_id`. */
 export const MAX_CUSTOM_ID_LENGTH = 100;
 
@@ -59,6 +64,38 @@ export function section(
     type: ComponentType.Section,
     components: lines.map(textDisplay),
     accessory,
+  };
+}
+
+/**
+ * One to ten pictures, each at a URL or an attachment of the message
+ * (`attachment://<file name>`), with optional alt text.
+ */
+export function mediaGallery(
+  items: { url: string; description?: string; spoiler?: boolean }[],
+): APIMediaGalleryComponent {
+  if (items.length < 1 || items.length > MAX_GALLERY_ITEMS) {
+    throw new RangeError(
+      `a media gallery has 1 to ${String(MAX_GALLERY_ITEMS)} items, not ${String(items.length)}`,
+    );
+  }
+  return {
+    type: ComponentType.MediaGallery,
+    items: items.map(({ url, description, spoiler }): APIMediaGalleryItem => {
+      if (
+        description !== undefined &&
+        description.length > MAX_MEDIA_DESCRIPTION
+      ) {
+        throw new RangeError(
+          `a media gallery item's description is at most ${String(MAX_MEDIA_DESCRIPTION)} characters`,
+        );
+      }
+      return {
+        media: { url },
+        ...(description === undefined ? {} : { description }),
+        ...(spoiler === undefined ? {} : { spoiler }),
+      };
+    }),
   };
 }
 

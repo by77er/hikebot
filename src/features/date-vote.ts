@@ -52,6 +52,7 @@ import { cadenceDateWindow, scheduleCadence } from "./cadence-state";
 import { planHikeDayStep } from "./hike-day";
 import { createHikeEventStep } from "./hike-event";
 import { createHikeThreadStep, whenLine } from "./hike-thread";
+import { showMapPictureStep } from "./map-picture";
 import {
   VOTE_CLOSED_MESSAGE,
   actorOf,
@@ -123,7 +124,12 @@ export const DATE_POLL: PollWording = {
       whenLine(date ?? null, timeZone),
     ];
   },
-  closeSteps: [createHikeThreadStep, createHikeEventStep, planHikeDayStep],
+  closeSteps: [
+    createHikeThreadStep,
+    createHikeEventStep,
+    showMapPictureStep,
+    planHikeDayStep,
+  ],
 };
 
 /** The candidate dates an admin typed, or why they are refused. */

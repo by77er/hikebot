@@ -31,8 +31,17 @@ function appliedNames(storage: DurableObjectStorage): string[] {
     .map((row) => row.name);
 }
 
-/** Takes the database back from 0007_guild_cadence to 0006_places. */
+/** Takes the database back from 0008_round_map_picture to 0007_guild_cadence. */
+function undoMapPicture(storage: DurableObjectStorage): void {
+  storage.sql.exec("ALTER TABLE rounds DROP COLUMN map_picture_key");
+  storage.sql.exec(
+    "DELETE FROM _migrations WHERE name = '0008_round_map_picture'",
+  );
+}
+
+/** Takes the database back from 0008_round_map_picture to 0006_places. */
 function undoCadence(storage: DurableObjectStorage): void {
+  undoMapPicture(storage);
   for (const column of [
     "cadence_enabled",
     "cadence_weekday",
@@ -480,6 +489,42 @@ describe("migrations", () => {
           .exec("SELECT cadence_enabled, cadence_weekday FROM guild_settings")
           .one(),
       ).toEqual({ cadence_enabled: 1, cadence_weekday: 5 });
+    });
+  });
+
+  it("add the map picture column to a database at 0007, keeping its rounds", async () => {
+    const stub = stubFor("schema-map-picture");
+    await runInDurableObject(stub, (_instance, state) => {
+      undoMapPicture(state.storage);
+      state.storage.sql.exec(
+        `INSERT INTO rounds (status, thread_id, event_id, started_by, started_at, ended_by, ended_at)
+         VALUES ('complete', '61', '71', '21', 1, '21', 2)`,
+      );
+      expect(appliedNames(state.storage)).toEqual(
+        shipped.slice(0, shipped.indexOf("0008_round_map_picture")),
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(appliedNames(state.storage)).toEqual(shipped);
+      expect(
+        state.storage.sql.exec("SELECT * FROM rounds").toArray(),
+      ).toMatchObject([
+        { thread_id: "61", event_id: "71", map_picture_key: null },
+      ]);
+      state.storage.sql.exec(
+        "UPDATE rounds SET map_picture_key = 'pictures/a.png'",
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(
+        state.storage.sql.exec("SELECT map_picture_key FROM rounds").one(),
+      ).toEqual({ map_picture_key: "pictures/a.png" });
     });
   });
 

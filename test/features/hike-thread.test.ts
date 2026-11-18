@@ -188,6 +188,7 @@ function round(location: PollView, date: PollView): RoundView {
     dateOptionId: date.winnerOptionId,
     threadId: null,
     eventId: null,
+    mapPictureKey: null,
     dayOf: null,
     startedBy: OWNER,
     startedAt: 0,
