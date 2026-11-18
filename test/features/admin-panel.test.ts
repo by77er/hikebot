@@ -71,6 +71,7 @@ const EMPTY: GuildSettings = {
   ownerId: null,
   ownerFetchedAt: null,
   timezone: "America/Los_Angeles",
+  homeArea: null,
 };
 const COMPLETE: GuildSettings = {
   ...EMPTY,
@@ -365,6 +366,7 @@ describe("renderAdminPanel", () => {
     };
     expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
       POLL_CONTROL_IDS.startDateVote,
+      POLL_CONTROL_IDS.setMapPin(7),
       POLL_CONTROL_IDS.cancelRound(7),
       ADMIN_PANEL_IDS.settings,
       ADMIN_PANEL_IDS.refresh,
@@ -392,6 +394,7 @@ describe("renderAdminPanel", () => {
     };
     expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
       POLL_CONTROL_IDS.closePoll(dates.id),
+      POLL_CONTROL_IDS.setMapPin(7),
       POLL_CONTROL_IDS.cancelRound(7),
       ADMIN_PANEL_IDS.settings,
       ADMIN_PANEL_IDS.refresh,
@@ -426,6 +429,7 @@ describe("renderAdminPanel", () => {
     const state = { settings: COMPLETE, round: null, finished };
     expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
       POLL_CONTROL_IDS.startLocationVote,
+      POLL_CONTROL_IDS.setMapPin(7),
       ADMIN_PANEL_IDS.settings,
       ADMIN_PANEL_IDS.refresh,
     ]);
@@ -474,6 +478,7 @@ describe("renderAdminPanel", () => {
       expect(shown).toContain("**Hike thread:** <#900000000000000001>");
       expect(buttons).toEqual([
         POLL_CONTROL_IDS.startLocationVote,
+        POLL_CONTROL_IDS.setMapPin(7),
         ADMIN_PANEL_IDS.settings,
         ADMIN_PANEL_IDS.refresh,
       ]);
@@ -486,6 +491,7 @@ describe("renderAdminPanel", () => {
       expect(buttons).toEqual([
         POLL_CONTROL_IDS.startLocationVote,
         POLL_CONTROL_IDS.createHikeThread(finished.id),
+        POLL_CONTROL_IDS.setMapPin(7),
         ADMIN_PANEL_IDS.settings,
         ADMIN_PANEL_IDS.refresh,
       ]);
@@ -544,6 +550,7 @@ describe("renderAdminPanel", () => {
         expect(shown).toContain("**Hike event:** created.");
         expect(buttons).toEqual([
           POLL_CONTROL_IDS.startLocationVote,
+          POLL_CONTROL_IDS.setMapPin(7),
           ADMIN_PANEL_IDS.settings,
           ADMIN_PANEL_IDS.refresh,
         ]);
@@ -556,6 +563,7 @@ describe("renderAdminPanel", () => {
         expect(buttons).toEqual([
           POLL_CONTROL_IDS.startLocationVote,
           POLL_CONTROL_IDS.createHikeEvent(finished.id),
+          POLL_CONTROL_IDS.setMapPin(7),
           ADMIN_PANEL_IDS.settings,
           ADMIN_PANEL_IDS.refresh,
         ]);
@@ -612,6 +620,7 @@ describe("renderAdminPanel", () => {
           POLL_CONTROL_IDS.startLocationVote,
           POLL_CONTROL_IDS.createHikeThread(finished.id),
           POLL_CONTROL_IDS.createHikeEvent(finished.id),
+          POLL_CONTROL_IDS.setMapPin(7),
           ADMIN_PANEL_IDS.settings,
           ADMIN_PANEL_IDS.refresh,
         ]);

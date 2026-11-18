@@ -19,6 +19,7 @@ const empty: GuildSettings = {
   ownerId: null,
   ownerFetchedAt: null,
   timezone: "America/Los_Angeles",
+  homeArea: null,
 };
 
 describe("GuildConfig", () => {

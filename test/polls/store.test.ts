@@ -4,6 +4,7 @@ import { isPollError } from "../../src/polls/errors";
 import {
   COOLDOWN_HIKES,
   MAX_OPTIONS,
+  PENDING_PLACE,
   cooldownMessage,
   type PollStore,
 } from "../../src/polls/store";
@@ -1087,6 +1088,7 @@ describe("listPastLocations", () => {
         timesHiked: 0,
         cooldownHikesLeft: 0,
         onPoll: true,
+        place: PENDING_PLACE,
       },
       {
         optionId: expect.any(Number) as number,
@@ -1098,6 +1100,7 @@ describe("listPastLocations", () => {
         timesHiked: 1,
         cooldownHikesLeft: COOLDOWN_HIKES,
         onPoll: false,
+        place: PENDING_PLACE,
       },
     ]);
     const [lake, ridge] = past.viewer;

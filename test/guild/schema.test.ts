@@ -31,6 +31,25 @@ function appliedNames(storage: DurableObjectStorage): string[] {
     .map((row) => row.name);
 }
 
+/** Takes the database back from 0006_places to 0005_round_day_of. */
+function undoPlaces(storage: DurableObjectStorage): void {
+  storage.sql.exec("DROP INDEX poll_options_place_pending");
+  for (const column of [
+    "place_lat",
+    "place_lon",
+    "place_name",
+    "place_status",
+    "place_attempts",
+    "place_next_at",
+  ]) {
+    storage.sql.exec(`ALTER TABLE poll_options DROP COLUMN ${column}`);
+  }
+  for (const column of ["home_area", "home_name", "home_lat", "home_lon"]) {
+    storage.sql.exec(`ALTER TABLE guild_settings DROP COLUMN ${column}`);
+  }
+  storage.sql.exec("DELETE FROM _migrations WHERE name = '0006_places'");
+}
+
 /** Takes the 0005_round_day_of columns back out of the rounds table. */
 function dropDayOf(storage: DurableObjectStorage): void {
   storage.sql.exec("ALTER TABLE rounds DROP COLUMN day_of_channel_id");
@@ -168,6 +187,10 @@ describe("migrations", () => {
           owner_id: null,
           owner_fetched_at: null,
           timezone: null,
+          home_area: null,
+          home_name: null,
+          home_lat: null,
+          home_lon: null,
         },
       ]);
       state.storage.sql.exec(
@@ -192,6 +215,7 @@ describe("migrations", () => {
       // Take the database back to 0002_guild_settings, with settings in it.
       state.storage.sql.exec("ALTER TABLE guild_settings DROP COLUMN timezone");
       state.storage.sql.exec("ALTER TABLE rounds DROP COLUMN event_id");
+      undoPlaces(state.storage);
       dropDayOf(state.storage);
       state.storage.sql.exec(
         "DELETE FROM _migrations WHERE name IN ('0003_guild_timezone', '0004_round_event', '0005_round_day_of')",
@@ -234,6 +258,7 @@ describe("migrations", () => {
     await runInDurableObject(stub, (_instance, state) => {
       // Take the database back to 0003_guild_timezone, with a hike in it.
       state.storage.sql.exec("ALTER TABLE rounds DROP COLUMN event_id");
+      undoPlaces(state.storage);
       dropDayOf(state.storage);
       state.storage.sql.exec(
         "DELETE FROM _migrations WHERE name IN ('0004_round_event', '0005_round_day_of')",
@@ -274,6 +299,7 @@ describe("migrations", () => {
     const stub = stubFor("schema-round-day-of");
     await runInDurableObject(stub, (_instance, state) => {
       // Take the database back to 0004_round_event, with a hike in it.
+      undoPlaces(state.storage);
       dropDayOf(state.storage);
       state.storage.sql.exec(
         "DELETE FROM _migrations WHERE name = '0005_round_day_of'",
@@ -314,6 +340,78 @@ describe("migrations", () => {
           .exec("SELECT day_of_channel_id, day_of_message_id FROM rounds")
           .one(),
       ).toEqual({ day_of_channel_id: "31", day_of_message_id: "81" });
+    });
+  });
+
+  it("add the place columns to a database at 0005, keeping its options and settings", async () => {
+    const stub = stubFor("schema-places");
+    await runInDurableObject(stub, (_instance, state) => {
+      undoPlaces(state.storage);
+      state.storage.sql.exec(
+        `INSERT INTO rounds (status, started_by, started_at)
+         VALUES ('location_voting', '21', 1)`,
+      );
+      state.storage.sql.exec(
+        `INSERT INTO polls (round_id, kind, status, opened_by, opened_at)
+         VALUES (1, 'location', 'open', '21', 1)`,
+      );
+      state.storage.sql.exec(
+        `INSERT INTO poll_options (poll_id, label, label_key, proposed_by, created_at)
+         VALUES (1, 'Ridge', 'ridge', '21', 1)`,
+      );
+      state.storage.sql.exec(
+        "UPDATE guild_settings SET timezone = 'Europe/Berlin' WHERE id = 1",
+      );
+      expect(appliedNames(state.storage)).toEqual(
+        shipped.slice(0, shipped.indexOf("0006_places")),
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(appliedNames(state.storage)).toEqual(shipped);
+      expect(
+        state.storage.sql.exec("SELECT * FROM poll_options").toArray(),
+      ).toMatchObject([
+        {
+          label: "Ridge",
+          place_lat: null,
+          place_lon: null,
+          place_name: null,
+          place_status: null,
+          place_attempts: 0,
+          place_next_at: null,
+        },
+      ]);
+      expect(
+        state.storage.sql.exec("SELECT * FROM guild_settings").toArray(),
+      ).toMatchObject([
+        { timezone: "Europe/Berlin", home_area: null, home_lat: null },
+      ]);
+      expect(() =>
+        state.storage.sql.exec(
+          "UPDATE poll_options SET place_status = 'lost' WHERE id = 1",
+        ),
+      ).toThrow();
+      state.storage.sql.exec(
+        `UPDATE poll_options SET place_status = 'found', place_lat = 47.5,
+           place_lon = -121.7, place_name = 'Ridge, King County' WHERE id = 1`,
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(
+        state.storage.sql
+          .exec("SELECT place_status, place_lat, place_name FROM poll_options")
+          .one(),
+      ).toEqual({
+        place_status: "found",
+        place_lat: 47.5,
+        place_name: "Ridge, King County",
+      });
     });
   });
 
