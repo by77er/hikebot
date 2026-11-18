@@ -28,6 +28,7 @@ export const ROUND_IDS = {
   initial: "hb:location:initial",
   startDate: "hb:date:start",
   dates: "hb:date:dates",
+  day: "hb:date:day",
 };
 
 /** A guild with its owner, members and channels, as `RoundPlayer.guild` makes it. */
@@ -216,6 +217,23 @@ export class RoundPlayer {
     const poll = this.e2e.discord.channelMessages(g.channels.text)[before];
     if (!poll) throw new Error("the date poll was not posted");
     return poll;
+  }
+
+  /**
+   * Clicks Propose a date on the date `poll`, types `date` in the modal and
+   * submits it; returns the modal and the answer to the submit.
+   */
+  async proposeDate(member: Member, poll: FakeMessage, date: string) {
+    const form = await member.click(
+      poll,
+      idStarting(this.shown(poll), "hb:date:propose:"),
+    );
+    const response = await member.submitModal(
+      form,
+      { [ROUND_IDS.day]: date },
+      poll,
+    );
+    return { form, response };
   }
 
   /** Clicks Vote, picks `labels` and returns the select message. */

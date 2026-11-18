@@ -1,4 +1,9 @@
-import { parseDateOption } from "./dates";
+import {
+  MAX_PROPOSAL_DAYS_AHEAD,
+  addDays,
+  parseDateOption,
+  todayIn,
+} from "./dates";
 import { PollError } from "./errors";
 import { defaultRandom, pickWinner, type RandomSource } from "./tally";
 
@@ -353,6 +358,53 @@ export class PollStore {
       const id = this.insertOption(pollId, valid, this.now());
       const view = this.optionRows(pollId).find((row) => row.id === id);
       if (!view) throw new Error("addOption: inserted option not found");
+      return view;
+    });
+  }
+
+  /**
+   * Adds a member's date to an open date poll, with `userId` as proposer.
+   * `line` is `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`; its day must lie between
+   * today and `MAX_PROPOSAL_DAYS_AHEAD` days after today in `timeZone`,
+   * both included, judged at `this.now()`. Refuses a date and time already
+   * on the poll and a full poll; votes already cast are kept.
+   */
+  proposeDate(
+    pollId: number,
+    userId: string,
+    line: string,
+    timeZone: string,
+  ): OptionView {
+    return this.storage.transactionSync(() => {
+      const poll = this.openPollRow(pollId);
+      if (poll.kind !== "date") {
+        throw new PollError("invalid_state", "This poll does not take dates.");
+      }
+      const valid = validateDate(line, userId);
+      const day = (valid.dateValue ?? "").slice(0, 10);
+      const today = todayIn(timeZone, this.now());
+      const last = addDays(today, MAX_PROPOSAL_DAYS_AHEAD);
+      if (day < today) {
+        throw new PollError(
+          "date_in_past",
+          `${valid.label} is in the past: today is ${today} in ${timeZone}. Propose a day from ${today} to ${last}.`,
+        );
+      }
+      if (day > last) {
+        throw new PollError(
+          "date_too_far",
+          `${valid.label} is more than ${String(MAX_PROPOSAL_DAYS_AHEAD)} days away. Propose a day from ${today} to ${last}, or ask an admin to plan further ahead.`,
+        );
+      }
+      if (this.optionCount(pollId) >= MAX_OPTIONS) {
+        throw new PollError(
+          "too_many_options",
+          `A poll has at most ${String(MAX_OPTIONS)} options.`,
+        );
+      }
+      const id = this.insertOption(pollId, valid, this.now());
+      const view = this.optionRows(pollId).find((row) => row.id === id);
+      if (!view) throw new Error("proposeDate: inserted option not found");
       return view;
     });
   }
@@ -883,7 +935,8 @@ export class PollStore {
       .exec<OptionRow>(
         `SELECT o.*, (SELECT count(*) FROM poll_votes v WHERE v.option_id = o.id)
            AS votes
-         FROM poll_options o WHERE o.poll_id = ? ORDER BY o.id`,
+         FROM poll_options o WHERE o.poll_id = ?
+         ORDER BY o.date_value, o.id`,
         pollId,
       )
       .toArray()

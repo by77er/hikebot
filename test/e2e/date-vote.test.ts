@@ -136,7 +136,7 @@ describe("the date vote", () => {
     ].map((line) => text.indexOf(line));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(buttonLabels(poll)).toEqual(["Vote"]);
+    expect(buttonLabels(poll)).toEqual(["Vote", "Propose a date"]);
 
     await play.vote(ana, poll, [
       "Sat, 8 Jun 2030 · 11:00",
@@ -294,5 +294,175 @@ describe("the date vote", () => {
         idStarting(play.shown(poll), "hb:poll:vote:"),
       ),
     ).toBeDefined();
+  });
+});
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/** Today in Los Angeles, the default zone, as `YYYY-MM-DD`. */
+function todayInLosAngeles(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles",
+  }).format(Date.now());
+}
+
+function utcDay(day: string): Date {
+  return new Date(`${day}T00:00:00Z`);
+}
+
+/** The day `n` days after `day`, both `YYYY-MM-DD`. */
+function plusDays(day: string, n: number): string {
+  const date = utcDay(day);
+  date.setUTCDate(date.getUTCDate() + n);
+  return date.toISOString().slice(0, 10);
+}
+
+/** How the poll shows `day` at `time`: `Sat, 5 Dec 2026 · 11:00`. */
+function shownAs(day: string, time = "11:00"): string {
+  const date = utcDay(day);
+  return `${WEEKDAYS[date.getUTCDay()] ?? ""}, ${String(date.getUTCDate())} ${MONTHS[date.getUTCMonth()] ?? ""} ${String(date.getUTCFullYear())} · ${time}`;
+}
+
+/** The option labels on a poll message, top to bottom. */
+function shownDates(poll: FakeMessage): string[] {
+  return [
+    ...messageText(play.shown(poll)).matchAll(
+      /\*\*(\w{3}, \d+ \w{3} \d{4} · \d\d:\d\d)\*\* · /g,
+    ),
+  ].map((m) => m[1] ?? "");
+}
+
+describe("the default dates and proposed dates", () => {
+  it("opens the start modal with the next two weekends at 11:00 and starts the vote with them unchanged", async () => {
+    const g = play.guild(8);
+    const panel = await decided(g);
+    const today = todayInLosAngeles();
+    const form = await g.owner.click(panel, ROUND_IDS.startDate);
+    const field = findComponent(
+      form.type === InteractionResponseType.Modal ? form.data.components : [],
+      ROUND_IDS.dates,
+    );
+    const lines = String(field?.value).split("\n");
+    expect(lines).toHaveLength(4);
+    for (const line of lines) expect(line).toMatch(/^\d{4}-\d\d-\d\d 11:00$/);
+    const days = lines.map((line) => line.slice(0, 10));
+    expect(days.map((day) => WEEKDAYS[utcDay(day).getUTCDay()])).toEqual([
+      "Sat",
+      "Sun",
+      "Sat",
+      "Sun",
+    ]);
+    const [saturday = ""] = days;
+    expect(saturday > today).toBe(true);
+    expect(saturday <= plusDays(today, 7)).toBe(true);
+    expect(days).toEqual([
+      saturday,
+      plusDays(saturday, 1),
+      plusDays(saturday, 7),
+      plusDays(saturday, 8),
+    ]);
+
+    const before = e2e.discord.channelMessages(g.channels.text).length;
+    const response = await g.owner.submitModal(
+      form,
+      { [ROUND_IDS.dates]: String(field?.value) },
+      panel,
+    );
+    expect(response.type).toBe(InteractionResponseType.DeferredMessageUpdate);
+    await eventually(() => {
+      expect(messageText(play.shown(panel))).toContain(
+        `The date vote is open in <#${g.channels.text}>.`,
+      );
+    });
+    const poll = e2e.discord.channelMessages(g.channels.text)[before];
+    if (!poll) throw new Error("the date poll was not posted");
+    expect(shownDates(poll)).toEqual(days.map((day) => shownAs(day)));
+    expect(buttonLabels(poll)).toEqual(["Vote", "Propose a date"]);
+  });
+
+  it("lets a member propose a date in the window, shows it in date order, refuses one too far and one past, and the proposed date can win", async () => {
+    const g = play.guild(9);
+    const [ana, ben, cy] = g.members as [Member, Member, Member];
+    const panel = await decided(g);
+    const today = todayInLosAngeles();
+    const early = plusDays(today, 2);
+    const late = plusDays(today, 20);
+    const poll = await play.startDateVote(g, panel, `${today}\n${late}`);
+    await play.vote(ana, poll, [shownAs(today)]);
+
+    const { form, response } = await play.proposeDate(
+      ben,
+      poll,
+      `${early} 08:30`,
+    );
+    expect(form).toMatchObject({
+      type: InteractionResponseType.Modal,
+      data: {
+        title: "Propose a date",
+        components: [
+          {
+            label: "Date",
+            description: `${today} to ${plusDays(today, 31)}, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time defaults to 11:00.`,
+            component: { custom_id: ROUND_IDS.day },
+          },
+        ],
+      },
+    });
+    expect(response.type).toBe(
+      InteractionResponseType.ChannelMessageWithSource,
+    );
+    const proposed = shownAs(early, "08:30");
+    expectEphemeral(ben, `Added **${proposed}** to the date vote.`);
+    await eventually(() => {
+      expect(shownDates(poll)).toEqual([
+        shownAs(today),
+        proposed,
+        shownAs(late),
+      ]);
+    });
+    // Ana's vote, cast before the proposal, is kept.
+    expect(messageText(play.shown(poll))).toContain(
+      `**${shownAs(today)}** · 1 vote`,
+    );
+    expect(messageText(play.shown(poll))).toContain(
+      `**${proposed}** · 0 votes`,
+    );
+
+    await play.proposeDate(cy, poll, plusDays(today, 40));
+    expectEphemeral(cy, "is more than 31 days away. Propose a day from ");
+    await play.proposeDate(cy, poll, plusDays(today, -1));
+    expectEphemeral(cy, "is in the past: today is ");
+    expect(shownDates(play.shown(poll))).toHaveLength(3);
+
+    const select = await play.vote(cy, poll, [proposed]);
+    expect(Object.keys(optionValues(select))).toEqual([
+      shownAs(today),
+      proposed,
+      shownAs(late),
+    ]);
+    await play.vote(ben, poll, [proposed]);
+    await play.closeVote(g.owner, panel, "date vote");
+    expect(messageText(play.shown(poll))).toContain(
+      `🏆 **${proposed}** won with 2 votes.`,
+    );
+    expect(shownDates(play.shown(poll))).toEqual([
+      shownAs(today),
+      proposed,
+      shownAs(late),
+    ]);
   });
 });

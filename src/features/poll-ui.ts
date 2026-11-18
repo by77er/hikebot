@@ -78,7 +78,8 @@ export interface PollWording {
   showProposer: boolean;
   /**
    * How the poll message orders the options: by votes (most first, ties in
-   * the order they were added) or by date (chronological).
+   * the order they were added) or by date (chronological, in the vote
+   * select too, wherever a date was added).
    */
   order: "votes" | "date";
   /** Buttons after Vote while the poll is open. */
@@ -236,6 +237,14 @@ export function renderPollMessage(
   return [container(body)];
 }
 
+/** The options in the order the select lists them: by date for a date poll. */
+function ordered(
+  options: readonly OptionView[],
+  wording: PollWording,
+): OptionView[] {
+  return wording.order === "date" ? chronological(options) : [...options];
+}
+
 /** Date options by date, earliest first; others in the order they were added. */
 export function chronological(options: readonly OptionView[]): OptionView[] {
   return [...options].sort(
@@ -314,7 +323,7 @@ export function renderVoteSelect(
           placeholder: `Pick ${wording.nouns}`,
           min_values: 0,
           max_values: poll.options.length,
-          options: poll.options.map((option) => ({
+          options: ordered(poll.options, wording).map((option) => ({
             label: option.label,
             value: String(option.id),
             ...(option.details === null

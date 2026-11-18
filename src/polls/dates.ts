@@ -237,6 +237,38 @@ export function todayIn(timeZone: string, now: number): string {
   ].join("-");
 }
 
+/** How many days after today a member may propose a date for, inclusive. */
+export const MAX_PROPOSAL_DAYS_AHEAD = 31;
+
+/** The calendar day `days` after `day`, both `YYYY-MM-DD`. */
+export function addDays(day: string, days: number): string {
+  const [y = 0, m = 1, d = 1] = day.split("-").map(Number);
+  const date = new Date(0);
+  date.setUTCFullYear(y, m - 1, d + days);
+  return [
+    String(date.getUTCFullYear()).padStart(4, "0"),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+/**
+ * The date vote's default candidates for `today` (`YYYY-MM-DD`): the
+ * Saturday and Sunday of the next two weekends, at `DEFAULT_HIKE_TIME`, as
+ * `YYYY-MM-DD HH:MM`. The first Saturday is the first one strictly after
+ * today, so a weekend in progress is not offered.
+ */
+export function defaultDateCandidates(today: string): string[] {
+  const [y = 0, m = 1, d = 1] = today.split("-").map(Number);
+  const date = new Date(0);
+  date.setUTCFullYear(y, m - 1, d);
+  // Saturday is 6; a Saturday today waits a whole week.
+  const toSaturday = 6 - date.getUTCDay() || 7;
+  return [0, 1, 7, 8].map(
+    (offset) => `${addDays(today, toSaturday + offset)} ${DEFAULT_HIKE_TIME}`,
+  );
+}
+
 /** The weekday and time in `timeZone` at the instant `now`: `Wed 11:42`. */
 export function clockIn(timeZone: string, now: number): string {
   const clock = wallClock(timeZone, now);
