@@ -155,20 +155,26 @@ describe("/hike log", () => {
     expect(buttons(reply?.components ?? [])).toEqual([]);
   });
 
-  it("shows a hike's date, location, details and thread", async () => {
+  it("shows a hike's date, location, details, thread and event", async () => {
     const [reply] = await play((store) => {
       const id = completeRound(store, "Ridge", "2030-06-15 09:00", "Steep");
       store.setRoundThread(id, "600000000000000001");
-      completeRound(store, "Lake", "2030-03-01");
+      store.setRoundEvent(id, "700000000000000001");
+      const lake = completeRound(store, "Lake", "2030-03-01");
+      store.setRoundEvent(lake, "700000000000000002");
+      completeRound(store, "Bay", "2030-01-01");
     });
+    // The interactions come from the guild "log".
     expect(text(reply?.components ?? [])).toBe(
       [
         "## Hike log",
-        "2 hikes",
+        "3 hikes",
         "Sat, 15 Jun 2030 · 09:00 · **Ridge**",
         "Steep",
-        "Thread: <#600000000000000001>",
+        "Thread: <#600000000000000001> · [Event](https://discord.com/events/log/700000000000000001)",
         "Fri, 1 Mar 2030 · 11:00 · **Lake**",
+        "[Event](https://discord.com/events/log/700000000000000002)",
+        "Tue, 1 Jan 2030 · 11:00 · **Bay**",
       ].join("\n"),
     );
   });
@@ -258,7 +264,7 @@ describe("renderHikeLog", () => {
     datePoll: { channelId: "300", messageId: "702" },
   });
 
-  it("stays within Discord's limits with ten hikes at the longest label and details", () => {
+  it("stays within Discord's limits with ten hikes at the longest label and details, each with a thread and an event", () => {
     const components = renderHikeLog(
       {
         hikes: Array.from({ length: HIKES_PER_PAGE }, (_, i) => longest(i)),

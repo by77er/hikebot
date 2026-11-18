@@ -30,6 +30,7 @@ import {
   renderAdminPanel,
   renderAdminSettings,
 } from "../../src/features/admin-panel";
+import type { HikeEventStatus } from "../../src/features/hike-event-state";
 import type { HikeThreadStatus } from "../../src/features/hike-thread-state";
 import type { PollView, RoundView } from "../../src/polls/store";
 import { GuildConfig, type GuildSettings } from "../../src/guild/config";
@@ -504,6 +505,99 @@ describe("renderAdminPanel", () => {
         POLL_CONTROL_IDS.createHikeThread(finished.id),
       );
     });
+
+    describe("and its event", () => {
+      const thread: HikeThreadStatus = {
+        state: "created",
+        threadId: "900000000000000001",
+      };
+      const withEvent = (event: HikeEventStatus) => {
+        const state = {
+          settings: COMPLETE,
+          round: null,
+          finished: { ...finished, threadId: thread.threadId },
+          thread,
+          event,
+        };
+        return {
+          buttons: actionButtons(state).map((b) => b.custom_id),
+          shown: text(asNodes(renderAdminPanel(state))),
+          view: renderAdminPanel(state, "x".repeat(300)),
+        };
+      };
+
+      it("says it was created, with no Create hike event", () => {
+        const { buttons, shown } = withEvent({
+          state: "created",
+          eventId: "950000000000000001",
+        });
+        expect(shown).toContain("**Hike event:** created.");
+        expect(buttons).toEqual([
+          POLL_CONTROL_IDS.startLocationVote,
+          ADMIN_PANEL_IDS.settings,
+          ADMIN_PANEL_IDS.refresh,
+        ]);
+      });
+
+      it("shows why it failed and offers Create hike event for that round", () => {
+        const reason = `Could not create the hike event: ${"r".repeat(400)} Give the bot the Create Events permission in the server's settings, then click Create hike event.`;
+        const { buttons, shown, view } = withEvent({ state: "failed", reason });
+        expect(shown).toContain(`**Hike event:** not created. ${reason}`);
+        expect(buttons).toEqual([
+          POLL_CONTROL_IDS.startLocationVote,
+          POLL_CONTROL_IDS.createHikeEvent(finished.id),
+          ADMIN_PANEL_IDS.settings,
+          ADMIN_PANEL_IDS.refresh,
+        ]);
+        expectWithinLimits(view);
+      });
+
+      it("offers Create hike event when no attempt finished", () => {
+        const { buttons, shown } = withEvent({ state: "missing" });
+        expect(shown).toContain(
+          "**Hike event:** not created. Click Create hike event to create it.",
+        );
+        expect(buttons).toContain(
+          POLL_CONTROL_IDS.createHikeEvent(finished.id),
+        );
+      });
+
+      it("offers no button while it is being created", () => {
+        const { buttons, shown } = withEvent({ state: "creating" });
+        expect(shown).toContain("**Hike event:** being created.");
+        expect(buttons).not.toContain(
+          POLL_CONTROL_IDS.createHikeEvent(finished.id),
+        );
+      });
+
+      it("says the start has passed, with no retry", () => {
+        const { buttons, shown } = withEvent({ state: "past" });
+        expect(shown).toContain(
+          "**Hike event:** The hike's start time has passed, so no event was created.",
+        );
+        expect(buttons).not.toContain(
+          POLL_CONTROL_IDS.createHikeEvent(finished.id),
+        );
+      });
+
+      it("keeps both retries and the panel within Discord's limits when both failed", () => {
+        const state = {
+          settings: COMPLETE,
+          round: null,
+          finished,
+          thread: { state: "failed", reason: "t".repeat(500) } as const,
+          event: { state: "failed", reason: "e".repeat(500) } as const,
+        };
+        expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
+          POLL_CONTROL_IDS.startLocationVote,
+          POLL_CONTROL_IDS.createHikeThread(finished.id),
+          POLL_CONTROL_IDS.createHikeEvent(finished.id),
+          ADMIN_PANEL_IDS.settings,
+          ADMIN_PANEL_IDS.refresh,
+        ]);
+        expectWithinLimits(renderAdminPanel(state, "x".repeat(300)));
+      });
+    });
   });
 
   it("shows the time zone and the time there now", () => {
@@ -959,6 +1053,10 @@ describe("the admin panel", () => {
       [
         POLL_CONTROL_IDS.createHikeThread(1),
         (g) => click(POLL_CONTROL_IDS.createHikeThread(1), g, STRANGER),
+      ],
+      [
+        POLL_CONTROL_IDS.createHikeEvent(1),
+        (g) => click(POLL_CONTROL_IDS.createHikeEvent(1), g, STRANGER),
       ],
       [ADMIN_PANEL_IDS.role, (g) => pickRole(g, STRANGER, ROLE)],
       ...[
