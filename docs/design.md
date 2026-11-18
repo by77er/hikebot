@@ -29,11 +29,10 @@ The var `DISCORD_OAUTH_AUTHORIZE_URL` (default
 `https://discord.com/oauth2/authorize`) is where web sign-in sends the
 browser; tests point it at the fake Discord API. Request logs keep no query
 string (`observability.redact_query_string`), since the sign-in callback's
-query holds a one-time code.
-The var `NOMINATIM_BASE` (default `https://nominatim.openstreetmap.org`) is
-where place lookups go (see "Locating hikes"); tests point it at a stand-in.
-One
-`GuildHike` Durable Object per Discord guild (binding `GUILD_HIKE`,
+query holds a one-time code. The var `NOMINATIM_BASE` (default
+`https://nominatim.openstreetmap.org`) is where place lookups go (see
+"Locating hikes"); tests point it at a stand-in. One `GuildHike` Durable
+Object per Discord guild (binding `GUILD_HIKE`,
 `idFromName(guild_id)`) holds all of that guild's state in its SQLite storage
 and makes every state change, so votes and poll closes never race. One
 `MapPainter` Durable Object (binding `MAP_PAINTER`, `idFromName("maps")`)
@@ -770,10 +769,9 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   ("its message is being posted", "has not been posted" with the reason of
   a failed attempt, or "not confirmed" when a post was cut off) and, unless
   a post is under way, the panel offers **Post vote message**
-  (`hb:poll:post:<poll id>`) before the Close button.
-  Once a round's location is
-  decided (the active round from `location_decided` on, or the last
-  completed one), the view shows its pin ("**Map pin:** Mount Si, King
+  (`hb:poll:post:<poll id>`) before the Close button. Once a round's
+  location is decided (the active round from `location_decided` on, or the
+  last completed one), the view shows its pin ("**Map pin:** Mount Si, King
   County · [map](…)", "being looked up on OpenStreetMap", or "none") and
   offers **Set map pin** (`hb:pin:set:<round id>`) after the Announce
   buttons; see "Locating hikes".
