@@ -161,9 +161,10 @@ immutable`. Each deploy changes the URLs, so browsers cache the files for
   data, and opens the pages in headless Chromium from the
   `@sparticuz/chromium` npm package driven by `puppeteer-core`, so nothing
   is downloaded at run time. The browser's clock, time zone and language are
-  fixed, animations are off, the device scale factor is 1 and fonts come
-  from the package, never from the machine, so a run gives the same bytes
-  on every machine. The page list (`test/screenshots/pages.json`) names
+  fixed, animations are off, the device scale factor is 1, fonts come
+  from the package, never from the machine, and each shot waits for the
+  page's fonts and CSS images (such as the header's contour mask), so a run
+  gives the same bytes on every machine. The page list (`test/screenshots/pages.json`) names
   each page with its path, expected status, seed and signed-in member; a
   unit test fails when a `GET` route of the web router is neither on it nor
   excluded with a reason. On a pull request, CI regenerates the screenshots
