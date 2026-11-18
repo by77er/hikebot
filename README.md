@@ -44,8 +44,9 @@ without a manual step:
    finally requests `https://hiking.bitcru.sh/healthz` until it answers
    `hikebot is running`, failing after about two minutes.
 
-The first deploy creates the Worker, its Durable Object and the DNS record
-for `hiking.bitcru.sh`; there is no other infrastructure.
+The first deploy creates the Worker, its Durable Object, the DNS record
+for `hiking.bitcru.sh` and the R2 bucket `hikebot-maps` if it is missing;
+there is no other infrastructure.
 
 ### GitHub Actions secrets
 
@@ -72,6 +73,9 @@ Create a custom token with these permissions:
 
 - Account, Workers Scripts, Edit, on the account that holds the `bitcru.sh`
   zone;
+- Account, Workers R2 Storage, Edit, on the same account, for the map data
+  bucket: `wrangler deploy` looks the bucket up, and the `Map data` workflow
+  creates it and uploads the archives;
 - Zone, Workers Routes, Edit, on the zone `bitcru.sh`.
 
 The custom domain needs no other permission. Cloudflare's
@@ -82,6 +86,15 @@ fake Cloudflare API calls only `/accounts/<account>/workers/...` endpoints:
 the script upload, its settings and subdomain, and
 `workers/scripts/hiking/domains/records`, which creates the DNS record and
 certificate itself.
+
+### Map data
+
+hikebot keeps OpenStreetMap vector tiles of the whole world at low zoom and
+of the US Pacific states in detail in the R2 bucket `hikebot-maps`, rebuilt
+monthly by the `Map data` workflow; at under 5 GB per build and two builds
+kept, this costs nothing within R2's free tier (10 GB stored, no egress
+fee). To map another area, change the `region` box in `maps/regions.json` as
+"Change the mapped region" in [`maps/AGENTS.md`](maps/AGENTS.md) says.
 
 ### Discord, once after the first deploy
 

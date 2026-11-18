@@ -29,6 +29,14 @@
       "new_sqlite_classes": ["GuildHike"],
     },
   ],
+  // OpenStreetMap vector tiles (PMTiles archives and their manifest), written
+  // by the Map data workflow. Deploy creates the bucket if it is missing.
+  "r2_buckets": [
+    {
+      "binding": "MAPS",
+      "bucket_name": "hikebot-maps",
+    },
+  ],
   "vars": {
     // Tests and local runs override this to point at a fake Discord API.
     "DISCORD_API_BASE": "https://discord.com/api/v10",

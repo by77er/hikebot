@@ -27,9 +27,11 @@ address) is built from it with `absoluteUrl(env, path)` in
 `https://hikebot.example`, and `.dev.vars.example` to the local dev server. One
 `GuildHike` Durable Object per Discord guild (binding `GUILD_HIKE`,
 `idFromName(guild_id)`) holds all of that guild's state in its SQLite storage
-and makes every state change, so votes and poll closes never race.
-`wrangler deploy` creates everything the bot needs, including the Custom
-Domain's DNS record; there is no other infrastructure.
+and makes every state change, so votes and poll closes never race. The R2
+bucket `hikebot-maps` (binding `MAPS`) holds the map data described under
+"Map data". `wrangler deploy` creates everything the bot needs, including
+the Custom Domain's DNS record and the bucket when it is missing; there is no
+other infrastructure.
 
 Production is deployed by the `Deploy` workflow
 (`.github/workflows/deploy.yml`): after the `Undercurrent` workflow succeeds
@@ -947,3 +949,94 @@ hike thread is being created." and creates nothing, and a click after it
 succeeded is told the thread already exists. A claim older than a minute
 (`THREAD_CLAIM_MS`) counts as lost, for example when the object restarted
 during the follow-up, so the button comes back.
+
+## Map data
+
+hikebot keeps its own map data, so a suggested hike can be drawn on a map
+without a map-image service: vector tiles of OpenStreetMap in the R2 bucket
+`hikebot-maps`, which the Worker reads through the `MAPS` binding.
+
+**Source and licence.** The tiles come from a daily
+[Protomaps basemap build](https://docs.protomaps.com/basemaps/downloads):
+the whole planet as one PMTiles archive of Mapbox Vector Tiles (about
+120 GB, zooms 0-15), from OpenStreetMap data with Natural Earth at low zooms,
+in the Protomaps basemap schema (layers such as `earth`, `water`,
+`landcover`, `landuse`, `roads`, `transit`, `buildings`, `pois`, `places`,
+`boundaries`). The tiles are a Produced Work of OpenStreetMap under the ODbL
+1.0, so every surface that shows them prints the attribution
+`© OpenStreetMap contributors`. `maps/regions.json` holds that text and the
+licence, the manifest carries them, and `MapReader.attribution()` returns
+the text. Natural Earth is public domain and needs none.
+
+**What is stored.** `maps/regions.json` lists two archives, each a bounding
+box and a zoom range, cut from one build with `pmtiles extract`:
+
+- `world`: the whole world at zooms 0-8, for overviews;
+- `region`: the US Pacific states (`-125,32,-114,49.5`, matching the bot's
+  default Pacific time zone) at zooms 9-14, for trails.
+
+The region starts at the zoom after the world's last, so no zoom is stored
+twice. The bucket holds `manifest.json` and, under `builds/<build>-<UTC
+time>/`, one `<name>.pmtiles` per archive. The manifest names the
+Protomaps build and basemap version, the time it was written, the
+attribution and licence, and per archive its name, key, box, zooms and size
+(`src/maps/manifest.ts`).
+
+**Budget.** The archives of one build total at most `budgetBytes` in
+`maps/regions.json`, 5 GB. The region's maxzoom is the highest up to 14
+that keeps the total within it; each extra zoom roughly doubles an archive.
+The bucket keeps the current and the previous build, at most twice the
+budget, within R2's free 10 GB of storage; reads and writes stay far within
+its free operations, and R2 has no egress fee.
+
+**Refresh.** The `Map data` workflow (`.github/workflows/map-data.yml`) runs
+in two modes:
+
+- **check**, on a pull request that changes `maps/` or the workflow, once it
+  is ready for review: it checks that the CI token can list, write, read and
+  delete in the bucket (creating the bucket if missing), picks the newest
+  build, dry-runs every extract (the region also one zoom either side), and
+  fails over budget or when a higher region zoom up to 14 would fit. When
+  the sample archive is missing, or its note no longer matches `sample` and
+  `samplePoint` in `maps/regions.json`, or the newest build's basemap major
+  version differs from the note's, it extracts the sample again (refusing
+  one over `sample.maxBytes`), and a second job commits it to the pull
+  request's branch.
+- **build**, on a push to `main` that changes `maps/regions.json` or the
+  workflow, on the 2nd of each month and by hand: it removes every build
+  other than the one the manifest names, extracts each archive from the
+  newest build, checks the real sizes against the budget, uploads each under
+  a new key and writes the manifest last. A failed or cancelled run leaves
+  the manifest and its archives as they were; after a run the bucket holds
+  the new build and the previous one, which readers that still hold the old
+  manifest keep reading.
+
+Results are `::notice::` annotations and the job summary. The workflow pins
+the `pmtiles` release and checks its SHA-256, derives R2's S3 credentials
+from `CLOUDFLARE_API_TOKEN` (the token's id and the SHA-256 of its value)
+and masks them.
+
+**Reading.** `MapReader` (`src/maps/reader.ts`) is built over the bucket and
+an injected clock; one per isolate keeps what it has read:
+
+- `tile(z, x, y)` returns the tile's decompressed bytes. It reads the
+  manifest (kept for at most five minutes), tries the archives whose box
+  overlaps the tile and whose zooms include `z`, most detailed first, and
+  returns the first that has the tile. It reads archives with ranged `get`
+  calls through the `pmtiles` package and keeps their headers and
+  directories in memory, so a tile after the first costs one read.
+- `zoomsAt(lon, lat)` lists the zooms some archive covers at a point.
+- `attribution()` returns the text to print with the map.
+
+No manifest, an unreadable manifest, a missing or corrupt archive, a zoom
+above an archive's own and a tile outside every archive are all "no data"
+(undefined or an empty list), never an exception. A failed manifest read is
+not kept: the reader keeps the last manifest it had and reads again on the
+next call.
+
+**Tests.** `maps/sample/sample.pmtiles` is a small extract of the sample
+area (Mount Si, Washington) from a real build, with `maps/sample/sample.json`
+naming its build, basemap and schema version, licence, box, zooms and a
+sample point. Unit tests put it into the local R2 simulator under the keys
+their manifests name; the end-to-end harness seeds the Worker's `MAPS`
+bucket with it and a manifest before each file.

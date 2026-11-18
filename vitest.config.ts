@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vitest/config";
 import { unstable_readConfig } from "wrangler";
@@ -7,6 +8,12 @@ import { unstable_readConfig } from "wrangler";
 const { vars } = unstable_readConfig({ config: "./wrangler.jsonc" }) as {
   vars: Record<string, string>;
 };
+
+// The committed sample map archive, which tests put into the local MAPS
+// bucket. Tests read it with inject("mapSample"); see test/maps/helpers.ts.
+const mapSample = readFileSync(
+  new URL("./maps/sample/sample.pmtiles", import.meta.url),
+).toString("base64");
 
 export default defineConfig({
   test: {
@@ -34,6 +41,7 @@ export default defineConfig({
         ],
         test: {
           name: "unit",
+          provide: { mapSample },
           include: ["test/**/*.test.{ts,tsx}"],
           exclude: ["test/e2e/**"],
           deps: {

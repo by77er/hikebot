@@ -3,3 +3,5 @@ worker-configuration.d.ts
 .wrangler
 # Prettier would put a blank line between a rule heading and its `only:` line.
 UNDERCURRENT.md
+# Written by the Map data workflow.
+maps/sample/
