@@ -317,8 +317,8 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
             }),
           ]
         : []),
-      ...(finished ? [pinButton(finished)] : []),
       ...announceButtons(state),
+      ...(finished ? [pinButton(finished)] : []),
     ];
   }
   const open = openPoll(round);
@@ -353,8 +353,8 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
             label: `Close ${POLL_NAMES[open.kind]}`,
           }),
         ]),
-    ...(round.locationOptionId === null ? [] : [pinButton(round)]),
     ...announceButtons(state),
+    ...(round.locationOptionId === null ? [] : [pinButton(round)]),
     button({
       custom_id: POLL_CONTROL_IDS.cancelRound(round.id),
       label: "Cancel round",
