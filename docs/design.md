@@ -84,9 +84,11 @@ keeps its handlers in its own file under `src/features/` and adds one line to
 An unknown command or `custom_id` (for example a button on an old message)
 gets an ephemeral Components V2 reply: "This action is no longer available."
 
+Scheduled jobs are registered the same way, by name:
+`router.job("poll:refresh", handler)`. A job name is `<feature>:<action>`.
 `GuildHike.alarm()` hands the object's Durable Object alarm to `runAlarm`
-(`src/features/index.ts`), which runs the features' scheduled work: today the
-debounced refresh of poll messages, described under "Live updates".
+(`src/features/index.ts`), which runs the jobs that are due, as "Deferred
+work" describes.
 
 ## Deferred work
 
@@ -101,6 +103,25 @@ lets a pending call run for up to 15 minutes). `runFollowUp` runs each job
 once and returns false if there is no job, for example because the object was
 evicted in between, so follow-ups must tolerate being lost: anything that must
 survive belongs in storage, written before the response is returned.
+
+Work due at a later time is a scheduled job (`src/guild/schedule.ts`). A
+Durable Object has a single alarm, which the scheduler shares among named
+jobs. `schedule(storage, job, dueAt)` stores a `job:<name>` key holding when
+the job is due; scheduling a job that is already scheduled keeps the earlier
+of the two times, and the object's alarm is moved earlier whenever a job is
+due before it. Because the schedule lives in storage, it survives a restart
+of the object.
+
+The alarm's body, `runDueJobs`, runs every job due by the store's clock, and
+at least the earliest ones, which the alarm was set for. It removes each
+due job's key before running its handler, so a job runs at most once per
+alarm, and a job scheduled while the alarm runs (by a job, including itself,
+or by a concurrent request) stays scheduled. When the jobs have run it sets
+the alarm for the earliest job still scheduled. A job that throws is logged
+with its name and the other due jobs still run; a due job no handler is
+registered for is logged and dropped. The alarm handler does not throw for
+either, so the platform's automatic alarm retry never runs a job that
+succeeded a second time. A job that wants another go schedules itself again.
 
 ## Talking to Discord
 
@@ -549,12 +570,13 @@ answer); a full or closed poll is refused already at the buttons.
 ### Live updates
 
 A vote, proposal or pick of a past location marks its poll for a refresh (a `poll-refresh:<poll id>`
-key in the object's storage, holding when it is due) and, unless the object
-already has an alarm, sets one `REFRESH_DELAY_MS` (2 seconds) after the
-store's clock. The alarm edits the message of every marked poll that is still
-open, so a burst of votes causes one edit. A failed edit is logged and
-dropped; the member's interaction never waits for it. Marks added while the
-alarm ran get an alarm of their own. Every edit of a poll message (refresh,
+key in the object's storage, holding when it is due) and schedules the
+`poll:refresh` job `REFRESH_DELAY_MS` (2 seconds) after the store's clock,
+unless it is already scheduled earlier. The job edits the message of every
+marked poll that is still open, so a burst of votes causes one edit. A failed
+edit is logged and dropped; the member's interaction never waits for it.
+Marks added while the job runs schedule it again, so they get a run of their
+own. Every edit of a poll message (refresh,
 close, cancel) runs through one queue per object (`queuePollEdit`), so an
 older render never lands after a newer one.
 

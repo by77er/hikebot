@@ -205,9 +205,35 @@ Run `npm test` for the whole suite before opening a pull request.
    expect(await runDurableObjectAlarm(stub)).toBe(false);
    ```
 
-3. Run the file: `npx vitest run test/features/poll-ui.test.ts -t "debounced refresh"`.
+3. To test a scheduled job on its own, register it on the object's router,
+   schedule it, then run the alarm and check what is still scheduled, as
+   `test/guild/schedule.test.ts` does. The alarm runs the earliest job even
+   when its time is ahead of the clock, so a fixed time far ahead works:
 
-4. In an end-to-end scenario, wait for what the alarm changes with
+   ```ts
+   import type { GuildHike } from "../../src/guild/guild-hike";
+   import { schedule, scheduledJobs } from "../../src/guild/schedule";
+
+   const runs: string[] = [];
+   await runInDurableObject(stub, async (instance: GuildHike, state) => {
+     instance.router.job("test:first", () => {
+       runs.push("first");
+       return Promise.resolve();
+     });
+     await schedule(state.storage, "test:first", 2_000_000_000_000);
+   });
+   expect(await runDurableObjectAlarm(stub)).toBe(true);
+   expect(runs).toEqual(["first"]);
+   expect(
+     await runInDurableObject(stub, (_instance, state) =>
+       scheduledJobs(state.storage),
+     ),
+   ).toEqual(new Map());
+   ```
+
+4. Run the file: `npx vitest run test/features/poll-ui.test.ts -t "debounced refresh"`.
+
+5. In an end-to-end scenario, wait for what the alarm changes with
    `eventually` or `waitForMessage` instead, as "Write an end-to-end
    scenario" says.
 

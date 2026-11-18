@@ -35,18 +35,28 @@ export type CommandHandler = Handler<APIApplicationCommandInteraction>;
 export type ComponentHandler = Handler<APIMessageComponentInteraction>;
 export type ModalHandler = Handler<APIModalSubmitInteraction>;
 
+/**
+ * A scheduled job's work, run by the object's alarm (see `schedule.ts`). A
+ * job that wants another go calls `schedule` again.
+ */
+export type JobHandler = (context: HandlerContext) => Promise<void>;
+
 /** `hb:<feature>` or `hb:<feature>:<action>`. */
 const CUSTOM_ID_PREFIX = /^hb:[a-z0-9-]+(:[a-z0-9-]+)?$/;
+
+/** `<feature>:<action>`, as in `poll:refresh`. */
+const JOB_NAME = /^[a-z0-9-]+:[a-z0-9-]+$/;
 
 /**
  * The handler registry. Commands match by name; components and modal
  * submits match by `custom_id` prefix on `:` boundaries, longest prefix first,
- * so `hb:poll:vote` receives `hb:poll:vote:12`.
+ * so `hb:poll:vote` receives `hb:poll:vote:12`. Scheduled jobs match by name.
  */
 export class Router {
   private readonly commands = new Map<string, CommandHandler>();
   private readonly components = new Map<string, ComponentHandler>();
   private readonly modals = new Map<string, ModalHandler>();
+  private readonly jobs = new Map<string, JobHandler>();
 
   command(name: string, handler: CommandHandler): this {
     register(this.commands, name, handler, "command");
@@ -61,6 +71,19 @@ export class Router {
   modal(prefix: string, handler: ModalHandler): this {
     register(this.modals, checkPrefix(prefix), handler, "modal");
     return this;
+  }
+
+  job(name: string, handler: JobHandler): this {
+    if (!JOB_NAME.test(name)) {
+      throw new Error(`job name "${name}" must look like <feature>:<action>`);
+    }
+    register(this.jobs, name, handler, "job");
+    return this;
+  }
+
+  /** The handler of the scheduled job `name`, if one is registered. */
+  jobHandler(name: string): JobHandler | undefined {
+    return this.jobs.get(name);
   }
 
   async dispatch(

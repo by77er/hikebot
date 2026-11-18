@@ -478,6 +478,51 @@ describe("the debounced refresh", () => {
     expect(await runDurableObjectAlarm(stub(guild))).toBe(false);
   });
 
+  it("gives a vote that arrives during a refresh a refresh of its own", async () => {
+    const guild = "poll-ui-refresh-during-run";
+    const view = await openPoll(guild, ["Ridge", "Lake"]);
+    let editingStarted = () => {};
+    const editing = new Promise<void>((resolve) => {
+      editingStarted = resolve;
+    });
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce(async () => {
+        editingStarted();
+        await held;
+        return Response.json({ id: POLL_MESSAGE });
+      })
+      .mockImplementation(() =>
+        Promise.resolve(Response.json({ id: POLL_MESSAGE })),
+      );
+    const vote = (user: string) =>
+      send(choose(guild, view, user, [String(view.options[0]?.id)]));
+    await vote("400000000000000011");
+
+    const firstRun = runDurableObjectAlarm(stub(guild));
+    await editing;
+    await vote("400000000000000012");
+    release();
+    expect(await firstRun).toBe(true);
+    expect(requests(fetchSpy)).toHaveLength(1);
+    expect(text(bodyOf(requests(fetchSpy)[0]).components)).toContain(
+      "1 member has voted.",
+    );
+
+    expect(await runDurableObjectAlarm(stub(guild))).toBe(true);
+    const sent = requests(fetchSpy);
+    expect(sent.map((r) => `${r.method} ${new URL(r.url).pathname}`)).toEqual([
+      `PATCH /api/v10/channels/${TEXT}/messages/${POLL_MESSAGE}`,
+      `PATCH /api/v10/channels/${TEXT}/messages/${POLL_MESSAGE}`,
+    ]);
+    expect(text(bodyOf(sent[1]).components)).toContain("2 members have voted.");
+    expect(await runDurableObjectAlarm(stub(guild))).toBe(false);
+  });
+
   it("sets the alarm about two seconds after the change", async () => {
     const guild = "poll-ui-alarm-time";
     const view = await openPoll(guild, ["Ridge"]);

@@ -48,9 +48,9 @@ export class GuildHike extends DurableObject<Env> {
     };
   }
 
-  /** Runs the features' scheduled work, such as poll message refreshes. */
+  /** Runs the scheduled jobs that are due, such as poll message refreshes. */
   override async alarm(): Promise<void> {
-    await runAlarm({ env: this.env, storage: this.ctx.storage });
+    await runAlarm(this.router, { env: this.env, storage: this.ctx.storage });
   }
 
   /**
