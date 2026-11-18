@@ -43,6 +43,11 @@ export async function calendarGuild(
   if (parts.length !== 2) return null;
   const [guildId = "", signature = ""] = parts;
   if (!SNOWFLAKE.test(guildId)) return null;
-  const valid = await verify(env.SIGNING_SECRET, "calendar", guildId, signature);
+  const valid = await verify(
+    env.SIGNING_SECRET,
+    "calendar",
+    guildId,
+    signature,
+  );
   return valid ? guildId : null;
 }

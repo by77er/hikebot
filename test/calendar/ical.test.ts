@@ -41,8 +41,9 @@ function contentLines(text: string): string[] {
 
 describe("buildCalendar", () => {
   it("writes one hike as this exact text", () => {
-    expect(buildCalendar({ name: "Hikes", stamp: STAMP, events: [hike()] }))
-      .toBe(
+    expect(
+      buildCalendar({ name: "Hikes", stamp: STAMP, events: [hike()] }),
+    ).toBe(
       [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
@@ -114,9 +115,7 @@ describe("buildCalendar", () => {
       ],
     });
     const lines = contentLines(text);
-    expect(lines).toContain(
-      "SUMMARY:Hike: Ridge\\, North\\; Peak \\\\ Summit",
-    );
+    expect(lines).toContain("SUMMARY:Hike: Ridge\\, North\\; Peak \\\\ Summit");
     expect(lines).toContain("LOCATION:Ridge\\, North\\; Peak \\\\ Summit");
     expect(lines).toContain(
       "DESCRIPTION:Bring water\\; snacks\\, and\\na map \\\\ compass",
@@ -130,7 +129,11 @@ describe("buildCalendar", () => {
       name: "Hikes",
       stamp: STAMP,
       events: [
-        hike({ summary: `Hike: ${label}`, location: label, description: details }),
+        hike({
+          summary: `Hike: ${label}`,
+          location: label,
+          description: details,
+        }),
       ],
     });
     const lines = physicalLines(text);
