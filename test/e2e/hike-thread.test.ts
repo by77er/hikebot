@@ -207,11 +207,17 @@ describe("the hike thread", () => {
 
     const id = idStarting(play.shown(panel), "hb:thread:create:");
     await Promise.all([g.owner.click(panel, id), g.owner.click(panel, id)]);
+    // The fake holds the thread before the Worker has stored its id, so wait
+    // for the first click's follow-up on the panel, sent once it is stored.
     await eventually(() => {
-      expect(e2e.discord.threads(g.channels.forum)).toHaveLength(1);
+      expect(messageText(play.shown(panel))).toContain(
+        "The hike thread is open",
+      );
     });
     await g.owner.click(panel, ROUND_IDS.refresh);
-    const [thread] = e2e.discord.threads(g.channels.forum);
+    const threads = e2e.discord.threads(g.channels.forum);
+    expect(threads).toHaveLength(1);
+    const [thread] = threads;
     expect(messageText(play.shown(panel))).toContain(
       `**Hike thread:** <#${thread?.id ?? ""}>`,
     );
