@@ -16,6 +16,7 @@ import {
   channelUrl,
   eventUrl,
   guildIconUrl,
+  oauthAuthorizeUrl,
   type DiscordApiOptions,
 } from "../../src/discord/api";
 
@@ -39,7 +40,12 @@ function fakeFetch(...responses: Response[]) {
       url: request.url,
       method: request.method,
       headers: request.headers,
-      body: text === "" ? undefined : JSON.parse(text),
+      body:
+        text === ""
+          ? undefined
+          : request.headers.get("Content-Type") === "application/json"
+            ? JSON.parse(text)
+            : text,
     });
     const response = responses.shift();
     if (!response) throw new Error("unexpected request");
@@ -172,6 +178,13 @@ describe("DiscordApi routes", () => {
       method: "POST",
       url: `${base}/webhooks/50/tok?wait=true`,
       auth: false,
+    },
+    {
+      name: "getBotGuilds",
+      call: (api) => api.getBotGuilds({ limit: 200, after: "70" }),
+      method: "GET",
+      url: `${base}/users/@me/guilds?after=70&limit=200`,
+      auth: true,
     },
     {
       name: "bulkOverwriteGlobalCommands",
@@ -482,6 +495,95 @@ describe("allowed_mentions", () => {
     const body = { ...message };
     await api.createMessage("10", body);
     expect(body).not.toHaveProperty("allowed_mentions");
+  });
+});
+
+describe("OAuth2 routes", () => {
+  const base = "https://discord.com/api/v10";
+  const app = { id: "50", secret: "client-secret" };
+  const basic = `Basic ${btoa("50:client-secret")}`;
+
+  it("exchangeOAuthCode posts the code as a form with the client's Basic credentials", async () => {
+    const { api, sent } = client([ok({ access_token: "at" })]);
+    expect(
+      await api.exchangeOAuthCode(app, "the-code", "https://x.example/cb"),
+    ).toEqual({ access_token: "at" });
+    expect(sent[0]).toMatchObject({
+      method: "POST",
+      url: `${base}/oauth2/token`,
+    });
+    expect(sent[0]?.headers.get("Authorization")).toBe(basic);
+    expect(sent[0]?.headers.get("Content-Type")).toBe(
+      "application/x-www-form-urlencoded",
+    );
+    expect(sent[0]?.body).toBe(
+      "grant_type=authorization_code&code=the-code&redirect_uri=https%3A%2F%2Fx.example%2Fcb",
+    );
+  });
+
+  it("revokeOAuthToken posts the access token as a form", async () => {
+    const { api, sent } = client([ok({})]);
+    await api.revokeOAuthToken(app, "at");
+    expect(sent[0]?.url).toBe(`${base}/oauth2/token/revoke`);
+    expect(sent[0]?.headers.get("Authorization")).toBe(basic);
+    expect(sent[0]?.body).toBe("token=at&token_type_hint=access_token");
+  });
+
+  it("getOAuthUser and getOAuthUserGuilds send the user's token, not the bot's", async () => {
+    const { api, sent } = client([ok({ id: "7" }), ok([])]);
+    await api.getOAuthUser("at");
+    await api.getOAuthUserGuilds("at");
+    expect(
+      sent.map((s) => [s.method, s.url, s.headers.get("Authorization")]),
+    ).toEqual([
+      ["GET", `${base}/users/@me`, "Bearer at"],
+      ["GET", `${base}/users/@me/guilds`, "Bearer at"],
+    ]);
+  });
+
+  it("errors name the route, never the code, token or secret", async () => {
+    const { api } = client([
+      Response.json(
+        { error: "invalid_grant", error_description: "Invalid code" },
+        { status: 400 },
+      ),
+      Response.json({ message: "401: Unauthorized", code: 0 }, { status: 401 }),
+    ]);
+    const exchange = await failure(api.exchangeOAuthCode(app, "the-code", "u"));
+    expect(exchange.route).toBe("/oauth2/token");
+    const user = await failure(api.getOAuthUser("secret-at"));
+    expect(user.route).toBe("/users/@me");
+    for (const error of [exchange, user]) {
+      for (const secret of ["the-code", "secret-at", "client-secret"]) {
+        expect(error.message).not.toContain(secret);
+      }
+    }
+  });
+});
+
+describe("oauthAuthorizeUrl", () => {
+  const query = {
+    clientId: "50",
+    scope: "identify guilds",
+    redirectUri: "https://x.example/auth/callback",
+    state: "s1",
+  };
+
+  it("builds Discord's authorize address with prompt=none", () => {
+    expect(oauthAuthorizeUrl({}, query)).toBe(
+      "https://discord.com/oauth2/authorize?response_type=code&client_id=50&scope=identify+guilds&redirect_uri=https%3A%2F%2Fx.example%2Fauth%2Fcallback&state=s1&prompt=none",
+    );
+  });
+
+  it("uses DISCORD_OAUTH_AUTHORIZE_URL when set", () => {
+    expect(
+      oauthAuthorizeUrl(
+        { DISCORD_OAUTH_AUTHORIZE_URL: "http://127.0.0.1:9/oauth2/authorize" },
+        query,
+      ),
+    ).toMatch(
+      /^http:\/\/127\.0\.0\.1:9\/oauth2\/authorize\?response_type=code&/,
+    );
   });
 });
 

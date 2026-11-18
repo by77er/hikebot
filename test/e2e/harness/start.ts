@@ -4,8 +4,10 @@
  * in-memory Durable Object storage, a `MAPS` bucket holding the sample map
  * archive and its manifest (`./maps.ts`), a newly generated signing key pair, a
  * dummy bot token, application id, OAuth client secret and SIGNING_SECRET,
- * PUBLIC_URL set to an example origin, and DISCORD_API_BASE pointing at the
- * fake. These go in as the harness's `vars` and `secrets`, which override
+ * PUBLIC_URL set to an example origin, and DISCORD_API_BASE and
+ * DISCORD_OAUTH_AUTHORIZE_URL pointing at the fake, which accepts
+ * `${PUBLIC_URL}/auth/callback` as the application's OAuth2 redirect URI.
+ * These go in as the harness's `vars` and `secrets`, which override
  * whatever `.dev.vars`, `.env` files or the environment hold, so the Worker
  * runs the same in any checkout. `useE2E` in `./worker` starts one per test
  * file; the screenshot script in `test/screenshots/` starts one of its own.
@@ -79,6 +81,8 @@ export class E2ERun {
     const discord = new FakeDiscord({
       botToken: BOT_TOKEN,
       applicationId: APPLICATION_ID,
+      clientSecret: CLIENT_SECRET,
+      redirectUris: [`${PUBLIC_URL}/auth/callback`],
     });
     this.discord = discord;
     await discord.listen();
@@ -90,7 +94,11 @@ export class E2ERun {
       DISCORD_CLIENT_SECRET: CLIENT_SECRET,
       SIGNING_SECRET,
     };
-    const vars = { DISCORD_API_BASE: discord.apiBase, PUBLIC_URL };
+    const vars = {
+      DISCORD_API_BASE: discord.apiBase,
+      DISCORD_OAUTH_AUTHORIZE_URL: discord.authorizeUrl,
+      PUBLIC_URL,
+    };
     const root = options.root?.() ?? ROOT;
     let configPath = join(root, CONFIG_PATH);
     if (options.probe) {

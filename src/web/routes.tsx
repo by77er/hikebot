@@ -5,9 +5,13 @@
  * when a request does reach the Worker (as in the unit tests), and turns a
  * missing one into the HTML 404 page.
  */
+import { systemNow } from "../clock";
+import { addSignInRoutes } from "./auth/routes";
+import { readSession } from "./auth/session";
 import { calendarRoute } from "./calendar";
 import { MethodNotAllowedPage, NotFoundPage } from "./pages/errors";
 import { HomePage } from "./pages/home";
+import { seeOther } from "./redirect";
 import { htmlResponse } from "./response";
 import { WebRouter } from "./router";
 
@@ -20,7 +24,11 @@ export const webRouter = new WebRouter({
   methodNotAllowed: () =>
     htmlResponse(<MethodNotAllowedPage />, { status: 405 }),
 })
-  .get("/", () => htmlResponse(<HomePage />))
+  .get("/", async (request, env) =>
+    (await readSession(request, env, systemNow()))
+      ? seeOther("/servers")
+      : htmlResponse(<HomePage />),
+  )
   .get("/assets/*", async (request, env) => {
     const asset = await env.ASSETS.fetch(request);
     return asset.status === 404 ? notFound() : asset;
@@ -37,3 +45,5 @@ export const webRouter = new WebRouter({
         },
       }),
   );
+
+addSignInRoutes(webRouter);

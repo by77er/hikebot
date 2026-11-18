@@ -5,7 +5,8 @@
  * interaction responses in memory so
  * tests can assert on what Discord would now show, and refuses what Discord
  * refuses: a missing bot token (401) and any payload that breaks a rule in
- * `validate.ts` (400 naming the rule).
+ * `validate.ts` (400 naming the rule). It also plays Discord's OAuth2
+ * provider for web sign-in, in `fake-discord-oauth.ts`.
  */
 import {
   createServer,
@@ -14,6 +15,7 @@ import {
 } from "node:http";
 import type { AddressInfo } from "node:net";
 import { ChannelType, MessageFlags } from "discord-api-types/v10";
+import { FakeOAuth, type FakeUser } from "./fake-discord-oauth";
 import {
   RULES,
   describeViolations,
@@ -128,6 +130,10 @@ type Waiter = {
 export interface FakeDiscordOptions {
   botToken: string;
   applicationId: string;
+  /** The OAuth2 client secret; without it the token routes refuse all. */
+  clientSecret?: string;
+  /** The OAuth2 redirect URIs registered for the application. */
+  redirectUris?: string[];
 }
 
 let nextSnowflake = 1_300_000_000_000_000_000n;
@@ -141,6 +147,8 @@ export function snowflake(): string {
 export class FakeDiscord {
   readonly botToken: string;
   readonly applicationId: string;
+  /** Discord's OAuth2 side: users, codes and tokens. */
+  readonly oauth: FakeOAuth;
   /** Every request the fake received, in order. */
   readonly requests: RecordedRequest[] = [];
   /** The latest Bulk Overwrite Global Application Commands body. */
@@ -172,6 +180,13 @@ export class FakeDiscord {
   constructor(options: FakeDiscordOptions) {
     this.botToken = options.botToken;
     this.applicationId = options.applicationId;
+    this.oauth = new FakeOAuth({
+      applicationId: options.applicationId,
+      clientSecret: options.clientSecret,
+      botToken: options.botToken,
+      redirectUris: options.redirectUris ?? [],
+      botGuilds: () => [...this.guilds.values()],
+    });
   }
 
   async listen(): Promise<void> {
@@ -188,6 +203,11 @@ export class FakeDiscord {
   /** The value for DISCORD_API_BASE. */
   get apiBase(): string {
     return `${this.origin}/api/v10`;
+  }
+
+  /** The value for DISCORD_OAUTH_AUTHORIZE_URL. */
+  get authorizeUrl(): string {
+    return `${this.origin}/oauth2/authorize`;
   }
 
   async close(): Promise<void> {
@@ -250,6 +270,14 @@ export class FakeDiscord {
     };
     this.channels.set(channel.id, stored);
     return stored;
+  }
+
+  /**
+   * Adds a Discord user who can sign in to the web site, with the servers
+   * they are in; the bot is in those added with `addGuild`.
+   */
+  addUser(user: FakeUser): FakeUser {
+    return this.oauth.addUser(user);
   }
 
   /** Makes every request on the channel fail as Discord would. */
@@ -601,6 +629,8 @@ export class FakeDiscord {
     body: unknown,
   ): Reply {
     const path = pathname.replace(/^\/api\/v10/, "");
+    const oauth = this.oauth.route(method, pathname, query, req, body);
+    if (oauth) return oauth;
     if (!pathname.startsWith("/api/v10/")) {
       return notFound("the API base must end in /api/v10");
     }

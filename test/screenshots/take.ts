@@ -1,7 +1,8 @@
 /**
  * `npm run screenshots`: starts the Worker in local workerd next to the fake
  * Discord API, seeds it, opens every page in `pages.json` in headless
- * Chromium at each viewport and colour scheme, and writes a full-page PNG
+ * Chromium at each viewport and colour scheme, signed in as its `user`
+ * when it has one, and writes a full-page PNG
  * per combination to `docs/screenshots/<page>--<viewport>--<scheme>.png`,
  * deleting PNGs there that no page produces any more. It exits non-zero
  * when a page answers with another status than its entry gives, or when the
@@ -30,6 +31,7 @@ import {
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Browser, CDPSession } from "puppeteer-core";
+import { PageClient } from "../e2e/harness/web";
 import { launchBrowser } from "./browser";
 import {
   SCHEMES,
@@ -71,9 +73,9 @@ async function main(): Promise<void> {
         `pages.json gives page ${page.name} the seed "${page.seed}", which is not in SEEDS in test/screenshots/seeds.ts`,
       );
     }
-    if (page.user !== null) {
+    if (page.cancel && page.user === null) {
       throw new Error(
-        `pages.json signs in "${page.user}" for page ${page.name}, but test/screenshots/take.ts opens pages signed out only; add signing in to capture() there first`,
+        `pages.json cancels sign-in for page ${page.name}, which has no user to sign in`,
       );
     }
   }
@@ -147,7 +149,11 @@ async function capture(
   try {
     const page = await context.newPage();
     const failures: string[] = [];
-    const url = new URL(entry.path, base);
+    const { path, cookie } = await signedIn(base, entry);
+    const url = new URL(path, base);
+    // The session (or, for a cancelled sign-in, the state) cookie, sent the
+    // way the browser would send the one the Worker set.
+    if (cookie !== "") await page.setExtraHTTPHeaders({ Cookie: cookie });
     page.on("requestfailed", (request) => {
       failures.push(
         `${request.url()} failed: ${request.failure()?.errorText ?? "unknown error"}`,
@@ -204,6 +210,32 @@ async function capture(
   } finally {
     await context.close();
   }
+}
+
+/**
+ * Signs the page's `user` in through the fake Discord API, as a browser
+ * would, and returns the path to open and the cookies to send. A signed-out
+ * page opens its own path with no cookie; a cancelled sign-in opens the
+ * callback address Discord sent back, with the state cookie.
+ */
+async function signedIn(
+  base: URL,
+  entry: ScreenshotPage,
+): Promise<{ path: string; cookie: string }> {
+  if (entry.user === null) return { path: entry.path, cookie: "" };
+  const client = new PageClient(base);
+  const user = { id: entry.user };
+  if (entry.cancel) {
+    const path = await client.authorize(user, { cancel: true });
+    return { path, cookie: client.cookieHeader() };
+  }
+  const back = await client.signIn(user);
+  if (back.status !== 303) {
+    throw new Error(
+      `${entry.name}: signing in ${entry.user} answered ${String(back.status)}`,
+    );
+  }
+  return { path: entry.path, cookie: client.cookieHeader() };
 }
 
 /**

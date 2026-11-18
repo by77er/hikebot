@@ -24,7 +24,12 @@ is where REST calls go; tests point it at a fake Discord API. The var
 own origin; every absolute link to the Worker (OAuth redirect URI, calendar
 address) is built from it with `absoluteUrl(env, path)` in
 `src/public-url.ts`, never by joining strings. Tests set it to
-`https://hikebot.example`, and `.dev.vars.example` to the local dev server. One
+`https://hikebot.example`, and `.dev.vars.example` to the local dev server.
+The var `DISCORD_OAUTH_AUTHORIZE_URL` (default
+`https://discord.com/oauth2/authorize`) is where web sign-in sends the
+browser; tests point it at the fake Discord API. Request logs keep no query
+string (`observability.redact_query_string`), since the sign-in callback's
+query holds a one-time code. One
 `GuildHike` Durable Object per Discord guild (binding `GUILD_HIKE`,
 `idFromName(guild_id)`) holds all of that guild's state in its SQLite storage
 and makes every state change, so votes and poll closes never race. The R2
@@ -49,7 +54,10 @@ The Worker (`src/index.ts`) handles the rest:
 - `POST /interactions`: the Discord interactions endpoint, below. Any other
   method gets 405 with `Allow: POST`.
 - Anything else goes to the web router (`src/web/routes.tsx`):
-  - `GET /` (or `HEAD`): the landing page.
+  - `GET /` (or `HEAD`): the landing page, or a redirect to `/servers`
+    when signed in.
+  - `GET /login`, `GET /auth/callback`, `POST /logout` and `GET /servers`:
+    sign-in, below.
   - `GET /healthz` (or `HEAD`): a plain-text health line,
     `hikebot is running`.
   - `GET /assets/*`: the file from `public/` through the `ASSETS` binding,
@@ -213,6 +221,73 @@ storage survives it. A member who leaves can still read the server for up
 to 60 seconds, and a renamed server or channel shows its old name for up to
 an hour.
 
+## Sign-in and sessions
+
+People sign in to the web site with Discord, through the OAuth2
+authorization code grant with the scopes `identify guilds`
+(`src/web/auth/`). The Worker keeps no Discord token and no server-side
+session: everything it remembers is in one sealed cookie.
+
+1. `GET /login` (optional `next`, a path on this site) seals a random
+   `state` and `next` (purpose `oauth-state`) into the cookie
+   `__Host-hikebot_oauth_state` for ten minutes, and redirects (303) to
+   `DISCORD_OAUTH_AUTHORIZE_URL` with `response_type=code`, `client_id`
+   (`DISCORD_APPLICATION_ID`), `scope`, `redirect_uri` (`PUBLIC_URL` +
+   `/auth/callback`), `state` and `prompt=none`, so someone who authorized
+   before goes straight back. A `next` that is not a path on this site is
+   dropped.
+2. `GET /auth/callback` clears the state cookie whatever happens, so a
+   callback works once. A missing, expired or mismatched `state` is a 400
+   "Sign-in failed" page and nothing is exchanged. `error=access_denied` is
+   the "Sign-in was cancelled" page; any other error is a 400. Otherwise the
+   Worker exchanges the code at `/oauth2/token` with the client id and
+   `DISCORD_CLIENT_SECRET` (HTTP Basic), reads `GET /users/@me` and
+   `GET /users/@me/guilds` with the access token, and revokes the token in
+   the background (a failed revoke is logged and does not stop the
+   sign-in). A Discord failure is a 502 "Sign-in failed" page.
+3. Of the user's servers it keeps those the bot is in: the bot's own
+   `GET /users/@me/guilds`, read 200 at a time and cached in the isolate for
+   60 seconds. It sorts them by name, keeps 25 at most, starts the session
+   and redirects (303) to `next` or `/servers`.
+
+The session is the cookie `__Host-hikebot_session` (`HttpOnly`, `Secure`,
+`SameSite=Lax`, `Path=/`, `Max-Age` seven days), sealed with purpose
+`session`. It holds the user's id, display name (global name, else
+username) and avatar hash, each kept server's id, name and icon hash, and
+the issue time; it expires seven days after sign-in. Server names are
+shortened (ending in `…`) until the cookie is at most 4000 bytes. A
+tampered, expired, oversized or malformed cookie reads as signed out.
+Signing in again (the **Refresh servers** link, `/login?next=/servers`)
+replaces it with a fresh server list.
+
+**The session's server list is a hint for navigation, not a permission.**
+It can be seven days old: the user may have left the server, lost a role,
+or the bot may have been removed. It decides which servers `/servers`
+lists and keeps people off pages of servers they were not in
+(`requireGuild` answers 404), but a server's page checks membership and
+roles with the bot's token when it is opened (`readGuild`, "Web pages for a
+server"), and every action checks them again.
+
+Every request that changes something is a `POST` from a form carrying a
+CSRF token (purpose `csrf`, bound to the user id, valid seven days). It is
+refused with 403 unless the token opens for the session's user and the
+browser says the request came from this site: `Sec-Fetch-Site:
+same-origin` when sent, and an `Origin` equal to the request's origin when
+sent; a request with neither is refused. `POST /logout` is the first such
+form: the **Sign out** button `Layout` shows next to the user's name. It
+clears the cookie and redirects to `/`.
+
+The helpers later pages and forms use, each documented in its module:
+`readSession` and `requireSession` (which redirects to
+`/login?next=<path>`) and `requireGuild` in `session.tsx`; `csrfToken`,
+`CsrfField`, `layoutUser` and `checkPost` in `csrf.tsx`; `safeNext` in
+`next.ts`. `src/web/AGENTS.md` shows a page and a form built with them.
+
+Nothing from Discord or the query string reaches a page except through
+JSX. The client secret, codes and tokens are never logged, shown or put in
+a redirect: logged errors name only the method, route and status, and the
+error pages show neither the code nor the state.
+
 ## GuildHike and the handler registry
 
 `GuildHike` (`src/guild/guild-hike.ts`, `extends DurableObject` from
@@ -338,8 +413,11 @@ Handlers and follow-ups call Discord's REST API only through `DiscordApi`
 over `fetch` with no Discord SDK.
 
 - Bot routes (messages, forum threads, guilds, guild scheduled events,
-  global commands) send
-  `Authorization: Bot <DISCORD_BOT_TOKEN>`. Interaction webhook routes
+  global commands, the bot's servers) send
+  `Authorization: Bot <DISCORD_BOT_TOKEN>`. The OAuth2 routes of web
+  sign-in send a form body and the client credentials
+  (`Authorization: Basic`) or the user's access token
+  (`Authorization: Bearer`) instead. Interaction webhook routes
   (edit original response, follow-up) are authorised by the interaction
   token in the path and send no `Authorization` header.
 - Every message body gets `allowed_mentions: { parse: [] }` unless the
@@ -471,7 +549,13 @@ The e2e harness (`test/e2e/harness/`) has five parts:
 - A fake Discord API on `node:http` with the routes the bot uses: create and
   edit message, start forum thread, get guild, get guild member, get guild
   channels, create guild scheduled event, edit original interaction
-  response, create follow-up and bulk overwrite global commands. As on
+  response, create follow-up and bulk overwrite global commands. It also
+  plays Discord's OAuth2 provider (`fake-discord-oauth.ts`): the authorize
+  page, which redirects back with a code for the user the browser is signed
+  in as, or with `error=access_denied`; the token URL, which checks the
+  client credentials, the form body, the grant type, the redirect URI and
+  that a code is used once; token revocation; and the current user and
+  their servers for a user's token or the bot's. As on
   Discord, after an interaction is answered with an update or a deferred
   update, its original response is the message its component (or the modal's
   button) was on. It keeps
@@ -512,7 +596,9 @@ The e2e harness (`test/e2e/harness/`) has five parts:
 - A page client (`test/e2e/harness/web.ts`) that requests a path the way a
   browser does and returns the status, headers and body as they came: it
   does not follow redirects, and it keeps the cookies the Worker sets and
-  sends them back.
+  sends them back. `signIn(user)` walks sign-in's redirects through the
+  fake, and `submitForm` posts a form found in a page from the page's
+  origin.
 
 Harness self-tests check every rule of the fake against a payload at the
 limit and one past it, and the interaction and page clients against a

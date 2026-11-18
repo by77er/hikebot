@@ -882,6 +882,289 @@ describe("scheduled events", () => {
   });
 });
 
+describe("OAuth2 sign-in", () => {
+  const CLIENT_SECRET = "fake-discord-test-secret";
+  const REDIRECT = "https://hikebot.example/auth/callback";
+  const USER = "420000000000000501";
+  const BOT_GUILDS = ["220000000000000501", "220000000000000502"];
+  const OTHER_GUILD = "220000000000000599";
+  const basic = `Basic ${Buffer.from(`${APPLICATION_ID}:${CLIENT_SECRET}`).toString("base64")}`;
+  let oauth: FakeDiscord;
+
+  beforeAll(async () => {
+    oauth = new FakeDiscord({
+      botToken: BOT_TOKEN,
+      applicationId: APPLICATION_ID,
+      clientSecret: CLIENT_SECRET,
+      redirectUris: [REDIRECT],
+    });
+    await oauth.listen();
+    for (const id of BOT_GUILDS) oauth.addGuild({ id, ownerId: USER });
+    oauth.addUser({
+      id: USER,
+      username: "ana",
+      globalName: "Ana",
+      guilds: [
+        { id: BOT_GUILDS[0] ?? "", name: "Ridge Walkers" },
+        { id: OTHER_GUILD, name: "Book Club" },
+      ],
+    });
+  });
+
+  afterAll(async () => {
+    await oauth.close();
+  });
+
+  const authorizeQuery = (extra: Record<string, string> = {}) =>
+    new URLSearchParams({
+      response_type: "code",
+      client_id: APPLICATION_ID,
+      scope: "identify guilds",
+      redirect_uri: REDIRECT,
+      state: "s-1",
+      prompt: "none",
+      ...extra,
+    });
+
+  async function authorize(
+    query: URLSearchParams,
+    cookie = `fake_discord_user=${USER}`,
+  ): Promise<Reply & { location: URL | null }> {
+    const response = await fetch(`${oauth.authorizeUrl}?${query.toString()}`, {
+      headers: { Cookie: cookie },
+      redirect: "manual",
+    });
+    const text = await response.text();
+    const location = response.headers.get("Location");
+    return {
+      status: response.status,
+      body: text === "" ? undefined : (JSON.parse(text) as unknown),
+      location: location === null ? null : new URL(location),
+    };
+  }
+
+  async function post(
+    path: string,
+    form: Record<string, string>,
+    headers: Record<string, string> = {
+      Authorization: basic,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+  ): Promise<Reply> {
+    const response = await fetch(`${oauth.apiBase}${path}`, {
+      method: "POST",
+      headers,
+      body:
+        headers["Content-Type"] === "application/json"
+          ? JSON.stringify(form)
+          : new URLSearchParams(form).toString(),
+    });
+    return {
+      status: response.status,
+      body: await response.json(),
+    };
+  }
+
+  async function get(path: string, authorization: string): Promise<Reply> {
+    const response = await fetch(`${oauth.apiBase}${path}`, {
+      headers: { Authorization: authorization },
+    });
+    return {
+      status: response.status,
+      body: await response.json(),
+    };
+  }
+
+  async function code(): Promise<string> {
+    const reply = await authorize(authorizeQuery());
+    return reply.location?.searchParams.get("code") ?? "";
+  }
+
+  const exchange = (theCode: string, extra: Record<string, string> = {}) =>
+    post("/oauth2/token", {
+      grant_type: "authorization_code",
+      code: theCode,
+      redirect_uri: REDIRECT,
+      ...extra,
+    });
+
+  function expectOAuthRefused(reply: Reply, rule: Rule, status = 400): void {
+    expect(reply.status).toBe(status);
+    expect(reply.body).toMatchObject({ rule: rule.id, docs: rule.docs });
+    expect(JSON.stringify(reply.body)).not.toContain(CLIENT_SECRET);
+    refused.add(rule.id);
+    expect(oauth.takeRejections()).toHaveLength(1);
+  }
+
+  it("redirects back with a code and the state, or access_denied on Cancel", async () => {
+    const approved = await authorize(authorizeQuery());
+    expect(approved.status).toBe(302);
+    expect(
+      `${approved.location?.origin ?? ""}${approved.location?.pathname ?? ""}`,
+    ).toBe(REDIRECT);
+    expect(approved.location?.searchParams.get("state")).toBe("s-1");
+    expect(approved.location?.searchParams.get("code")).toMatch(/^fake-code-/);
+
+    const denied = await authorize(
+      authorizeQuery(),
+      `fake_discord_user=${USER}; fake_discord_consent=deny`,
+    );
+    expect(
+      Object.fromEntries(denied.location?.searchParams ?? []),
+    ).toMatchObject({ error: "access_denied", state: "s-1" });
+    expect(denied.location?.searchParams.has("code")).toBe(false);
+  });
+
+  it("exchanges a code for a token that reads the user and their servers until revoked", async () => {
+    const token = await exchange(await code());
+    expect(token).toMatchObject({
+      status: 200,
+      body: { token_type: "Bearer", scope: "identify guilds" },
+    });
+    const access = (token.body as { access_token: string }).access_token;
+    expect(await get("/users/@me", `Bearer ${access}`)).toMatchObject({
+      status: 200,
+      body: { id: USER, username: "ana", global_name: "Ana", avatar: null },
+    });
+    const guilds = await get("/users/@me/guilds", `Bearer ${access}`);
+    expect((guilds.body as { id: string }[]).map((g) => g.id)).toEqual([
+      BOT_GUILDS[0],
+      OTHER_GUILD,
+    ]);
+    expect(
+      await post("/oauth2/token/revoke", {
+        token: access,
+        token_type_hint: "access_token",
+      }),
+    ).toMatchObject({ status: 200 });
+    expect(oauth.oauth.revoked(access)).toBe(true);
+    expect((await get("/users/@me", `Bearer ${access}`)).status).toBe(401);
+    expect(oauth.takeRejections()).toHaveLength(1);
+  });
+
+  it("accepts the client credentials in the form body", async () => {
+    const reply = await post(
+      "/oauth2/token",
+      {
+        grant_type: "authorization_code",
+        code: await code(),
+        redirect_uri: REDIRECT,
+        client_id: APPLICATION_ID,
+        client_secret: CLIENT_SECRET,
+      },
+      { "Content-Type": "application/x-www-form-urlencoded" },
+    );
+    expect(reply.status).toBe(200);
+  });
+
+  it("pages the bot's servers with limit and after", async () => {
+    const bot = `Bot ${BOT_TOKEN}`;
+    expect(await get("/users/@me", bot)).toMatchObject({
+      status: 200,
+      body: { id: APPLICATION_ID, bot: true },
+    });
+    const first = await get("/users/@me/guilds?limit=1", bot);
+    expect((first.body as { id: string }[]).map((g) => g.id)).toEqual([
+      BOT_GUILDS[0],
+    ]);
+    const second = await get(
+      `/users/@me/guilds?limit=200&after=${BOT_GUILDS[0] ?? ""}`,
+      bot,
+    );
+    expect((second.body as { id: string }[]).map((g) => g.id)).toEqual([
+      BOT_GUILDS[1],
+    ]);
+  });
+
+  it("refuses an authorize request for another response type", async () => {
+    expectOAuthRefused(
+      await authorize(authorizeQuery({ response_type: "token" })),
+      RULES.oauthResponseType,
+    );
+  });
+
+  it("refuses an unknown client, at the authorize page and the token URL", async () => {
+    expectOAuthRefused(
+      await authorize(authorizeQuery({ client_id: "100000000000000000" })),
+      RULES.oauthClientCredentials,
+    );
+    const theCode = await code();
+    expectOAuthRefused(
+      await post(
+        "/oauth2/token",
+        {
+          grant_type: "authorization_code",
+          code: theCode,
+          redirect_uri: REDIRECT,
+        },
+        {
+          Authorization: `Basic ${Buffer.from(`${APPLICATION_ID}:wrong`).toString("base64")}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      ),
+      RULES.oauthClientCredentials,
+      401,
+    );
+    expect((await exchange(theCode)).status).toBe(200);
+  });
+
+  it("refuses a redirect URI the application did not register", async () => {
+    const reply = await authorize(
+      authorizeQuery({ redirect_uri: "https://evil.example/auth/callback" }),
+    );
+    expect(reply.location).toBeNull();
+    expect(reply.body).toMatchObject({
+      error_description: "Invalid OAuth2 redirect_uri",
+    });
+    expectOAuthRefused(reply, RULES.oauthRegisteredRedirectUri);
+  });
+
+  it("refuses a token request that is not a form", async () => {
+    expectOAuthRefused(
+      await post(
+        "/oauth2/token",
+        { grant_type: "authorization_code", code: await code() },
+        { Authorization: basic, "Content-Type": "application/json" },
+      ),
+      RULES.oauthFormBody,
+    );
+  });
+
+  it("refuses another grant type", async () => {
+    expectOAuthRefused(
+      await exchange(await code(), { grant_type: "client_credentials" }),
+      RULES.oauthGrantType,
+    );
+  });
+
+  it("takes a code once", async () => {
+    const theCode = await code();
+    expect((await exchange(theCode)).status).toBe(200);
+    const again = await exchange(theCode);
+    expect(again.body).toMatchObject({ error: "invalid_grant" });
+    expect(JSON.stringify(again.body)).not.toContain(theCode);
+    expectOAuthRefused(again, RULES.oauthCodeSingleUse);
+  });
+
+  it("refuses a redirect URI other than the authorization's", async () => {
+    expectOAuthRefused(
+      await exchange(await code(), {
+        redirect_uri: "https://hikebot.example/other",
+      }),
+      RULES.oauthRedirectUriMatches,
+    );
+  });
+
+  it("serves 1 to 200 servers a page", async () => {
+    const bot = `Bot ${BOT_TOKEN}`;
+    expect((await get("/users/@me/guilds?limit=200", bot)).status).toBe(200);
+    expectOAuthRefused(
+      await get("/users/@me/guilds?limit=201", bot),
+      RULES.currentUserGuildsLimit,
+    );
+  });
+});
+
 describe("rule coverage", () => {
   it("has a test above for every rule the fake enforces", () => {
     const untested = Object.values(RULES)

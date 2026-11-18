@@ -14,11 +14,17 @@ export interface ScreenshotPage {
   /** A key of `SEEDS` in `seeds.ts`: the data the Worker holds first. */
   seed: string;
   /**
-   * The member signed in when the page is opened, or null for a signed-out
-   * visitor. `take.ts` opens pages signed out only, and refuses another
-   * value until signing in is added to its `capture`.
+   * The id of the Discord user, added by the seed with `discord.addUser`,
+   * who signs in before the page is opened, or null for a signed-out
+   * visitor.
    */
   user: string | null;
+  /**
+   * With a `user`: press Cancel on Discord's authorize page while signing
+   * in, and take the page the Worker's callback answers. `path` is then
+   * `/auth/callback`, and the query is the one Discord sends back.
+   */
+  cancel?: boolean;
 }
 
 export interface ExcludedRoute {

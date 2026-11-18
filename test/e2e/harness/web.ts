@@ -2,15 +2,30 @@
  * A browser-like client for the Worker's web pages. It requests a path from
  * the Worker under test and returns the status, headers and body as they
  * came, without following redirects, and keeps the cookies the Worker sets
- * in a jar, sending them back on later requests as a browser would.
+ * in a jar, sending them back on later requests as a browser would. It signs
+ * in with Discord through the fake Discord API (`signIn`) and submits the
+ * forms a page holds (`submitForm`), as a browser does.
  */
+import {
+  DISCORD_CONSENT_COOKIE,
+  DISCORD_USER_COOKIE,
+} from "./fake-discord-oauth";
 
 export interface PageResponse {
+  /** The address requested. */
+  url: URL;
   status: number;
   headers: Headers;
   body: string;
   /** For a redirect, the `Location` header resolved against the request. */
   location: URL | null;
+}
+
+export interface SignInOptions {
+  /** The page to come back to, sent as `/login?next=…`. */
+  next?: string;
+  /** Press Cancel on Discord's authorize page instead of Authorize. */
+  cancel?: boolean;
 }
 
 export interface PageRequest {
@@ -29,6 +44,75 @@ export class PageClient {
 
   get(path: string): Promise<PageResponse> {
     return this.request(path);
+  }
+
+  /**
+   * Signs in as the fake Discord user `user` (added with
+   * `discord.addUser`), walking the redirects a browser follows: `/login`,
+   * Discord's authorize page, then the Worker's `/auth/callback`, whose
+   * answer it returns (a redirect into the site once signed in, or the
+   * cancelled page with `cancel`).
+   */
+  async signIn(
+    user: { id: string },
+    options: SignInOptions = {},
+  ): Promise<PageResponse> {
+    return this.get(await this.authorize(user, options));
+  }
+
+  /**
+   * Takes the first two steps of `signIn`, `/login` and Discord's authorize
+   * page, and returns the path and query of the Worker's callback without
+   * requesting it; the state cookie it needs is in `cookies`. The callback
+   * address names the Worker's `PUBLIC_URL`, so this returns its path and
+   * query, for the Worker under test.
+   */
+  async authorize(
+    user: { id: string },
+    options: SignInOptions = {},
+  ): Promise<string> {
+    const login = await this.get(
+      options.next === undefined
+        ? "/login"
+        : `/login?next=${encodeURIComponent(options.next)}`,
+    );
+    if (login.status !== 303 || !login.location) {
+      throw new Error(`GET /login answered ${String(login.status)}`);
+    }
+    const discordCookies = [`${DISCORD_USER_COOKIE}=${user.id}`];
+    if (options.cancel) discordCookies.push(`${DISCORD_CONSENT_COOKIE}=deny`);
+    const authorize = await fetch(login.location, {
+      headers: { Cookie: discordCookies.join("; ") },
+      redirect: "manual",
+    });
+    const back = authorize.headers.get("Location");
+    if (authorize.status !== 302 || back === null) {
+      throw new Error(
+        `Discord's authorize page answered ${String(authorize.status)}: ${await authorize.text()}`,
+      );
+    }
+    const callback = new URL(back);
+    return callback.pathname + callback.search;
+  }
+
+  /**
+   * Submits the form of `page` whose `action` is `action`, with its fields
+   * (hidden ones included) and `fields` over them, as a browser would: a
+   * POST from the page's own origin.
+   */
+  submitForm(
+    page: PageResponse,
+    action: string,
+    fields: Record<string, string> = {},
+  ): Promise<PageResponse> {
+    const found = formFields(page.body, action);
+    if (!found) {
+      throw new Error(`the page ${page.url.pathname} has no form to ${action}`);
+    }
+    return this.request(new URL(action, page.url).pathname, {
+      form: { ...found, ...fields },
+      headers: { Origin: page.url.origin, "Sec-Fetch-Site": "same-origin" },
+    });
   }
 
   async request(path: string, init: PageRequest = {}): Promise<PageResponse> {
@@ -50,6 +134,7 @@ export class PageClient {
     this.store(response.headers.getSetCookie());
     const location = response.headers.get("Location");
     return {
+      url,
       status: response.status,
       headers: response.headers,
       body: await response.text(),
@@ -57,7 +142,8 @@ export class PageClient {
     };
   }
 
-  private cookieHeader(): string {
+  /** The `Cookie` header the client sends: every cookie in the jar. */
+  cookieHeader(): string {
     return [...this.cookies]
       .map(([name, value]) => `${name}=${value}`)
       .join("; ");
@@ -82,6 +168,40 @@ export class PageClient {
       else this.cookies.set(name, value);
     }
   }
+}
+
+/**
+ * The named inputs and their values of the first `<form>` in `html` whose
+ * `action` is `action`, or null when there is none.
+ */
+export function formFields(
+  html: string,
+  action: string,
+): Record<string, string> | null {
+  for (const [, attributes = "", inner = ""] of html.matchAll(
+    /<form\b([^>]*)>([\s\S]*?)<\/form>/g,
+  )) {
+    if (attribute(attributes, "action") !== action) continue;
+    const fields: Record<string, string> = {};
+    for (const [tag] of inner.matchAll(/<input\b[^>]*>/g)) {
+      const name = attribute(tag, "name");
+      if (name !== null) fields[name] = attribute(tag, "value") ?? "";
+    }
+    return fields;
+  }
+  return null;
+}
+
+/** The value of attribute `name` in an HTML tag, entities decoded. */
+function attribute(tag: string, name: string): string | null {
+  const match = new RegExp(`\\s${name}="([^"]*)"`).exec(tag);
+  if (!match) return null;
+  return (match[1] ?? "")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
 }
 
 /** The `href` of each stylesheet link in a page's HTML. */
