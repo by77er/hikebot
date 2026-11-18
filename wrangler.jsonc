@@ -7,6 +7,9 @@
   "routes": [{ "pattern": "hiking.bitcru.sh", "custom_domain": true }],
   "observability": {
     "enabled": true,
+    // Request logs keep the path only: the sign-in callback's query holds a
+    // one-time OAuth code and state, which must never be stored in a log.
+    "redact_query_string": true,
   },
   // Files under public/ are served at the same path before the Worker runs
   // (public/assets/app.css is /assets/app.css); public/_headers sets their

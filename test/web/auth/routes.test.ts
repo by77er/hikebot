@@ -153,10 +153,11 @@ describe("POST /logout", () => {
 
   it("is refused with 403 from another site, even with the token", async () => {
     const token = await csrfToken(env, ana, NOW);
-    for (const headers of [
+    const crossSite: Record<string, string>[] = [
       { Origin: "https://evil.example" },
       { "Sec-Fetch-Site": "cross-site", Origin: "https://evil.example" },
-    ]) {
+    ];
+    for (const headers of crossSite) {
       const response = await logout(headers, token);
       expect(response.status).toBe(403);
       expect(response.headers.getSetCookie()).toEqual([]);

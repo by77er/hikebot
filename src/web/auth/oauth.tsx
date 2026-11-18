@@ -49,14 +49,13 @@ export interface SignInDeps {
   fetch?: typeof fetch;
 }
 
-type SignInEnv = Parameters<typeof discordApi>[0] &
-  Pick<
-    Env,
-    | "DISCORD_APPLICATION_ID"
-    | "DISCORD_CLIENT_SECRET"
-    | "PUBLIC_URL"
-    | "SIGNING_SECRET"
-  > & { DISCORD_OAUTH_AUTHORIZE_URL?: string };
+type SignInEnv = Parameters<typeof discordApi>[0] & {
+  DISCORD_APPLICATION_ID: string;
+  DISCORD_CLIENT_SECRET: string;
+  PUBLIC_URL: string;
+  SIGNING_SECRET: string;
+  DISCORD_OAUTH_AUTHORIZE_URL?: string;
+};
 
 /** The sealed state cookie: the random `state`, and where to go after. */
 interface StatePayload {
