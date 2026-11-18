@@ -52,6 +52,166 @@ and which headers they carry.
    npm test
    ```
 
+## Add a page that needs a signed-in user
+
+"Sign-in and sessions" in `docs/design.md` says what the session holds. The
+example is `/trails` again, now for signed-in members only.
+
+1. Take the signed-in user as a prop and pass it to `Layout`, which then
+   shows their name and the Sign out button:
+
+   ```tsx
+   /** The list of trails at `/trails`, for signed-in members. */
+   import { Layout, type LayoutUser } from "../layout";
+
+   export function TrailsPage({
+     user,
+     names,
+   }: {
+     user: LayoutUser;
+     names: string[];
+   }) {
+     return (
+       <Layout title="Trails · hikebot" user={user}>
+         <h1>Trails</h1>
+         <ul>
+           {names.map((name) => (
+             <li key={name}>{name}</li>
+           ))}
+         </ul>
+       </Layout>
+     );
+   }
+   ```
+
+2. In the route, read the clock once with `systemNow()` from
+   `src/clock.ts`, start with `requireSession`, which answers someone
+   signed out with a redirect to `/login?next=/trails`, and build the
+   layout's user with `layoutUser`:
+
+   ```tsx
+   import { systemNow } from "../clock";
+   import { layoutUser } from "./auth/csrf";
+   import { requireSession } from "./auth/session";
+   import { TrailsPage } from "./pages/trails";
+
+     .get("/trails", async (request, env) => {
+       const now = systemNow();
+       const session = await requireSession(request, env, now);
+       if (session instanceof Response) return session;
+       return htmlResponse(
+         <TrailsPage user={await layoutUser(env, session, now)} names={["Ridge"]} />,
+       );
+     })
+   ```
+
+3. For a page of one server, such as `/g/<guild id>`, register a prefix
+   (`/g/*`), take the id from the path, and answer with
+   `requireGuild(session, guildId)` first, which is the 404 page for a
+   server the session does not list. The session's list is only a hint:
+   before showing anything of the server, check with the bot's token that
+   the user is still a member and has the roles the page needs.
+4. Unit test it in `test/web/routes.test.ts`: send a session cookie made
+   with `sessionCookie` from `src/web/auth/session.tsx` (with
+   `issuedAt: Date.now()`, since the route reads the real clock), and check
+   that a request without one gets a `303` to
+   `/login?next=%2Ftrails`, as "sends someone signed in to /servers" there
+   does.
+5. Add an end-to-end scenario: add a Discord user to the fake and sign in
+   with the page client, as `test/e2e/sign-in.test.ts` does ("Sign in in an
+   end-to-end scenario" in `test/AGENTS.md`):
+
+   ```ts
+   e2e.discord.addUser({
+     id: "400000000000000901",
+     username: "ana",
+     guilds: [],
+   });
+   const client = new PageClient(e2e.url);
+   await client.signIn({ id: "400000000000000901" });
+   const page = await client.get("/trails");
+   expect(page.body).toContain("Signed in as ana.");
+   ```
+
+6. Run the tests:
+
+   ```sh
+   npx vitest run test/web
+   npx vitest run --project e2e test/e2e/sign-in.test.ts
+   ```
+
+## Add a form that changes something
+
+Every request that changes something is a `POST` from a form with a CSRF
+token; `checkPost` refuses it with 403 unless the token is the signed-in
+user's and the browser says it came from this site. The example adds a
+trail from a form on `/trails`.
+
+1. In the route that renders the form, make a token with
+   `csrfToken(env, session, now)` and pass it to the page; put
+   `<CsrfField token={csrf} />` inside the `<form method="post">`:
+
+   ```tsx
+   import { CsrfField } from "../auth/csrf";
+
+   <form method="post" action="/trails">
+     <CsrfField token={csrf} />
+     <label for="trail-name">Trail name</label>
+     <input id="trail-name" name="name" required />
+     <button type="submit">Add trail</button>
+   </form>;
+   ```
+
+2. Register the target with `.post`. Read the session (a POST cannot be
+   sent back after sign-in, so refuse instead of redirecting), check the
+   POST, then do the work and redirect with `303` so a reload does not
+   post again:
+
+   ```tsx
+   import { checkPost, forbidden } from "./auth/csrf";
+   import { readSession } from "./auth/session";
+   import { seeOther } from "./redirect";
+
+     .post("/trails", async (request, env) => {
+       const now = systemNow();
+       const session = await readSession(request, env, now);
+       if (!session) return forbidden();
+       const form = await checkPost(request, env, session, now);
+       if (form instanceof Response) return form;
+       const name = form.get("name");
+       // check the name, and the user's rights with the bot's token, then save it
+       return seeOther("/trails");
+     })
+   ```
+
+3. Unit test the route: a POST with the page's token and
+   `Origin: https://hikebot.example` succeeds; without the token, with
+   another user's token, or with `Origin: https://evil.example` it gets
+   `403`, as `test/web/auth/routes.test.ts` does for `/logout`.
+4. In the end-to-end scenario, submit the form the way a browser does, and
+   check a forged one is refused:
+
+   ```ts
+   const page = await client.get("/trails");
+   const added = await client.submitForm(page, "/trails", { name: "Lake" });
+   expect(added.status).toBe(303);
+   const forged = await client.request("/trails", {
+     form: { name: "Lake" },
+     headers: {
+       Origin: "https://evil.example",
+       "Sec-Fetch-Site": "cross-site",
+     },
+   });
+   expect(forged.status).toBe(403);
+   ```
+
+5. Run the tests:
+
+   ```sh
+   npx vitest run test/web
+   npx vitest run --project e2e test/e2e/sign-in.test.ts
+   ```
+
 ## Add a static asset
 
 1. Put the file under `public/assets/`; it is served at the same path below

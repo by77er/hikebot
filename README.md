@@ -113,6 +113,13 @@ fee). To map another area, change the `region` box in `maps/regions.json` as
    (through the invite, or on the bot's role under Server Settings, Roles).
 4. In the server, run `/hike admin` as the server owner, open Settings, and
    pick the admin role and the three channels.
+5. For signing in to the web site with Discord, open OAuth2 in the
+   developer portal and, under Redirects, add
+   `https://hiking.bitcru.sh/auth/callback`, then Save Changes. Until it is
+   there, signing in stops at Discord with "Invalid OAuth2 redirect_uri";
+   nothing else is affected. For a local dev server or a test application,
+   add its own `PUBLIC_URL` followed by `/auth/callback`, such as
+   `http://localhost:8787/auth/callback`.
 
 ### Slash commands
 

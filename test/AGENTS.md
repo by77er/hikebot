@@ -470,6 +470,50 @@ Run `npm test` for the whole suite before opening a pull request.
    pgrep -x workerd || echo "no workerd left"
    ```
 
+## Sign in in an end-to-end scenario
+
+1. Add the servers the bot is in with `e2e.discord.addGuild`, then the
+   Discord user with the servers they are in, with the bot or not:
+
+   ```ts
+   e2e.discord.addGuild({
+     id: "200000000000000901",
+     ownerId: "400000000000000901",
+     name: "Ridge Walkers",
+   });
+   e2e.discord.addUser({
+     id: "400000000000000901",
+     username: "ana",
+     globalName: "Ana",
+     guilds: [
+       { id: "200000000000000901", name: "Ridge Walkers" },
+       { id: "200000000000000902", name: "Book Club" },
+     ],
+   });
+   ```
+
+2. Sign in with a `PageClient`. `signIn` walks `/login`, the fake's
+   authorize page and `/auth/callback`, and returns the callback's answer;
+   the session cookie is then in `client.cookies`. Pass
+   `{ next: "/g/200000000000000901" }` to come back to a page, or
+   `{ cancel: true }` to press Cancel at Discord:
+
+   ```ts
+   const client = new PageClient(e2e.url);
+   const back = await client.signIn({ id: "400000000000000901" });
+   expect(back.location?.pathname).toBe("/servers");
+   ```
+
+3. Submit a form of a page with `client.submitForm(page, "<action>")`,
+   which posts its hidden CSRF token from the page's origin, such as
+   signing out with `client.submitForm(await client.get("/servers"), "/logout")`.
+4. Run the file and check that no `workerd` process is left:
+
+   ```sh
+   npx vitest run --project e2e test/e2e/sign-in.test.ts
+   pgrep -x workerd || echo "no workerd left"
+   ```
+
 ## Act while the bot's post is in flight
 
 1. Hold the channel's new messages before the action that posts one:
