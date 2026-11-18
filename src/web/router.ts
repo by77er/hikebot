@@ -1,6 +1,8 @@
 /**
  * A small router for the Worker's web routes: one handler per method and
- * exact path. A `GET` route also answers `HEAD`, with the same status and
+ * path. A path is matched exactly, except one ending in `/*`, which matches
+ * every path under it (`/assets/*` matches `/assets/app.css`); an exact path
+ * wins over a prefix, and a longer prefix over a shorter one. A `GET` route also answers `HEAD`, with the same status and
  * headers and no body. A path with no route gets the `notFound` response; a
  * path whose route lacks the method gets the `methodNotAllowed` response,
  * with `Allow` listing the methods it has.
@@ -66,7 +68,7 @@ export class WebRouter {
     ctx: ExecutionContext,
   ): Promise<Response> {
     const { pathname } = new URL(request.url);
-    const methods = this.routes.get(pathname);
+    const methods = this.match(pathname);
     if (!methods) return this.options.notFound(request, env, ctx);
     const method = request.method === "HEAD" ? "GET" : request.method;
     const handler = methods.get(method);
@@ -75,6 +77,21 @@ export class WebRouter {
     const response = this.options.methodNotAllowed(allow);
     response.headers.set("Allow", allow);
     return response;
+  }
+
+  private match(pathname: string): Map<string, WebHandler> | undefined {
+    const exact = this.routes.get(pathname);
+    if (exact) return exact;
+    let best: { prefix: string; methods: Map<string, WebHandler> } | undefined;
+    for (const [path, methods] of this.routes) {
+      if (!path.endsWith("/*")) continue;
+      const prefix = path.slice(0, -1);
+      if (!pathname.startsWith(prefix)) continue;
+      if (!best || prefix.length > best.prefix.length) {
+        best = { prefix, methods };
+      }
+    }
+    return best?.methods;
   }
 }
 

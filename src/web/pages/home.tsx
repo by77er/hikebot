@@ -6,9 +6,8 @@ export function HomePage() {
     <Layout title="hikebot">
       <h1>hikebot</h1>
       <p>
-        hikebot is a Discord bot that runs a hiking group's votes on where
-        and when to hike, then announces the plan and opens a thread for the
-        hike.
+        hikebot is a Discord bot that runs a hiking group's votes on where and
+        when to hike, then announces the plan and opens a thread for the hike.
       </p>
       <p>
         <a href={PROJECT_URL}>The hikebot project</a>
