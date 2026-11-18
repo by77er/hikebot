@@ -3,9 +3,13 @@
  * In production Workers Static Assets answers a request for a file under
  * `public/` before the Worker runs; `/assets/*` here serves the same files
  * when a request does reach the Worker (as in the unit tests), and turns a
- * missing one into the HTML 404 page.
+ * missing one into the HTML 404 page. `/maps/sample.png` is the map picture of
+ * the sample point in `maps/regions.json`, which the deploy's smoke check
+ * fetches to prove the map pictures work in production.
  */
+import regions from "../../maps/regions.json";
 import { systemNow } from "../clock";
+import { mapPainter } from "../maps/map-painter";
 import { addSignInRoutes } from "./auth/routes";
 import { readSession } from "./auth/session";
 import { calendarRoute } from "./calendar";
@@ -34,6 +38,18 @@ export const webRouter = new WebRouter({
     return asset.status === 404 ? notFound() : asset;
   })
   .get("/calendar/*", calendarRoute(notFound))
+  .get("/maps/sample.png", async (_request, env) => {
+    const { lon, lat } = regions.samplePoint;
+    const picture = await mapPainter(env).picture({ lon, lat });
+    if (!picture) return notFound();
+    return new Response(picture.png, {
+      headers: {
+        "Content-Type": "image/png",
+        "Cache-Control": "public, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  })
   .get(
     "/healthz",
     () =>

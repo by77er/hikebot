@@ -5,6 +5,8 @@
   "compatibility_date": "2026-11-17",
   "workers_dev": false,
   "routes": [{ "pattern": "hiking.bitcru.sh", "custom_domain": true }],
+  // The map pictures' label fonts (src/maps/fonts/) are imported as bytes.
+  "rules": [{ "type": "Data", "globs": ["**/*.ttf"], "fallthrough": true }],
   "observability": {
     "enabled": true,
     // Request logs keep the path only: the sign-in callback's query holds a
@@ -24,12 +26,21 @@
         "name": "GUILD_HIKE",
         "class_name": "GuildHike",
       },
+      // Draws map pictures (src/maps/map-painter.ts).
+      {
+        "name": "MAP_PAINTER",
+        "class_name": "MapPainter",
+      },
     ],
   },
   "migrations": [
     {
       "tag": "v1",
       "new_sqlite_classes": ["GuildHike"],
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["MapPainter"],
     },
   ],
   // OpenStreetMap vector tiles (PMTiles archives and their manifest), written

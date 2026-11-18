@@ -30,6 +30,7 @@ jobs:
       DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       HEALTH_URL: https://hiking.bitcru.sh/healthz
       HEALTH_LINE: hikebot is running
+      MAP_SAMPLE_URL: https://hiking.bitcru.sh/maps/sample.png
     steps:
       - name: Check the secrets are set
         env:
@@ -160,4 +161,40 @@ jobs:
             fi
             echo "Not healthy yet ($status); retrying in 5 seconds."
             sleep 5
+          done
+
+      # The sample map picture proves the map pictures work in production:
+      # 200 with a PNG of a plausible size passes; 404 means the map data has
+      # not been built yet and passes with a notice; anything else fails.
+      - name: Check the sample map picture
+        if: steps.tip.outputs.deploy == 'true'
+        env:
+          DEADLINE_SECONDS: "180"
+          MIN_BYTES: "20000"
+          MAX_BYTES: "1000000"
+        run: |
+          deadline=$((SECONDS + DEADLINE_SECONDS))
+          body_file=$(mktemp)
+          while :; do
+            result=$(curl -sS --max-time 60 -o "$body_file" -w '%{http_code} %{content_type}' "$MAP_SAMPLE_URL" 2>"$body_file.err") || result="curl failed: $(cat "$body_file.err")"
+            status=${result%% *}
+            content_type=${result#* }
+            bytes=$(wc -c < "$body_file")
+            signature=$(head -c 8 "$body_file" | od -An -tx1 | tr -d ' \n')
+            if [ "$status" = "200" ] && [ "$content_type" = "image/png" ] && [ "$signature" = "89504e470d0a1a0a" ] && [ "$bytes" -ge "$MIN_BYTES" ] && [ "$bytes" -le "$MAX_BYTES" ]; then
+              echo "::notice title=Map picture::$MAP_SAMPLE_URL answered 200 image/png, $bytes bytes."
+              exit 0
+            fi
+            if [ "$status" = "404" ]; then
+              echo "::notice title=Map picture::$MAP_SAMPLE_URL answered 404: the map data has not been built yet, so there is no picture to check. Run the Map data workflow (\"Rebuild the map data\" in maps/AGENTS.md)."
+              exit 0
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::$MAP_SAMPLE_URL did not answer 200 with a PNG of $MIN_BYTES to $MAX_BYTES bytes (or 404) within $DEADLINE_SECONDS seconds. Last response: $result, $bytes bytes."
+              head -c 500 "$body_file" | tr -c '[:print:]\n' '.'
+              echo
+              exit 1
+            fi
+            echo "No picture yet ($result, $bytes bytes); retrying in 10 seconds."
+            sleep 10
           done

@@ -32,9 +32,11 @@ string (`observability.redact_query_string`), since the sign-in callback's
 query holds a one-time code. One
 `GuildHike` Durable Object per Discord guild (binding `GUILD_HIKE`,
 `idFromName(guild_id)`) holds all of that guild's state in its SQLite storage
-and makes every state change, so votes and poll closes never race. The R2
-bucket `hikebot-maps` (binding `MAPS`) holds the map data described under
-"Map data". `wrangler deploy` creates everything the bot needs, including
+and makes every state change, so votes and poll closes never race. One
+`MapPainter` Durable Object (binding `MAP_PAINTER`, `idFromName("maps")`)
+draws map pictures; see "Map pictures". The R2 bucket `hikebot-maps`
+(binding `MAPS`) holds the map data described under "Map data" and the
+pictures drawn from it. `wrangler deploy` creates everything the bot needs, including
 the Custom Domain's DNS record and the bucket when it is missing; there is no
 other infrastructure.
 
@@ -43,7 +45,11 @@ Production is deployed by the `Deploy` workflow
 on a push to `main`, it deploys exactly that commit if it is still the tip of
 `main`, setting the five Worker secrets from GitHub Actions secrets with
 `wrangler deploy --secrets-file`, then runs `npm run register --if-present`
-and checks that `GET /healthz` answers with the health line.
+and checks that `GET /healthz` answers with the health line. It then
+checks the sample map picture, `GET /maps/sample.png`: 200 with a PNG of
+20 kB to 1 MB passes with a notice naming its size; 404 (no map data built
+yet) passes with a notice saying so; anything else, after retrying for three
+minutes, fails the run.
 
 ## Request flow
 
@@ -60,6 +66,10 @@ The Worker (`src/index.ts`) handles the rest:
     sign-in, below.
   - `GET /healthz` (or `HEAD`): a plain-text health line,
     `hikebot is running`.
+  - `GET /maps/sample.png` (or `HEAD`): the map picture of `samplePoint` in
+    `maps/regions.json` at the default size and zoom (see "Map pictures"),
+    `image/png`, cacheable for an hour; the HTML 404 page while there is no
+    map data there.
   - `GET /assets/*`: the file from `public/` through the `ASSETS` binding,
     for a request that reaches the Worker.
   - `GET /calendar/<guild id>/<signature>.ics` (or `HEAD`): the guild's
@@ -1638,3 +1648,111 @@ naming its build, basemap and schema version, licence, box, zooms and a
 sample point. Unit tests put it into the local R2 simulator under the keys
 their manifests name; the end-to-end harness seeds the Worker's `MAPS`
 bucket with it and a manifest before each file.
+
+## Map pictures
+
+Discord shows a picture, not an interactive map, so the Worker draws one: a
+PNG of the map round a point, with a pin on it, from the vector tiles in
+`MAPS`. `mapPicture(deps, request)` in `src/maps/picture.ts` is the one
+function; callers reach it through the `MapPainter` Durable Object's typed
+method, `mapPainter(env).picture({ lon, lat, zoom?, width?, height?,
+pixelRatio?, units? })`, which answers `{ png, key }` or `undefined` when the
+map data does not cover the point.
+
+**Why a Durable Object.** Drawing a picture takes a few hundred milliseconds
+of CPU, and the first one in an isolate about a second more while the
+rasterizer starts. A Worker request gets 10 ms of CPU on the Free plan; a
+SQLite-backed Durable Object request gets 30 s. `MapPainter` is a class of
+its own so the rasterizer's WebAssembly memory is loaded only in that one
+object, not in every guild's. It keeps no state of its own.
+
+**Pipeline.** Coordinate, then zooms, tiles, SVG, PNG:
+
+1. The default picture is 1200 by 800 pixels at pixel ratio 2 (600 by 400
+   logical pixels), at zoom 12, centred on the pin, in metric units. Zooms
+   follow the vector map convention: at zoom `z` the world is `512 * 2^z`
+   logical pixels wide (`src/maps/projection.ts`).
+2. `drawingZooms` picks the zoom to draw at and the tiles to draw from. The
+   picture is drawn at most one zoom above the finest data at the point, so
+   where only the world archive (zooms 0-8) covers it, a zoom 12 request is
+   drawn at zoom 9 rather than as a blur. Its tiles are one zoom finer per
+   doubling of the pixel ratio where they exist: a 2x picture at zoom 12 is
+   drawn from zoom 13 tiles, which carry the trails the zoom 12 tiles leave
+   out.
+3. The tiles that cover the picture are read through `MapReader`, decoded
+   with `@mapbox/vector-tile` and `pbf`, and each tile's geometry is clipped
+   to its own square in JavaScript (`src/maps/clip.ts`): SVG clip paths cost
+   the rasterizer four times the drawing.
+4. `buildSvg` (`src/maps/svg.ts`) writes the SVG from the Protomaps basemap
+   schema 4 layers (`landcover`, `landuse`, `water`, `buildings`, `roads`,
+   `pois`, `places`; the archives are basemap 4.15.2), then the labels, the
+   pin, the scale bar and the attribution.
+5. `@resvg/resvg-wasm` rasterizes it (`src/maps/rasterize.ts`). Its
+   WebAssembly module is imported statically, as Workers cannot compile
+   WebAssembly at run time, and instantiated once per isolate; the fonts are
+   passed in as bytes.
+
+**What is drawn**, bottom to top: land; landcover and land use (built-up
+areas, grass, forest, bare rock, ice, parks); protected areas as a faint
+tint; water areas, rivers and streams; protected areas' dashed outlines;
+buildings, faintly, from zoom 14; roads by rank with casings (minor roads
+from zoom 11), railways; tracks and paths as dashed lines with a light halo,
+drawn last so they stand out (footways and steps only from zoom 14);
+labels; the pin; the scale bar (bottom left, in the requested units) and the
+attribution `MapReader.attribution()` returns (bottom right); a thin frame.
+
+**Labels.** Peaks with a name get a triangle, the name and the elevation (in
+metres or feet), places get their name (towns larger and bolder than
+villages and neighbourhoods), lakes and rivers their name in italic water
+blue (rivers along their line). A label is shown up to a few zooms before
+the data's own `min_zoom` for it where it matters on a hike (peaks and water
+two zooms). Labels are measured with the font's own advance widths
+(`src/maps/font-metrics.ts`) and placed greedily by importance
+(`src/maps/labels.ts`): each at the first of its candidate positions that
+stays inside the picture and clear, by a padding, of every label placed and
+of the pin, scale bar and attribution; a label with no free position is left
+out, so no two labels and no label and the pin overlap. A peak under the pin
+is labelled beside the pin and its triangle left out.
+
+**Style.** `src/maps/style.ts` is the style, as data: a colour per role, the
+see-through roles' opacity, line widths and label sizes as `[zoom, value]`
+stops, dash patterns, the zoom each kind of feature starts at, the label
+fonts and the furniture's sizes, and `STYLE_VERSION`. The drawing code reads
+only these and writes no colour of its own (a test checks the sources). The
+colour roles:
+
+| Role                                                         | Used for                                                                  |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `land`                                                       | everything that is not another fill                                       |
+| `forest`, `grass`, `bareRock`, `ice`, `settled`, `park`      | landcover and land use                                                    |
+| `protectedArea`, `protectedAreaOutline`                      | national parks, nature reserves, protected areas: tint and dashed outline |
+| `water`, `waterLabel`                                        | water areas and lines; lake and river names                               |
+| `roadMotorway`, `roadMajor`, `roadMinor` and their `Casing`s | roads by rank                                                             |
+| `rail`                                                       | railways                                                                  |
+| `path`, `track`, `pathHalo`                                  | trails and footways; unpaved tracks; the light line under both            |
+| `building`                                                   | buildings, faint                                                          |
+| `label`, `labelHalo`                                         | place and peak names; the halo round every label                          |
+| `peak`                                                       | peak triangles                                                            |
+| `pin`, `pinOutline`                                          | the pin: trail-blaze orange with a light outline                          |
+| `furniture`, `furnitureBackground`, `frame`                  | scale bar and attribution text, their backing, the picture's frame        |
+
+The palette is calm and light (warm paper land, pine greens, lake blue,
+granite greys) so the picture reads at Discord's display size, about 400
+pixels wide, on both of Discord's themes; the trails and the pin are the
+strongest marks. Labels use Noto Sans (SIL Open Font License 1.1), regular,
+semibold and italic, subset to Latin with its extensions, IPA and combining
+marks so names such as `q̓əlbc̓` draw; the files and their licence are in
+`src/maps/fonts/`, loaded only by `src/maps/font.ts`.
+
+**Stored pictures.** A drawn picture is put into `MAPS` under
+`pictures/style-<STYLE_VERSION>/build-<build>/z<zoom>-<width>x<height>@<ratio>x-<units>/<lat>,<lon>.png`
+(coordinates rounded to five decimals, about a metre), and the next request
+with the same key is answered from there without drawing. A new style
+version or a new map data build therefore draws new pictures; the old ones
+stay in the bucket.
+
+**Samples.** `npm run maps:samples` starts the Worker in local workerd with
+the sample archive and draws a fixed set of views (`scripts/map-samples.ts`:
+the sample point at zooms 11, 12 and 14, also in imperial units, a peak, a
+lake shore and a town) into `docs/maps/samples/`. They are committed, and a
+style change is reviewed on them.

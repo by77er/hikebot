@@ -37,6 +37,7 @@ import type { CommandHandler, HandlerResult } from "../../../src/guild/router";
 import worker from "../../../src/index";
 
 export default worker;
+export { MapPainter } from "../../../src/maps/map-painter";
 
 const NOTES_KEY = "e2e-probe:notes";
 
