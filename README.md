@@ -52,13 +52,13 @@ The three `DISCORD_*` values are from the
 [Discord developer portal](https://discord.com/developers/applications); the
 deploy sets them as the Worker's secrets on every run.
 
-| Secret                   | What it is for                                         | Where to find it                         |
-| ------------------------ | ------------------------------------------------------ | ---------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`   | Lets wrangler deploy the Worker and its Custom Domain  | Cloudflare dashboard, API Tokens (below) |
-| `CLOUDFLARE_ACCOUNT_ID`  | The Cloudflare account that holds the Worker and zone  | Cloudflare dashboard, account home       |
-| `DISCORD_PUBLIC_KEY`     | The Worker verifies interaction signatures with it     | General Information, Public Key          |
-| `DISCORD_APPLICATION_ID` | The application the slash commands are registered for  | General Information, Application ID      |
-| `DISCORD_BOT_TOKEN`      | The Worker and the register step call Discord's API    | Bot, Token                               |
+| Secret                   | What it is for                                        | Where to find it                         |
+| ------------------------ | ----------------------------------------------------- | ---------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`   | Lets wrangler deploy the Worker and its Custom Domain | Cloudflare dashboard, API Tokens (below) |
+| `CLOUDFLARE_ACCOUNT_ID`  | The Cloudflare account that holds the Worker and zone | Cloudflare dashboard, account home       |
+| `DISCORD_PUBLIC_KEY`     | The Worker verifies interaction signatures with it    | General Information, Public Key          |
+| `DISCORD_APPLICATION_ID` | The application the slash commands are registered for | General Information, Application ID      |
+| `DISCORD_BOT_TOKEN`      | The Worker and the register step call Discord's API   | Bot, Token                               |
 
 ### Cloudflare API token
 
