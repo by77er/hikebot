@@ -44,6 +44,7 @@ import type {
   Router,
 } from "../guild/router";
 import { UNAVAILABLE_MESSAGE } from "../guild/router";
+import { hikeThreadStatus, type HikeThreadStatus } from "./hike-thread-state";
 
 /** Everything the panel shows. Later features add their state here. */
 export interface AdminPanelState {
@@ -52,6 +53,8 @@ export interface AdminPanelState {
   round: RoundView | null;
   /** The last round, when no round is active and it was completed. */
   finished?: RoundView | null;
+  /** Where the finished round's forum thread stands. */
+  thread?: HikeThreadStatus | null;
 }
 
 export const ADMIN_PANEL_IDS = {
@@ -71,6 +74,8 @@ export const POLL_CONTROL_IDS = {
   closePoll: (pollId: number) => customId("poll", "close", String(pollId)),
   cancelRound: (roundId: number) =>
     customId("round", "cancel", String(roundId)),
+  createHikeThread: (roundId: number) =>
+    customId("thread", "create", String(roundId)),
 } as const;
 
 /** How the panel names each kind of poll. */
@@ -118,10 +123,15 @@ export function loadAdminPanelState(
   const store = new PollStore(storage);
   const round = store.getActiveRound();
   const last = round === null ? store.getLastRound() : null;
+  const finished = last?.status === "complete" ? last : null;
   return {
     settings: new GuildConfig(storage).get(),
     round,
-    finished: last?.status === "complete" ? last : null,
+    finished,
+    thread:
+      finished === null
+        ? null
+        : hikeThreadStatus(storage, finished, store.now()),
   };
 }
 
@@ -139,14 +149,28 @@ export function actionButtons(
 function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
   const { round } = state;
   if (round === null) {
-    return setupComplete(state.settings)
-      ? [
-          button({
-            custom_id: POLL_CONTROL_IDS.startLocationVote,
-            label: "Start location vote",
-          }),
-        ]
-      : [];
+    const { finished, thread } = state;
+    return [
+      ...(setupComplete(state.settings)
+        ? [
+            button({
+              custom_id: POLL_CONTROL_IDS.startLocationVote,
+              label: "Start location vote",
+            }),
+          ]
+        : []),
+      // Only while the last round is complete without a thread.
+      ...(finished &&
+      (thread?.state === "missing" || thread?.state === "failed")
+        ? [
+            button({
+              custom_id: POLL_CONTROL_IDS.createHikeThread(finished.id),
+              label: "Create hike thread",
+              style: ButtonStyle.Secondary,
+            }),
+          ]
+        : []),
+    ];
   }
   const open = openPoll(round);
   return [
@@ -242,7 +266,12 @@ function openPoll(round: RoundView): PollView | null {
 function roundSection(state: AdminPanelState) {
   const { round, finished } = state;
   if (round === null) {
-    const lines = finished ? [`**Last hike:** ${hikeSummary(finished)}`] : [];
+    const lines = finished
+      ? [
+          `**Last hike:** ${hikeSummary(finished)}`,
+          ...threadLines(state.thread),
+        ]
+      : [];
     if (setupComplete(state.settings)) {
       lines.push("No hike is being planned. Start a location vote.");
     }
@@ -283,6 +312,24 @@ function roundSection(state: AdminPanelState) {
     }
   }
   return [separator(), textDisplay(lines.join("\n"))];
+}
+
+/** Where the last hike's forum thread stands, for its summary. */
+function threadLines(thread: HikeThreadStatus | null | undefined): string[] {
+  switch (thread?.state) {
+    case "created":
+      return [`**Hike thread:** <#${thread.threadId}>`];
+    case "creating":
+      return ["**Hike thread:** being created."];
+    case "failed":
+      return [`**Hike thread:** not created. ${thread.reason}`];
+    case "missing":
+      return [
+        "**Hike thread:** not created. Click Create hike thread to create it.",
+      ];
+    default:
+      return [];
+  }
 }
 
 /** A completed round's location and date: "Ridge Trail on Sat, 5 Dec 2026". */

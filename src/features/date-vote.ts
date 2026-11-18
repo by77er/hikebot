@@ -35,6 +35,7 @@ import {
   listing,
   missingSettings,
 } from "./admin-panel";
+import { createHikeThreadStep } from "./hike-thread";
 import {
   deferPanel,
   errorText,
@@ -96,7 +97,7 @@ export const DATE_POLL: PollWording = {
       `**When:** ${date?.label ?? "?"}`,
     ];
   },
-  closeSteps: [],
+  closeSteps: [createHikeThreadStep],
 };
 
 /** The candidate dates an admin typed, or why they are refused. */

@@ -316,7 +316,12 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   from a tie) and the open vote's tallies (most votes first) and voter count.
   With no round active, when the last round was completed, it sums up that
   hike: "**Last hike:** **Lake Loop** on **Sat, 15 Jun 2030 · 09:00**."
-  (`finished` in `AdminPanelState`).
+  (`finished` in `AdminPanelState`), then where its forum thread stands
+  (`thread`): "**Hike thread:** <#thread>", "being created", or "not
+  created" with the reason. While that round has no thread and none is
+  being created, the panel offers **Create hike thread**
+  (`hb:thread:create:<round id>`) after **Start location vote**; see "Hike
+  thread".
 - **Confirmation view**: Close and Cancel round first replace the status view
   with a question and a confirm button (`hb:poll:close-confirm:<poll id>`,
   `hb:round:cancel-confirm:<round id>`) next to Back; only the confirm button
@@ -563,15 +568,17 @@ in this order:
    `CloseStep` has a `name` and a `run(closed, context)` that gets the
    closed poll, its round and the guild id, and returns lines to add to the
    announcement (such as a link to what it created) and a note for the
-   panel. This is where the date vote's forum thread is created, before the
-   announcement so that the announcement can link it. A step that throws is
-   named in the panel ("Could not <name>: <error>") and the flow goes on.
+   panel. The date vote's one step creates the hike's forum thread (see
+   "Hike thread"), before the announcement so that the announcement can
+   link it. A step that throws is named in the panel ("Could not <name>:
+   <error>") and the flow goes on.
 3. Post the announcement: the kind's heading and opening lines, the winner
    and its votes, its details, the tie note, the link to the poll message,
    then the close steps' lines. The location vote's heading is "Hike
    location decided"; the date vote's is "Hike planned", opening with
    "**Where:**" (the decided location and its details) and "**When:**" (the
-   date).
+   date), and ending with "**Hike thread:** <#thread>" when the thread was
+   created.
 4. Redraw the panel with the result and a line per failed step: after the
    location vote it shows the decided location and **Start date vote**;
    after the date vote the round is `complete` and the panel sums up the
@@ -587,5 +594,52 @@ which offers **Start location vote** again. A failed rewrite is named in the
 panel. No announcement is posted.
 
 Every admin control (the start buttons and modals of both votes, close,
-cancel and their confirmations) is registered through `adminOnly`, so a
-member who replays its `custom_id` is refused.
+cancel and their confirmations, Create hike thread) is registered through
+`adminOnly`, so a member who replays its `custom_id` is refused.
+
+## Hike thread
+
+When the date vote closes, the hike is decided, and the close step in
+`src/features/hike-thread.ts` creates a thread (a forum post) for it in the
+configured hike threads channel with `startForumThread`, so the group has one
+place to organise that hike.
+
+- **Title**: `<location> — <date label>`, for example
+  `Eagle Peak — Sat, 5 Dec 2026 · 09:00`. Discord allows 100 characters, so
+  an over-long location is shortened with "…" (on a code point boundary)
+  and the date is always kept whole (`threadTitle`).
+- **First message**, Components V2 in the thread's `message`, pinging no
+  one: the location as a heading, its details, "Proposed by" and the
+  proposer's mention, "**When:**" and the date, then one line per vote: the
+  winner, its votes and how many members voted, a note when the winner was
+  drawn at random from a tie (with the number of tied options), and a link
+  to the poll message. Labels and details are bounded (80 and 300
+  characters), so it stays far within 40 components and 4000 characters.
+
+The thread's id is stored on the round with `setRoundThread`, and the
+announcement links it. If the thread cannot be created (no hike threads
+channel set, the bot lacks permission, the channel was deleted or is no
+longer a forum), the round is still `complete` and the announcement is
+posted without the link. The reason, with Discord's error and what to
+check, is shown in the panel under the last hike, with **Create hike
+thread**, until the thread exists.
+
+**Create hike thread** retries for the round in its `custom_id`, only while
+that round is the last one and `complete` without a thread; otherwise it
+redraws the panel saying why it did nothing. It answers with a deferred
+update and creates the thread in the follow-up, then redraws the panel with
+the link (or the new reason). A retry never posts the announcement again.
+Starting a new round does not need the thread; once it starts, the old
+round is no longer the last one and its button is gone.
+
+At most one thread is created per round. Where creation stands is kept in
+the guild object's synchronous key-value storage (`storage.kv`) under
+`hike-thread:<round id>` (`src/features/hike-thread-state.ts`): when a
+creation started, or the reason it last failed; it is removed once the
+thread id is on the round. The close step and the button both claim the
+creation in that key before calling Discord, synchronously and before the
+button answers, so a second click while the first is running is told "The
+hike thread is being created." and creates nothing, and a click after it
+succeeded is told the thread already exists. A claim older than a minute
+(`THREAD_CLAIM_MS`) counts as lost, for example when the object restarted
+during the follow-up, so the button comes back.

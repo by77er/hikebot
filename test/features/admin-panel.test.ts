@@ -27,6 +27,7 @@ import {
   renderAdminPanel,
   renderAdminSettings,
 } from "../../src/features/admin-panel";
+import type { HikeThreadStatus } from "../../src/features/hike-thread-state";
 import type { PollView, RoundView } from "../../src/polls/store";
 import { GuildConfig, type GuildSettings } from "../../src/guild/config";
 import {
@@ -399,6 +400,79 @@ describe("renderAdminPanel", () => {
     expect(shown).toContain("No hike is being planned. Start a location vote.");
   });
 
+  describe("the last hike's thread", () => {
+    const location: PollView = {
+      ...votingPoll(2),
+      status: "closed",
+      winnerOptionId: 2,
+    };
+    const finished: RoundView = {
+      ...votingRound(location),
+      status: "complete",
+      locationOptionId: 2,
+      dateOptionId: 12,
+      datePoll: { ...datePoll(3), status: "closed" },
+    };
+    const panel = (
+      thread: HikeThreadStatus,
+      threadId: string | null = null,
+    ) => {
+      const state = {
+        settings: COMPLETE,
+        round: null,
+        finished: { ...finished, threadId },
+        thread,
+      };
+      return {
+        buttons: actionButtons(state).map((b) => b.custom_id),
+        shown: text(asNodes(renderAdminPanel(state))),
+        view: renderAdminPanel(state, "x".repeat(300)),
+      };
+    };
+
+    it("links the thread once it exists, with no Create hike thread", () => {
+      const { buttons, shown } = panel(
+        { state: "created", threadId: "900000000000000001" },
+        "900000000000000001",
+      );
+      expect(shown).toContain("**Hike thread:** <#900000000000000001>");
+      expect(buttons).toEqual([
+        POLL_CONTROL_IDS.startLocationVote,
+        ADMIN_PANEL_IDS.settings,
+        ADMIN_PANEL_IDS.refresh,
+      ]);
+    });
+
+    it("shows why it failed and offers Create hike thread for that round", () => {
+      const reason = `Could not create the hike thread in <#${FORUM}>: ${"r".repeat(400)}`;
+      const { buttons, shown, view } = panel({ state: "failed", reason });
+      expect(shown).toContain(`**Hike thread:** not created. ${reason}`);
+      expect(buttons).toEqual([
+        POLL_CONTROL_IDS.startLocationVote,
+        POLL_CONTROL_IDS.createHikeThread(finished.id),
+        ADMIN_PANEL_IDS.settings,
+        ADMIN_PANEL_IDS.refresh,
+      ]);
+      expectWithinLimits(view);
+    });
+
+    it("offers Create hike thread when no attempt finished", () => {
+      const { buttons, shown } = panel({ state: "missing" });
+      expect(shown).toContain(
+        "**Hike thread:** not created. Click Create hike thread to create it.",
+      );
+      expect(buttons).toContain(POLL_CONTROL_IDS.createHikeThread(finished.id));
+    });
+
+    it("offers no button while the thread is being created", () => {
+      const { buttons, shown } = panel({ state: "creating" });
+      expect(shown).toContain("**Hike thread:** being created.");
+      expect(buttons).not.toContain(
+        POLL_CONTROL_IDS.createHikeThread(finished.id),
+      );
+    });
+  });
+
   it("shows a notice above the settings", () => {
     const view = renderAdminPanel({ settings: EMPTY, round: null }, "Saved.");
     expect(text(asNodes(view))).toContain("Saved.");
@@ -687,6 +761,10 @@ describe("the admin panel", () => {
       [
         POLL_CONTROL_IDS.startDateVote,
         (g) => click(POLL_CONTROL_IDS.startDateVote, g, STRANGER),
+      ],
+      [
+        POLL_CONTROL_IDS.createHikeThread(1),
+        (g) => click(POLL_CONTROL_IDS.createHikeThread(1), g, STRANGER),
       ],
       [ADMIN_PANEL_IDS.role, (g) => pickRole(g, STRANGER, ROLE)],
       ...[
