@@ -596,6 +596,7 @@ function past(n: number, overrides: Partial<PastLocation> = {}): PastLocation {
     timesHiked: 0,
     cooldownHikesLeft: 0,
     onPoll: false,
+    place: null,
     ...overrides,
   };
 }

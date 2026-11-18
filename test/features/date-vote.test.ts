@@ -229,6 +229,7 @@ function dateOption(id: number, value: string, label: string, votes: number) {
     dateValue: value,
     proposedBy: OWNER,
     createdAt: 0,
+    place: null,
     votes,
   };
 }

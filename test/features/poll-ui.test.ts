@@ -109,6 +109,7 @@ function option(id: number, label: string, votes: number, details?: string) {
     dateValue: null,
     proposedBy: `4000000000000000${String(id).padStart(2, "0")}`,
     createdAt: 0,
+    place: null,
     votes,
   };
 }

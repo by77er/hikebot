@@ -147,6 +147,7 @@ function option(
     dateValue: null,
     proposedBy: OWNER,
     createdAt: 0,
+    place: null,
     votes: 0,
     ...extra,
   };

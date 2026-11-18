@@ -869,6 +869,7 @@ function votingPoll(n: number): PollView {
       dateValue: null,
       proposedBy: OWNER,
       createdAt: 0,
+      place: null,
       votes: i,
     })),
     voterCount: 30,
@@ -890,6 +891,7 @@ function datePoll(n: number): PollView {
       dateValue: `2027-12-${String(i + 1).padStart(2, "0")} 09:00`,
       proposedBy: OWNER,
       createdAt: 0,
+      place: null,
       votes: i,
     })),
   };
