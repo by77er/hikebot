@@ -2,6 +2,7 @@ import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_CADENCE,
   GuildConfig,
   setupComplete,
   type GuildSettings,
@@ -20,6 +21,7 @@ const empty: GuildSettings = {
   ownerFetchedAt: null,
   timezone: "America/Los_Angeles",
   homeArea: null,
+  cadence: DEFAULT_CADENCE,
 };
 
 describe("GuildConfig", () => {

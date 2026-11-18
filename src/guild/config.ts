@@ -28,6 +28,8 @@ export interface GuildSettings {
    * lookups of locations prefer matches near the point. Null until set.
    */
   homeArea: HomeArea | null;
+  /** The weekly schedule the bot runs the rounds on by itself. */
+  cadence: CadenceSettings;
 }
 
 /** The guild's home area and where the geocoder found it. */
@@ -39,6 +41,30 @@ export interface HomeArea {
   lat: number;
   lon: number;
 }
+
+/** The weekly schedule (the cadence), set under Schedule in the panel. */
+export interface CadenceSettings {
+  /** Whether the bot opens and closes the votes by itself. */
+  enabled: boolean;
+  /** The day the votes open and close, 0 (Sunday) to 6 (Saturday). */
+  weekday: number;
+  /** The time of day they do, `HH:MM` in the guild's time zone. */
+  time: string;
+  /** How many days after it opens the date vote closes. */
+  dateVoteDays: number;
+}
+
+/** The schedule of a guild that has not changed it: off, Wednesday 09:00. */
+export const DEFAULT_CADENCE: CadenceSettings = {
+  enabled: false,
+  weekday: 3,
+  time: "09:00",
+  dateVoteDays: 2,
+};
+
+/** The fewest and most days a cadence date vote may stay open. */
+export const MIN_DATE_VOTE_DAYS = 1;
+export const MAX_DATE_VOTE_DAYS = 3;
 
 /** The settings an admin picks in the panel. */
 export type SettingField =
@@ -63,6 +89,10 @@ interface Row extends Record<string, SqlStorageValue> {
   home_name: string | null;
   home_lat: number | null;
   home_lon: number | null;
+  cadence_enabled: number;
+  cadence_weekday: number;
+  cadence_time: string;
+  cadence_date_vote_days: number;
 }
 
 /**
@@ -86,7 +116,9 @@ export class GuildConfig {
       .exec<Row>(
         `SELECT admin_role_id, vote_channel_id, announce_channel_id,
            forum_channel_id, owner_id, owner_fetched_at, timezone,
-           home_area, home_name, home_lat, home_lon
+           home_area, home_name, home_lat, home_lon,
+           cadence_enabled, cadence_weekday, cadence_time,
+           cadence_date_vote_days
          FROM guild_settings WHERE id = 1`,
       )
       .one();
@@ -107,6 +139,12 @@ export class GuildConfig {
               lat: row.home_lat,
               lon: row.home_lon,
             },
+      cadence: {
+        enabled: row.cadence_enabled !== 0,
+        weekday: row.cadence_weekday,
+        time: row.cadence_time,
+        dateVoteDays: row.cadence_date_vote_days,
+      },
     };
   }
 
@@ -144,6 +182,26 @@ export class GuildConfig {
     this.storage.sql.exec(
       "UPDATE guild_settings SET timezone = ? WHERE id = 1",
       timezone,
+    );
+    return this.get();
+  }
+
+  /**
+   * Changes the schedule settings given in `change`, which the caller has
+   * checked: a weekday 0 to 6, a time `HH:MM`, and a date vote length from
+   * `MIN_DATE_VOTE_DAYS` to `MAX_DATE_VOTE_DAYS`. Returns the settings after
+   * the change.
+   */
+  setCadence(change: Partial<CadenceSettings>): GuildSettings {
+    const cadence = { ...this.get().cadence, ...change };
+    this.storage.sql.exec(
+      `UPDATE guild_settings SET cadence_enabled = ?, cadence_weekday = ?,
+         cadence_time = ?, cadence_date_vote_days = ?
+       WHERE id = 1`,
+      cadence.enabled ? 1 : 0,
+      cadence.weekday,
+      cadence.time,
+      cadence.dateVoteDays,
     );
     return this.get();
   }

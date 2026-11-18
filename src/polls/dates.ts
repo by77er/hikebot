@@ -272,6 +272,138 @@ export function defaultDateCandidates(today: string): string[] {
   );
 }
 
+/** The weekday names, Sunday first, as `getUTCDay` numbers them. */
+export const WEEKDAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
+
+/** The day of the week of `day` (`YYYY-MM-DD`): 0 is Sunday, 6 Saturday. */
+export function weekdayOf(day: string): number {
+  const [y = 0, m = 1, d = 1] = day.split("-").map(Number);
+  const date = new Date(0);
+  date.setUTCFullYear(y, m - 1, d);
+  return date.getUTCDay();
+}
+
+/** A weekly moment in a guild's time zone: a weekday and a time of day. */
+export interface WeeklyTime {
+  /** 0 (Sunday) to 6 (Saturday). */
+  weekday: number;
+  /** `HH:MM`, 24-hour. */
+  time: string;
+}
+
+/** How many days after the date vote closes a cadence round's hike may be. */
+export const CADENCE_WINDOW_DAYS = 14;
+
+/**
+ * The instant at which the clock in `timeZone` reads `time` (`HH:MM`) on
+ * `day` (`YYYY-MM-DD`), as `hikeStart` reads it across clock changes.
+ */
+export function instantOn(day: string, time: string, timeZone: string): number {
+  return hikeStart(`${day} ${time}`, timeZone);
+}
+
+/**
+ * The first instant strictly after `after` at which it is `cadence.time` on
+ * `cadence.weekday` in `timeZone`.
+ */
+export function nextCadenceInstant(
+  cadence: WeeklyTime,
+  timeZone: string,
+  after: number,
+): number {
+  const today = todayIn(timeZone, after);
+  const ahead = (cadence.weekday - weekdayOf(today) + 7) % 7;
+  const first = instantOn(addDays(today, ahead), cadence.time, timeZone);
+  return first > after
+    ? first
+    : instantOn(addDays(today, ahead + 7), cadence.time, timeZone);
+}
+
+/**
+ * The last instant at or before `at` at which it is `cadence.time` on
+ * `cadence.weekday` in `timeZone`.
+ */
+export function previousCadenceInstant(
+  cadence: WeeklyTime,
+  timeZone: string,
+  at: number,
+): number {
+  const today = todayIn(timeZone, at);
+  const back = (weekdayOf(today) - cadence.weekday + 7) % 7;
+  const last = instantOn(addDays(today, -back), cadence.time, timeZone);
+  return last <= at
+    ? last
+    : instantOn(addDays(today, -back - 7), cadence.time, timeZone);
+}
+
+/** The first instant strictly after `after` at which it is `time` in `timeZone`. */
+export function nextDailyInstant(
+  time: string,
+  timeZone: string,
+  after: number,
+): number {
+  const today = todayIn(timeZone, after);
+  const first = instantOn(today, time, timeZone);
+  return first > after ? first : instantOn(addDays(today, 1), time, timeZone);
+}
+
+/**
+ * When a date vote opened at `openedAt` closes on a cadence: at `time` in
+ * `timeZone`, `days` calendar days after the day it opened.
+ */
+export function cadenceDateVoteClose(
+  openedAt: number,
+  time: string,
+  days: number,
+  timeZone: string,
+): number {
+  return instantOn(addDays(todayIn(timeZone, openedAt), days), time, timeZone);
+}
+
+/**
+ * The days a cadence round's hike may fall on, both `YYYY-MM-DD` and
+ * included: the `CADENCE_WINDOW_DAYS` days after the day the date vote
+ * closes (`closesAt`) in `timeZone`.
+ */
+export function cadenceWindow(
+  closesAt: number,
+  timeZone: string,
+): { first: string; last: string } {
+  const closeDay = todayIn(timeZone, closesAt);
+  return {
+    first: addDays(closeDay, 1),
+    last: addDays(closeDay, CADENCE_WINDOW_DAYS),
+  };
+}
+
+/**
+ * A cadence round's default candidates: every Saturday and Sunday in its
+ * window (`cadenceWindow`), at `DEFAULT_HIKE_TIME`, as `YYYY-MM-DD HH:MM`.
+ */
+export function cadenceDateCandidates(
+  closesAt: number,
+  timeZone: string,
+): string[] {
+  const { first } = cadenceWindow(closesAt, timeZone);
+  const days: string[] = [];
+  for (let i = 0; i < CADENCE_WINDOW_DAYS; i++) {
+    const day = addDays(first, i);
+    const weekday = weekdayOf(day);
+    if (weekday === 0 || weekday === 6) {
+      days.push(`${day} ${DEFAULT_HIKE_TIME}`);
+    }
+  }
+  return days;
+}
+
 /** The weekday and time in `timeZone` at the instant `now`: `Wed 11:42`. */
 export function clockIn(timeZone: string, now: number): string {
   const clock = wallClock(timeZone, now);

@@ -965,7 +965,7 @@ describe("the start modal's default dates", () => {
   });
 
   it("lists the next two weekends after a day, one per line", () => {
-    const form = startModal("2026-11-18") as {
+    const form = startModal(defaultDateCandidates("2026-11-18")) as {
       data: { components: Node[] };
     };
     expect(flatten(form.data.components)).toContainEqual(

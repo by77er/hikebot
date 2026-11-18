@@ -1,4 +1,5 @@
 import {
+  CADENCE_WINDOW_DAYS,
   MAX_PROPOSAL_DAYS_AHEAD,
   addDays,
   parseDateOption,
@@ -469,14 +470,16 @@ export class PollStore {
    * Adds a member's date to an open date poll, with `userId` as proposer.
    * `line` is `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`; its day must lie between
    * today and `MAX_PROPOSAL_DAYS_AHEAD` days after today in `timeZone`,
-   * both included, judged at `this.now()`. Refuses a date and time already
-   * on the poll and a full poll; votes already cast are kept.
+   * both included, judged at `this.now()`; with a `window` (`YYYY-MM-DD`
+   * days, both included), inside it instead. Refuses a date and time
+   * already on the poll and a full poll; votes already cast are kept.
    */
   proposeDate(
     pollId: number,
     userId: string,
     line: string,
     timeZone: string,
+    window?: { first: string; last: string },
   ): OptionView {
     return this.storage.transactionSync(() => {
       const poll = this.openPollRow(pollId);
@@ -487,13 +490,19 @@ export class PollStore {
       const day = (valid.dateValue ?? "").slice(0, 10);
       const today = todayIn(timeZone, this.now());
       const last = addDays(today, MAX_PROPOSAL_DAYS_AHEAD);
-      if (day < today) {
+      if (window !== undefined) {
+        if (day < window.first || day > window.last) {
+          throw new PollError(
+            "date_outside_window",
+            `${valid.label} is outside this round's dates. Propose a day from ${window.first} to ${window.last}: the ${String(CADENCE_WINDOW_DAYS)} days after the date vote closes.`,
+          );
+        }
+      } else if (day < today) {
         throw new PollError(
           "date_in_past",
           `${valid.label} is in the past: today is ${today} in ${timeZone}. Propose a day from ${today} to ${last}.`,
         );
-      }
-      if (day > last) {
+      } else if (day > last) {
         throw new PollError(
           "date_too_far",
           `${valid.label} is more than ${String(MAX_PROPOSAL_DAYS_AHEAD)} days away. Propose a day from ${today} to ${last}, or ask an admin to plan further ahead.`,

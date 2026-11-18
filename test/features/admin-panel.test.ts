@@ -35,7 +35,11 @@ import type { HikeDayStatus } from "../../src/features/hike-day-state";
 import type { HikeEventStatus } from "../../src/features/hike-event-state";
 import type { HikeThreadStatus } from "../../src/features/hike-thread-state";
 import type { OptionView, PollView, RoundView } from "../../src/polls/store";
-import { GuildConfig, type GuildSettings } from "../../src/guild/config";
+import {
+  DEFAULT_CADENCE,
+  GuildConfig,
+  type GuildSettings,
+} from "../../src/guild/config";
 import {
   ADMIN_ONLY_MESSAGE,
   ADMIN_ONLY_NO_ROLE_MESSAGE,
@@ -72,6 +76,7 @@ const EMPTY: GuildSettings = {
   ownerFetchedAt: null,
   timezone: "America/Los_Angeles",
   homeArea: null,
+  cadence: DEFAULT_CADENCE,
 };
 const COMPLETE: GuildSettings = {
   ...EMPTY,

@@ -124,6 +124,21 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE guild_settings ADD COLUMN home_lon REAL;
     `,
   },
+  {
+    // The weekly schedule: off by default, Wednesday (3) at 09:00, and a
+    // date vote of 2 days.
+    name: "0007_guild_cadence",
+    sql: `
+      ALTER TABLE guild_settings
+        ADD COLUMN cadence_enabled INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE guild_settings
+        ADD COLUMN cadence_weekday INTEGER NOT NULL DEFAULT 3;
+      ALTER TABLE guild_settings
+        ADD COLUMN cadence_time TEXT NOT NULL DEFAULT '09:00';
+      ALTER TABLE guild_settings
+        ADD COLUMN cadence_date_vote_days INTEGER NOT NULL DEFAULT 2;
+    `,
+  },
 ];
 
 /**

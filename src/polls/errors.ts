@@ -10,6 +10,7 @@ export type PollErrorCode =
   | "invalid_date"
   | "date_in_past"
   | "date_too_far"
+  | "date_outside_window"
   | "duplicate_option"
   | "too_many_options"
   | "too_few_options"
