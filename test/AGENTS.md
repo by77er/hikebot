@@ -378,23 +378,18 @@ Run `npm test` for the whole suite before opening a pull request.
    ```
 
    When a follow-up creates something on Discord and the Worker stores its
-   id (a thread, a poll message) before editing the reply, wait for that
-   edit before an interaction that reads the stored id, such as Refresh.
-   The fake holds the new thread or message before its answer reaches the
-   Worker, so waiting on the fake's state alone lets the next interaction
-   in first:
+   id (a thread, a poll message), wait until the bot shows the stored id
+   before asserting on it: click Refresh inside `eventually`, so each try is
+   answered from storage. The fake holds the new thread or message before
+   its answer reaches the Worker, and a follow-up's edit can be overwritten
+   by another interaction's update to the same message that lands later:
 
    ```ts
-   await g.owner.click(
-     panel,
-     idStarting(play.shown(panel), "hb:thread:create:"),
-   );
-   await eventually(() => {
-     expect(messageText(play.shown(panel))).toContain(
-       "The hike thread is open",
-     );
+   await Promise.all([g.owner.click(panel, id), g.owner.click(panel, id)]);
+   await eventually(async () => {
+     await g.owner.click(panel, ROUND_IDS.refresh);
+     expect(messageText(play.shown(panel))).toContain("**Hike thread:** <#");
    });
-   await g.owner.click(panel, ROUND_IDS.refresh);
    ```
 
    To check that a scenario waits on the right thing, hold the fake's
