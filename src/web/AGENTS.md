@@ -278,6 +278,9 @@ before marking the pull request ready.
    git show origin/main:docs/screenshots/<file> > /tmp/before/<file>
    ```
 
+   For a page that is new, `git show` answers that the path is not in
+   `origin/main`: there is no before image.
+
 3. Go through this checklist for each page, as a critical designer who has
    never seen it:
    - **Purpose and hierarchy.** Within a few seconds it is clear what the
