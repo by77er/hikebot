@@ -28,6 +28,7 @@ jobs:
         uses: by77er/undercurrent@v0
         with:
           mode: commands
+          rules-from: head
       - if: github.event_name == 'push'
         uses: by77er/undercurrent@v0
         with:
