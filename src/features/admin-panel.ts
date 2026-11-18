@@ -6,6 +6,7 @@ import {
   type APIButtonComponentWithCustomId,
   type APIMessageComponentInteraction,
   type APIMessageTopLevelComponent,
+  type APIModalSubmitInteraction,
   type RESTPatchAPIWebhookWithTokenMessageJSONBody,
 } from "discord-api-types/v10";
 import {
@@ -15,10 +16,14 @@ import {
   container,
   customId,
   ephemeralReply,
+  label,
   messageBody,
+  modal,
   roleSelect,
   separator,
   textDisplay,
+  textInput,
+  textInputValue,
   update,
 } from "../discord/components";
 import {
@@ -29,6 +34,7 @@ import {
 } from "../guild/config";
 import { ephemeralNotice } from "../discord/responses";
 import { adminOnly } from "../guild/permissions";
+import { DEFAULT_HIKE_TIME, clockIn, normalizeTimeZone } from "../polls/dates";
 import {
   PollStore,
   type PollKind,
@@ -41,6 +47,7 @@ import type {
   ComponentHandler,
   HandlerContext,
   HandlerResult,
+  ModalHandler,
   Router,
 } from "../guild/router";
 import { UNAVAILABLE_MESSAGE } from "../guild/router";
@@ -55,6 +62,8 @@ export interface AdminPanelState {
   finished?: RoundView | null;
   /** Where the finished round's forum thread stands. */
   thread?: HikeThreadStatus | null;
+  /** The time the panel is drawn at, for the clock in the guild's zone. */
+  now?: number;
 }
 
 export const ADMIN_PANEL_IDS = {
@@ -65,6 +74,8 @@ export const ADMIN_PANEL_IDS = {
   voteChannel: customId("admin", "vote-channel"),
   announceChannel: customId("admin", "announce-channel"),
   forumChannel: customId("admin", "forum-channel"),
+  timezone: customId("admin", "timezone"),
+  timezoneInput: customId("admin", "timezone-name"),
 } as const;
 
 /** The panel's poll controls; their handlers live with the poll features. */
@@ -132,6 +143,7 @@ export function loadAdminPanelState(
       finished === null
         ? null
         : hikeThreadStatus(storage, finished, store.now()),
+    now: store.now(),
   };
 }
 
@@ -230,6 +242,7 @@ export function renderAdminPanel(
       (channel) =>
         `**${channel.name}:** ${channelMention(settings[channel.field])}`,
     ),
+    timezoneLine(state),
   ];
   const buttons = actionButtons(state);
   const rows = [];
@@ -370,7 +383,19 @@ export function adminPanelBody(
   return messageBody(renderAdminPanel(loadAdminPanelState(storage), notice));
 }
 
-/** The settings view: one select per setting, each showing its value. */
+/**
+ * `**Time zone:** America/Los_Angeles · now Wed 11:42`, the clock left out
+ * when the state has no time.
+ */
+function timezoneLine({ settings, now }: AdminPanelState): string {
+  const zone = settings.timezone;
+  return `**Time zone:** ${zone}${now === undefined ? "" : ` · now ${clockIn(zone, now)}`}`;
+}
+
+/**
+ * The settings view: one select per setting, each showing its value, and
+ * the time zone with its Set time zone button.
+ */
 export function renderAdminSettings(
   state: AdminPanelState,
   notice?: string,
@@ -423,6 +448,16 @@ export function renderAdminSettings(
           ),
         ];
       }),
+      textDisplay(
+        `${timezoneLine(state)}\nDates are planned in this time zone; a date typed without a time starts at ${DEFAULT_HIKE_TIME}.`,
+      ),
+      actionRow(
+        button({
+          custom_id: ADMIN_PANEL_IDS.timezone,
+          label: "Set time zone",
+          style: ButtonStyle.Secondary,
+        }),
+      ),
     ]),
     actionRow(
       button({
@@ -519,6 +554,72 @@ function saveChannel(
   });
 }
 
+/** The longest time zone name the modal takes. */
+const MAX_TIMEZONE_INPUT = 64;
+
+const TIMEZONE_EXAMPLES =
+  "`America/Los_Angeles`, `Europe/Berlin` or `Asia/Kolkata`";
+
+/** Set time zone: opens the modal, prefilled with the current zone. */
+const openTimezoneModal: ComponentHandler = adminOnly(
+  (_interaction, _context, settings) => ({
+    response: modal(ADMIN_PANEL_IDS.timezone, "Set time zone", [
+      label(
+        "Time zone",
+        textInput({
+          custom_id: ADMIN_PANEL_IDS.timezoneInput,
+          required: true,
+          max_length: MAX_TIMEZONE_INPUT,
+          value: settings.timezone,
+          placeholder: "America/Los_Angeles",
+        }),
+        "An IANA name such as Europe/Berlin, or PT, MT, CT, ET or UTC.",
+      ),
+    ]),
+  }),
+);
+
+/**
+ * The time zone modal: stores the zone in its canonical spelling and
+ * redraws the settings view, or changes nothing and tells the admin what
+ * was typed and what would work.
+ */
+const saveTimezone: ModalHandler = adminOnly(
+  (interaction: APIModalSubmitInteraction, context, settings) => {
+    const typed =
+      textInputValue(interaction.data, ADMIN_PANEL_IDS.timezoneInput) ?? "";
+    const zone = normalizeTimeZone(typed);
+    if (zone === null) {
+      const what =
+        typed.trim() === ""
+          ? "No time zone was entered"
+          : `\`${quotedInput(typed.trim())}\` is not a time zone`;
+      return {
+        response: ephemeralNotice(
+          `${what}, so it is still ${settings.timezone}. Enter an IANA name such as ${TIMEZONE_EXAMPLES}, or PT, MT, CT, ET or UTC.`,
+        ),
+      };
+    }
+    new GuildConfig(context.storage).setTimezone(zone);
+    const components = renderAdminSettings(
+      loadAdminPanelState(context.storage),
+      `Time zone set to ${zone}.`,
+    );
+    return {
+      response:
+        interaction.message === undefined
+          ? ephemeralReply(components)
+          : update(components),
+    };
+  },
+);
+
+/** Typed text to quote: shortened and without backticks. */
+function quotedInput(text: string): string {
+  const plain = text.replaceAll("`", "'");
+  return plain.length <= 40 ? plain : `${plain.slice(0, 39)}…`;
+}
+
 function settingsUpdate(
   context: HandlerContext,
   notice: string,
@@ -553,7 +654,7 @@ function channelMention(id: string | null): string {
   return id === null ? NOT_SET : `<#${id}>`;
 }
 
-/** Registers the panel's buttons and selects. */
+/** Registers the panel's buttons, selects and the time zone modal. */
 export function registerAdminPanel(router: Router): Router {
   router.component(ADMIN_PANEL_IDS.settings, showSettings);
   router.component(ADMIN_PANEL_IDS.refresh, showStatus);
@@ -562,5 +663,7 @@ export function registerAdminPanel(router: Router): Router {
   for (const channel of CHANNEL_SETTINGS) {
     router.component(channel.id, saveChannel(channel));
   }
+  router.component(ADMIN_PANEL_IDS.timezone, openTimezoneModal);
+  router.modal(ADMIN_PANEL_IDS.timezone, saveTimezone);
   return router;
 }
