@@ -103,11 +103,14 @@ fee). To map another area, change the `region` box in `maps/regions.json` as
    signed PING to check it before saving.
 2. Invite the bot to the server with the scopes `bot` and
    `applications.commands`: under OAuth2, URL Generator, tick both scopes,
-   tick the bot permissions below, then open the generated URL.
+   tick the bot permissions below (the channel permissions of step 3 and
+   Create Events), then open the generated URL.
 3. Make sure the bot has these permissions in the voting, announcements and
    hike threads channels (through the invite or the channels' permission
    overrides): View Channel, Send Messages, Send Messages in Threads, Create
-   Public Threads, Embed Links and Read Message History.
+   Public Threads, Embed Links and Read Message History. It also needs
+   Create Events in the server, to create each hike's scheduled event
+   (through the invite, or on the bot's role under Server Settings, Roles).
 4. In the server, run `/hike admin` as the server owner, open Settings, and
    pick the admin role and the three channels.
 
