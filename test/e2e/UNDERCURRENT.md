@@ -147,13 +147,14 @@ Every test file starts its own Worker and fake Discord API, and Vitest runs
 files in parallel, so a fixed port collides with another file or with a dev
 server on `8787`. Listen on port `0` and read the port the system chose from
 `server.address()`, as `FakeDiscord.listen` does, and pass the URL on;
-`harness.listen()` already picks a free port.
+`harness.listen()` already picks a free port. "Run the end-to-end suite" in
+`test/AGENTS.md` runs every file at once.
 
 ```sh
 perl -ne '
   next if m{^\s*(?://|/?\*)};
   if (/\.listen\(\s*[1-9]|\bport\s*:\s*[1-9]|(?:localhost|127\.0\.0\.1):[1-9]/) {
-    print "$ARGV:$.: uses a fixed port; listen on port 0 and read the chosen port from server.address(), or take the URL harness.listen() returns\n";
+    print "$ARGV:$.: uses a fixed port; listen on port 0 and read the chosen port from server.address(), or take the URL harness.listen() returns (\"Run the end-to-end suite\" in test/AGENTS.md)\n";
     $bad = 1;
   }
   END { exit($bad ? 1 : 0) }
