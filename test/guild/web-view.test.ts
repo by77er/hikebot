@@ -210,7 +210,7 @@ describe("the membership cache", () => {
     const { guild, stub } = freshGuild();
     await inObject(stub, guild, async ({ read }) => {
       expect((await read(MEMBER, T0)).kind).toBe("view");
-      delete guild.members[MEMBER];
+      guild.members = { [OWNER]: [] };
       expect((await read(MEMBER, T0 + 1_000)).kind).toBe("view");
       expect((await read(MEMBER, T0 + MEMBER_CACHE_MS)).kind).toBe(
         "not_member",
