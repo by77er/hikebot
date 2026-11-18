@@ -50,14 +50,27 @@ export class PageClient {
    * Signs in as the fake Discord user `user` (added with
    * `discord.addUser`), walking the redirects a browser follows: `/login`,
    * Discord's authorize page, then the Worker's `/auth/callback`, whose
-   * answer it returns (a redirect into the site once signed in). The
-   * callback address names the Worker's `PUBLIC_URL`; the client requests
-   * its path and query from the Worker under test.
+   * answer it returns (a redirect into the site once signed in, or the
+   * cancelled page with `cancel`).
    */
   async signIn(
     user: { id: string },
     options: SignInOptions = {},
   ): Promise<PageResponse> {
+    return this.get(await this.authorize(user, options));
+  }
+
+  /**
+   * Takes the first two steps of `signIn`, `/login` and Discord's authorize
+   * page, and returns the path and query of the Worker's callback without
+   * requesting it; the state cookie it needs is in `cookies`. The callback
+   * address names the Worker's `PUBLIC_URL`, so this returns its path and
+   * query, for the Worker under test.
+   */
+  async authorize(
+    user: { id: string },
+    options: SignInOptions = {},
+  ): Promise<string> {
     const login = await this.get(
       options.next === undefined
         ? "/login"
@@ -79,7 +92,7 @@ export class PageClient {
       );
     }
     const callback = new URL(back);
-    return this.get(callback.pathname + callback.search);
+    return callback.pathname + callback.search;
   }
 
   /**
@@ -129,7 +142,8 @@ export class PageClient {
     };
   }
 
-  private cookieHeader(): string {
+  /** The `Cookie` header the client sends: every cookie in the jar. */
+  cookieHeader(): string {
     return [...this.cookies]
       .map(([name, value]) => `${name}=${value}`)
       .join("; ");

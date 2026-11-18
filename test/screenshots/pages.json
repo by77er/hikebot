@@ -13,6 +13,42 @@
       "status": 404,
       "seed": "empty",
       "user": null
+    },
+    {
+      "name": "servers",
+      "path": "/servers",
+      "status": 200,
+      "seed": "member",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "servers-many",
+      "path": "/servers",
+      "status": 200,
+      "seed": "member-many-servers",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "servers-none",
+      "path": "/servers",
+      "status": 200,
+      "seed": "member-no-servers",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "sign-in-cancelled",
+      "path": "/auth/callback",
+      "status": 200,
+      "seed": "member",
+      "user": "400000000000000001",
+      "cancel": true
+    },
+    {
+      "name": "sign-in-failed",
+      "path": "/auth/callback?code=expired&state=expired",
+      "status": 400,
+      "seed": "empty",
+      "user": null
     }
   ],
   "excluded": [
@@ -27,6 +63,10 @@
     {
       "route": "/calendar/*",
       "reason": "The iCal feed of a server's hikes (text/calendar) for calendar apps, not a page a browser shows."
+    },
+    {
+      "route": "/login",
+      "reason": "Starts sign-in: sets the state cookie and redirects to Discord's authorize page, so it has no page of its own; the sign-in pages are screenshotted from the callback."
     }
   ]
 }
