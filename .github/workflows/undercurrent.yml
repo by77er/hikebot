@@ -37,6 +37,19 @@ jobs:
           mode: commands
           all: "true"
           rules-from: head
+      # Regenerates docs/screenshots/ and fails when a committed PNG differs
+      # ("Take the screenshots" in src/web/AGENTS.md). The regenerated files
+      # are kept as an artifact, to compare with the committed ones.
+      - name: Check the screenshots are current
+        id: screenshots
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        run: npm run screenshots:check
+      - name: Keep the regenerated screenshots
+        if: ${{ !cancelled() && steps.screenshots.outcome == 'failure' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshots-${{ github.event.pull_request.head.sha }}
+          path: docs/screenshots/
   semantic:
     name: ${{ github.event.pull_request.draft && 'semantic (draft, not run)' || 'semantic' }}
     if: github.event_name == 'pull_request' && !github.event.pull_request.draft

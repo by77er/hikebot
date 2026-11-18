@@ -99,6 +99,17 @@ describe("WebRouter", () => {
     expect(await call("/assets/exact.css")).toMatchObject({ body: "exact" });
   });
 
+  it("lists the paths of each method in the order they were added", () => {
+    expect(router().paths("GET")).toEqual([
+      "/",
+      "/settings",
+      "/assets/*",
+      "/assets/icons/*",
+      "/assets/exact.css",
+    ]);
+    expect(router().paths("POST")).toEqual(["/settings", "/form"]);
+  });
+
   it("refuses a route registered twice or without a leading slash", () => {
     expect(() => router().get("/", text("again"))).toThrow(/registered twice/);
     expect(() => router().get("settings", text("x"))).toThrow(/start with \//);

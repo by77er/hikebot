@@ -1,0 +1,17 @@
+{
+  "action": "ready_for_review",
+  "number": 101,
+  "pull_request": {
+    "number": 101,
+    "draft": false,
+    "body": "Refactors the page shell.\n\n## Design review\n\n- **minor**: the link colour in the dark scheme is hard to tell from the text. Fixed: links are underlined.\n\n## Screenshots\n\nNo visual change.\n",
+    "base": {
+      "ref": "main",
+      "sha": "1111111111111111111111111111111111111111"
+    },
+    "head": {
+      "ref": "task/example",
+      "sha": "2222222222222222222222222222222222222222"
+    }
+  }
+}

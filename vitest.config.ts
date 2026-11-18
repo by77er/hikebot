@@ -43,7 +43,7 @@ export default defineConfig({
           name: "unit",
           provide: { mapSample },
           include: ["test/**/*.test.{ts,tsx}"],
-          exclude: ["test/e2e/**"],
+          exclude: ["test/e2e/**", "test/screenshots/**"],
           deps: {
             // discord-api-types is CommonJS; pre-bundle it so its enums load
             // in the Workers runtime, as Wrangler's bundler does for deploys.
@@ -54,6 +54,15 @@ export default defineConfig({
         },
       },
       "./vitest.e2e.config.ts",
+      {
+        // The screenshot tooling runs git and the browser, so its tests run
+        // in Node.
+        test: {
+          name: "node",
+          environment: "node",
+          include: ["test/screenshots/**/*.test.ts"],
+        },
+      },
     ],
   },
 });

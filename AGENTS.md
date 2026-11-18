@@ -304,7 +304,7 @@ them by hand, for example for your own test application:
    ```
 
    It is opened ready for review, so its checks start at once: follow "Get a
-   pull request checked" from step 4 to merge it.
+   pull request checked" from step 5 to merge it.
 
 5. Once the revert has merged and its `Undercurrent` run on `main` has
    passed, turn `Deploy` back on and deploy `main`:
@@ -410,7 +410,11 @@ on every change you push to a draft, and again before marking it ready.
    npm run format:check && npm run lint && npm run typecheck && npm test
    ```
 
-4. Follow "Record what you learned" below.
+4. If the change touches `src/web/`, `public/` or `docs/screenshots/`,
+   follow "Take the screenshots" and "Review your own UI change as a
+   designer" in `src/web/AGENTS.md`, and fix every blocker and major it
+   finds.
+5. Follow "Record what you learned" below.
 
 ## Get a pull request checked
 
@@ -424,20 +428,24 @@ on every change you push to a draft, and again before marking it ready.
    gh pr create --draft --base main --title "<title>" --body "<description>"
    ```
 
-2. Write the finished description to a file and set it:
+2. If the pull request changes `src/web/`, `public/` or
+   `docs/screenshots/`, write its `## Design review` and `## Screenshots`
+   sections after your last push, as "Describe a UI change in the pull
+   request" in `src/web/AGENTS.md` says.
+3. Write the finished description to a file and set it:
 
    ```sh
    gh api -X PATCH repos/by77er/hikebot/pulls/<n> -F body=@<file>
    ```
 
-3. Mark the pull request ready. This starts a run of the three checks on its
+4. Mark the pull request ready. This starts a run of the three checks on its
    head commit:
 
    ```sh
    gh pr ready <n>
    ```
 
-4. Find the run that started after you marked it ready (the newest
+5. Find the run that started after you marked it ready (the newest
    `in_progress` one) and wait for it:
 
    ```sh
@@ -445,7 +453,7 @@ on every change you push to a draft, and again before marking it ready.
    gh run watch <run-id> --exit-status
    ```
 
-5. Read the checks of the head commit:
+6. Read the checks of the head commit:
 
    ```sh
    gh pr checks <n>
@@ -460,7 +468,7 @@ on every change you push to a draft, and again before marking it ready.
    means the same. If one of the four is missing, pending or not `pass`, do not merge:
    read a failed run with `gh run view <run-id> --log-failed`.
 
-6. If more work is needed, turn the pull request back into a draft. This
+7. If more work is needed, turn the pull request back into a draft. This
    cancels a run in progress; push your changes, then continue at step 2:
 
    ```sh
@@ -468,11 +476,11 @@ on every change you push to a draft, and again before marking it ready.
    ```
 
    A push to a pull request that is ready starts a new run and cancels the
-   one in progress; wait for the new one from step 4.
+   one in progress; wait for the new one from step 5.
 
-7. Merge once the four checks of the run started after marking ready have
+8. Merge once the four checks of the run started after marking ready have
    passed. Auto-merge waits for them; if GitHub refuses it, merge by hand
-   only after step 5 shows four `pass` lines:
+   only after step 6 shows four `pass` lines:
 
    ```sh
    gh pr merge <n> --auto --squash
@@ -572,7 +580,7 @@ together with any other file, so rules go in a pull request of their own.
    ```
 
    The rules pull request is opened ready for review, so its checks start at
-   once: follow "Get a pull request checked" from step 4 to merge it.
+   once: follow "Get a pull request checked" from step 5 to merge it.
 
 ### A change to what the bot does: docs/design.md
 
