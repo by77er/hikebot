@@ -37,7 +37,10 @@ interface Row extends Record<string, SqlStorageValue> {
   owner_fetched_at: number | null;
 }
 
-/** True when the voting, announcements and forum channels are all set. */
+/**
+ * True when the voting, announcements and forum channels are all set: the
+ * admin role is optional, since the owner can always use the panel.
+ */
 export function setupComplete(settings: GuildSettings): boolean {
   return (
     settings.voteChannelId !== null &&

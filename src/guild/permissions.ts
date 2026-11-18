@@ -13,6 +13,7 @@ import type { HandlerContext, HandlerResult } from "./router";
 /** How long a cached guild owner id is trusted before it is fetched again. */
 export const OWNER_CACHE_MS = 60 * 60 * 1000;
 
+/** The refusals a member gets, once an admin role is set and before. */
 export const ADMIN_ONLY_MESSAGE =
   "The hikebot admin panel is limited to the server owner and members with the admin role.";
 export const ADMIN_ONLY_NO_ROLE_MESSAGE =
@@ -35,7 +36,9 @@ export type AdminCheck =
  * trusted for {@link OWNER_CACHE_MS}, measured with the interaction's own
  * timestamp; after that it is fetched again before it decides anything, so
  * after an ownership transfer the new owner gets in and the former owner is
- * refused. Makes at most one Discord REST call.
+ * refused. A member with the admin role is let in without a lookup. Makes
+ * at most one Discord REST call; if it fails, the member is refused with
+ * Discord's error.
  */
 export async function checkAdmin(
   interaction: AdminInteraction,

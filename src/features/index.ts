@@ -9,6 +9,9 @@ import { hikeCommand } from "./hike";
  *   router.command("hike", hikeCommand);
  *   router.component("hb:poll:vote", openVoteSelect);
  *   router.modal("hb:location:propose", saveProposal);
+ *
+ * A feature with several controls can export one function that registers
+ * them all, as `registerAdminPanel` does.
  */
 export function registerFeatures(router: Router): Router {
   router.command("hike", hikeCommand);

@@ -14,7 +14,10 @@ const subcommands: Record<string, CommandHandler | undefined> = {
   admin: openAdminPanel,
 };
 
-/** `/hike <subcommand>`: hands the interaction to the subcommand's handler. */
+/**
+ * `/hike <subcommand>`: hands the interaction to the subcommand's handler.
+ * A subcommand without a handler, or none at all, gets the unavailable notice.
+ */
 export const hikeCommand: CommandHandler = (interaction, context) => {
   const option =
     interaction.data.type === ApplicationCommandType.ChatInput

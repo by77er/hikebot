@@ -10,7 +10,10 @@ export function snowflakeTime(id: string): number {
   return Number(BigInt(id) >> 22n) + DISCORD_EPOCH_MS;
 }
 
-/** The smallest snowflake created at `time` (Unix milliseconds). */
+/**
+ * The smallest snowflake created at `time` (Unix milliseconds): an id that
+ * `snowflakeTime` reads back as `time`.
+ */
 export function snowflakeAt(time: number): string {
   return String(BigInt(time - DISCORD_EPOCH_MS) << 22n);
 }

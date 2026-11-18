@@ -68,6 +68,7 @@ export const migrations: readonly Migration[] = [
     `,
   },
   {
+    // One row per guild database, so `GuildConfig` always finds it.
     name: "0002_guild_settings",
     sql: `
       CREATE TABLE guild_settings (

@@ -19,6 +19,7 @@ export const commands = [
     description: "Plan the group's hikes",
     contexts: [InteractionContextType.Guild],
     integration_types: [ApplicationIntegrationType.GuildInstall],
+    // Each subcommand has its handler in `subcommands` in src/features/hike.ts.
     options: [
       {
         type: ApplicationCommandOptionType.Subcommand,

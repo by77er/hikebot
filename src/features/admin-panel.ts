@@ -228,7 +228,7 @@ export function adminPanelUpdate(
   };
 }
 
-/** `/hike admin`: opens the panel as an ephemeral reply. */
+/** `/hike admin`: opens the panel's status view as an ephemeral reply. */
 export const openAdminPanel: CommandHandler = adminOnly((_i, context) => ({
   response: ephemeralReply(
     renderAdminPanel(loadAdminPanelState(context.storage)),
@@ -262,6 +262,11 @@ const saveAdminRole: ComponentHandler = adminOnly((interaction, context) => {
   );
 });
 
+/**
+ * Saves the channel picked for `channel`, or clears it, after checking that
+ * the channel is in the interaction's `resolved` channels with a type the
+ * setting takes.
+ */
 function saveChannel(
   channel: (typeof CHANNEL_SETTINGS)[number],
 ): ComponentHandler {
