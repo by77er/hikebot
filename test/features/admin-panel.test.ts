@@ -103,7 +103,7 @@ function flatten(components: readonly Node[]): Node[] {
 }
 
 function asNodes(components: APIMessageTopLevelComponent[]): Node[] {
-  return components as unknown as Node[];
+  return components;
 }
 
 function text(components: readonly Node[]): string {
