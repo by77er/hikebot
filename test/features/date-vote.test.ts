@@ -49,8 +49,9 @@ const FORUM = "300000000000000003";
 const POLL_MESSAGE = "700000000000000001";
 const GUILD = "200000000000000001";
 
-/** 2026-11-18 12:00 UTC. */
+/** 2026-11-18 12:00 UTC, 04:00 on Wednesday 18 November in Los Angeles. */
 const NOW = Date.UTC(2026, 10, 18, 12);
+const LA = "America/Los_Angeles";
 
 let signer: Signer;
 beforeAll(async () => {
@@ -98,7 +99,7 @@ function ids(components: readonly unknown[] = []): string[] {
 
 describe("parseCandidateDates", () => {
   const refused = (input: string) => {
-    const result = parseCandidateDates(input, NOW);
+    const result = parseCandidateDates(input, NOW, LA);
     if (result.ok) throw new Error(`accepted ${input}`);
     return result.error;
   };
@@ -107,17 +108,17 @@ describe("parseCandidateDates", () => {
     [
       "both formats, blank lines and spaces",
       " 2026-12-05 \n\n2026-12-05 09:00\r\n2026-12-12  18:30\n",
-      ["2026-12-05", "2026-12-05 09:00", "2026-12-12 18:30"],
+      ["2026-12-05 11:00", "2026-12-05 09:00", "2026-12-12 18:30"],
     ],
     [
       "repeated dates collapsed",
-      "2026-12-05\n2026-12-06\n 2026-12-05",
-      ["2026-12-05", "2026-12-06"],
+      "2026-12-05\n2026-12-06\n 2026-12-05\n2026-12-06 11:00",
+      ["2026-12-05 11:00", "2026-12-06 11:00"],
     ],
     [
-      "yesterday and today in UTC",
-      "2026-11-17\n2026-11-18 06:00",
-      ["2026-11-17", "2026-11-18 06:00"],
+      "today in the guild's zone, at any time",
+      "2026-11-18\n2026-11-18 00:00",
+      ["2026-11-18 11:00", "2026-11-18 00:00"],
     ],
     [
       "25 dates",
@@ -127,11 +128,11 @@ describe("parseCandidateDates", () => {
       ).join("\n"),
       Array.from(
         { length: 25 },
-        (_, i) => `2027-01-${String(i + 1).padStart(2, "0")}`,
+        (_, i) => `2027-01-${String(i + 1).padStart(2, "0")} 11:00`,
       ),
     ],
   ])("accepts %s", (_name, input, dates) => {
-    expect(parseCandidateDates(input, NOW)).toEqual({ ok: true, dates });
+    expect(parseCandidateDates(input, NOW, LA)).toEqual({ ok: true, dates });
   });
 
   it("lists every line that is not a date, with the accepted formats", () => {
@@ -145,24 +146,37 @@ describe("parseCandidateDates", () => {
       "Line 5: `2026-02-30` is not a date.",
       "Line 6: `2026-12-08 25:00` is not a date.",
       "Line 7: `soon` is not a date.",
-      "Write one date per line as `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` (24-hour), for example `2026-12-05` or `2026-12-05 09:00`.",
+      "Write one date per line as `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` (24-hour), for example `2026-12-05` or `2026-12-05 09:00`; a date without a time starts at 11:00.",
     ]);
   });
 
-  it("refuses dates before yesterday in UTC, naming each line", () => {
-    const error = refused("2026-11-16 23:59\n2026-12-05\n2025-12-05");
+  it("refuses dates before today in the guild's zone, naming each line", () => {
+    const error = refused("2026-11-17 23:59\n2026-12-05\n2025-12-05");
     expect(error).toContain(
-      "Line 1: `2026-11-16 23:59` (Mon, 16 Nov 2026 · 23:59) is in the past.",
+      "Line 1: `2026-11-17 23:59` (Tue, 17 Nov 2026 · 23:59) is in the past: today is 2026-11-18 in America/Los_Angeles.",
     );
     expect(error).toContain(
-      "Line 3: `2025-12-05` (Fri, 5 Dec 2025) is in the past.",
+      "Line 3: `2025-12-05` (Fri, 5 Dec 2025 · 11:00) is in the past: today is 2026-11-18 in America/Los_Angeles.",
     );
     expect(error).not.toContain("Line 2");
-    // A day later, yesterday's date has moved on.
-    expect(parseCandidateDates("2026-11-17\n2026-12-05", NOW).ok).toBe(true);
+    expect(error).toContain("a date without a time starts at 11:00");
+  });
+
+  it("moves today on at midnight in the guild's zone, not in UTC", () => {
+    const dates = "2026-11-18\n2026-12-05";
+    // 23:59:59 on 18 November in Los Angeles, already the 19th in UTC.
+    const beforeMidnight = Date.UTC(2026, 10, 19, 7, 59, 59);
+    const afterMidnight = beforeMidnight + 1000;
+    expect(parseCandidateDates(dates, beforeMidnight, LA).ok).toBe(true);
+    expect(parseCandidateDates(dates, afterMidnight, LA).ok).toBe(false);
+    // In Kolkata the 18th ended at 18:30 UTC on the 18th.
+    const kolkata = "Asia/Kolkata";
     expect(
-      parseCandidateDates("2026-11-17\n2026-12-05", NOW + 24 * 60 * 60 * 1000)
+      parseCandidateDates(dates, Date.UTC(2026, 10, 18, 18, 29, 59), kolkata)
         .ok,
+    ).toBe(true);
+    expect(
+      parseCandidateDates(dates, Date.UTC(2026, 10, 18, 18, 30), kolkata).ok,
     ).toBe(false);
   });
 
@@ -353,19 +367,42 @@ describe("the date announcement", () => {
       tieBroken: true,
       tiedOptionIds: [12, 13],
     });
-    const view = renderAnnouncement(poll, DATE_POLL, GUILD, round(poll), [
-      "[Hike thread](https://discord.com/channels/1/2)",
-    ]);
+    const view = renderAnnouncement(
+      { poll, round: round(poll), guildId: GUILD, timeZone: LA },
+      DATE_POLL,
+      ["[Hike thread](https://discord.com/channels/1/2)"],
+    );
     expect(text(view).split("\n")).toEqual([
       "## Hike planned",
       "**Where:** Ridge Trail",
       "https://example.com/ridge",
-      "**When:** Sat, 5 Dec 2026 · 09:00",
+      // 09:00 in Los Angeles on 5 December 2026 is 17:00 UTC.
+      "**When:** Sat, 5 Dec 2026 · 09:00 (<t:1796490000:R>)",
       "**Sat, 5 Dec 2026 · 09:00** won the date vote with 3 votes.",
       "2 options tied with 3 votes each; the winner was drawn at random.",
       `[See the vote](https://discord.com/channels/${GUILD}/${TEXT}/${POLL_MESSAGE})`,
       "[Hike thread](https://discord.com/channels/1/2)",
     ]);
+  });
+});
+
+describe("the When line", () => {
+  it.each([
+    [12, LA, "**When:** Sat, 5 Dec 2026 · 09:00 (<t:1796490000:R>)"],
+    [
+      12,
+      "Europe/Berlin",
+      "**When:** Sat, 5 Dec 2026 · 09:00 (<t:1796457600:R>)",
+    ],
+    // A date stored without a time, from before every date had one, is read as 11:00.
+    [13, LA, "**When:** Sat, 5 Dec 2026 (<t:1796497200:R>)"],
+  ])("of option %i in %s is %s", (winnerOptionId, timeZone, line) => {
+    const poll = datePoll({ status: "closed", winnerOptionId });
+    const view = renderAnnouncement(
+      { poll, round: round(poll), guildId: GUILD, timeZone },
+      DATE_POLL,
+    );
+    expect(text(view).split("\n")[3]).toBe(line);
   });
 });
 
@@ -434,7 +471,10 @@ function bodyOf(sent: Sent | undefined) {
     components?: APIMessageTopLevelComponent[];
     allowed_mentions?: unknown;
     flags?: number;
-    message?: { allowed_mentions?: unknown };
+    message?: {
+      allowed_mentions?: unknown;
+      components?: APIMessageTopLevelComponent[];
+    };
   };
 }
 
@@ -506,8 +546,10 @@ describe("starting the date vote", () => {
           custom_id: DATE_IDS.dates,
           style: TextInputStyle.Paragraph,
           required: true,
-          placeholder: "2026-12-05 or 2026-12-05 09:00",
+          placeholder: "2026-12-05 (starts at 11:00) or 2026-12-05 09:00",
         }) as unknown,
+        description:
+          "2 to 25 dates, as YYYY-MM-DD or YYYY-MM-DD HH:MM (24-hour); the time defaults to 11:00.",
       }),
     ]);
   });
@@ -559,10 +601,11 @@ describe("starting the date vote", () => {
       messageId: "900000000000000001",
     });
     expect(round?.datePoll?.options.map((o) => o.label)).toEqual([
-      "Sat, 8 Jun 2030",
       "Sat, 8 Jun 2030 · 09:00",
-      "Sat, 15 Jun 2030",
+      "Sat, 8 Jun 2030 · 11:00",
+      "Sat, 15 Jun 2030 · 11:00",
     ]);
+    expect(text(message.components)).toContain("**Sat, 8 Jun 2030 · 11:00**");
     const panel = text(bodyOf(sent.at(-1)).components);
     expect(panel).toContain(`The date vote is open in <#${TEXT}>.`);
     expect(panel).toContain("**Location decided:** Ridge Trail");
@@ -694,17 +737,20 @@ describe("closing the date vote", () => {
       text(bodyOf(r).components),
     );
     expect(announcement?.split("\n").at(-1)).toBe("**Hike thread:** <#1>");
-    expect(edit).toContain("🏆 **Sat, 15 Jun 2030** won with 1 vote.");
+    expect(edit).toContain("🏆 **Sat, 15 Jun 2030 · 11:00** won with 1 vote.");
     expect(announcement).toContain("**Where:** Ridge Trail");
-    expect(announcement).toContain("**When:** Sat, 15 Jun 2030");
+    // 11:00 in Los Angeles on 15 June 2030 is 18:00 UTC.
+    expect(announcement).toContain(
+      "**When:** Sat, 15 Jun 2030 · 11:00 (<t:1907776800:R>)",
+    );
     expect(announcement).toContain(
       "2 options tied with 1 vote each; the winner was drawn at random.",
     );
     expect(panel).toContain(
-      "The date vote is closed: **Sat, 15 Jun 2030** won with 1 vote, drawn at random from a tie.",
+      "The date vote is closed: **Sat, 15 Jun 2030 · 11:00** won with 1 vote, drawn at random from a tie.",
     );
     expect(panel).toContain(
-      "**Last hike:** **Ridge Trail** on **Sat, 15 Jun 2030**.",
+      "**Last hike:** **Ridge Trail** on **Sat, 15 Jun 2030 · 11:00**.",
     );
     expect(panel).toContain("**Hike thread:** <#1>");
     expect(ids(bodyOf(sent[3]).components)).toContain("hb:location:start");
@@ -714,6 +760,30 @@ describe("closing the date vote", () => {
         bodyOf(r).allowed_mentions ?? bodyOf(r).message?.allowed_mentions,
       ).toEqual({ parse: [] });
     }
+  });
+
+  it("times the When line in the zone set before the vote closed", async () => {
+    const guild = "date-vote-close-zone";
+    const view = await tiedDatePoll(guild);
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() => Promise.resolve(Response.json({ id: "1" })));
+    await runInDurableObject(stub(guild), async (_i, state) => {
+      new GuildConfig(state.storage).setTimezone("Europe/Berlin");
+      await closePoll(
+        closeClick(view),
+        { env, storage: state.storage },
+        { date: DATE_POLL },
+        new PollStore(state.storage, { random: sequence(1) }),
+      ).followUp?.();
+    });
+    const [, thread, announcement] = requests(fetchSpy).map((r) =>
+      text(bodyOf(r).components ?? bodyOf(r).message?.components),
+    );
+    // 11:00 in Berlin on 15 June 2030 is 09:00 UTC.
+    const when = "**When:** Sat, 15 Jun 2030 · 11:00 (<t:1907744400:R>)";
+    expect(announcement).toContain(when);
+    expect(thread).toContain(when);
   });
 
   it("keeps the result and names each step Discord refused", async () => {
@@ -747,7 +817,7 @@ describe("closing the date vote", () => {
       `Could not post the announcement in <#${NEWS}>: Discord could not be reached.`,
     );
     expect(panel).toContain(
-      "**Last hike:** **Ridge Trail** on **Sat, 8 Jun 2030**.",
+      "**Last hike:** **Ridge Trail** on **Sat, 8 Jun 2030 · 11:00**.",
     );
     expect(panel).toContain(
       `**Hike thread:** not created. Could not create the hike thread in <#${FORUM}>: Discord could not be reached.`,

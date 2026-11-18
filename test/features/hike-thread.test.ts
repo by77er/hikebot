@@ -209,7 +209,12 @@ describe("renderThreadMessage", () => {
         poll(
           2,
           "date",
-          [option(11, 2, "Sat, 15 Jun 2030 · 09:00", { votes: 1 })],
+          [
+            option(11, 2, "Sat, 15 Jun 2030 · 09:00", {
+              dateValue: "2030-06-15 09:00",
+              votes: 1,
+            }),
+          ],
           {
             tieBroken: true,
             tiedOptionIds: [11, 12],
@@ -218,12 +223,14 @@ describe("renderThreadMessage", () => {
         ),
       ),
       GUILD,
+      "America/Los_Angeles",
     );
     expect(text(view).split("\n")).toEqual([
       "## Lake Loop",
       "https://example.com/lake · 12 km",
       `Proposed by <@${PROPOSER}>`,
-      "**When:** Sat, 15 Jun 2030 · 09:00",
+      // 09:00 in Los Angeles on 15 June 2030 is 16:00 UTC.
+      "**When:** Sat, 15 Jun 2030 · 09:00 (<t:1907769600:R>)",
       `**Location vote:** **Lake Loop** won with 3 votes; 4 members voted. [See the location vote](https://discord.com/channels/${GUILD}/${TEXT}/${LOCATION_MESSAGE})`,
       `**Date vote:** **Sat, 15 Jun 2030 · 09:00** won with 1 vote; 1 member voted. The winner was drawn at random from 2 tied options. [See the date vote](https://discord.com/channels/${GUILD}/${TEXT}/${DATE_MESSAGE})`,
     ]);
@@ -242,12 +249,22 @@ describe("renderThreadMessage", () => {
             tiedOptionIds: Array.from({ length: tied }, (_, i) => i + 1),
             voterCount: 9999,
           }),
-          poll(2, "date", [option(11, 2, "Wed, 25 Dec 2030 · 23:59")], {
-            tieBroken: tied > 1,
-            tiedOptionIds: Array.from({ length: tied }, (_, i) => i + 11),
-          }),
+          poll(
+            2,
+            "date",
+            [
+              option(11, 2, "Wed, 25 Dec 2030 · 23:59", {
+                dateValue: "2030-12-25 23:59",
+              }),
+            ],
+            {
+              tieBroken: tied > 1,
+              tiedOptionIds: Array.from({ length: tied }, (_, i) => i + 11),
+            },
+          ),
         ),
         "2".repeat(20),
+        "America/Los_Angeles",
       );
       expect(flatten(view as unknown as Node[]).length).toBeLessThanOrEqual(
         MAX_MESSAGE_COMPONENTS,
@@ -533,7 +550,12 @@ describe("closing the date vote", () => {
     await runInDurableObject(stub(guild), async (_i, state) => {
       const store = new PollStore(state.storage);
       const result = await createHikeThreadStep.run(
-        { poll: view, round: store.getLastRound(), guildId: GUILD },
+        {
+          poll: view,
+          round: store.getLastRound(),
+          guildId: GUILD,
+          timeZone: "America/Los_Angeles",
+        },
         { env, storage: state.storage },
       );
       expect(result).toEqual({});

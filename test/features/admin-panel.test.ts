@@ -23,6 +23,7 @@ import {
   vi,
 } from "vitest";
 import {
+  ADMIN_PANEL_FIELDS,
   ADMIN_PANEL_IDS,
   POLL_CONTROL_IDS,
   actionButtons,
@@ -181,7 +182,7 @@ function submitTimezone(
         type: ComponentType.Label,
         component: {
           type: ComponentType.TextInput,
-          custom_id: ADMIN_PANEL_IDS.timezoneInput,
+          custom_id: ADMIN_PANEL_FIELDS.timezone,
           value,
         },
       },
@@ -839,7 +840,7 @@ describe("the admin panel", () => {
         label: "Time zone",
         component: {
           type: ComponentType.TextInput,
-          custom_id: ADMIN_PANEL_IDS.timezoneInput,
+          custom_id: ADMIN_PANEL_FIELDS.timezone,
           style: TextInputStyle.Short,
           required: true,
           value: "America/Los_Angeles",

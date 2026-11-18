@@ -75,7 +75,11 @@ export const ADMIN_PANEL_IDS = {
   announceChannel: customId("admin", "announce-channel"),
   forumChannel: customId("admin", "forum-channel"),
   timezone: customId("admin", "timezone"),
-  timezoneInput: customId("admin", "timezone-name"),
+} as const;
+
+/** The fields of the panel's modals, read back from their submissions. */
+export const ADMIN_PANEL_FIELDS = {
+  timezone: customId("admin", "timezone-name"),
 } as const;
 
 /** The panel's poll controls; their handlers live with the poll features. */
@@ -567,7 +571,7 @@ const openTimezoneModal: ComponentHandler = adminOnly(
       label(
         "Time zone",
         textInput({
-          custom_id: ADMIN_PANEL_IDS.timezoneInput,
+          custom_id: ADMIN_PANEL_FIELDS.timezone,
           required: true,
           max_length: MAX_TIMEZONE_INPUT,
           value: settings.timezone,
@@ -587,7 +591,7 @@ const openTimezoneModal: ComponentHandler = adminOnly(
 const saveTimezone: ModalHandler = adminOnly(
   (interaction: APIModalSubmitInteraction, context, settings) => {
     const typed =
-      textInputValue(interaction.data, ADMIN_PANEL_IDS.timezoneInput) ?? "";
+      textInputValue(interaction.data, ADMIN_PANEL_FIELDS.timezone) ?? "";
     const zone = normalizeTimeZone(typed);
     if (zone === null) {
       const what =

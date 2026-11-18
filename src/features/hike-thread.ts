@@ -21,7 +21,13 @@ import {
 import { GuildConfig } from "../guild/config";
 import { adminOnly } from "../guild/permissions";
 import type { ComponentHandler, HandlerContext, Router } from "../guild/router";
-import { PollStore, type PollView, type RoundView } from "../polls/store";
+import { hikeStart } from "../polls/dates";
+import {
+  PollStore,
+  type OptionView,
+  type PollView,
+  type RoundView,
+} from "../polls/store";
 import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
 import {
   claimHikeThread,
@@ -53,6 +59,23 @@ export const HIKE_THREAD_IDS = {
 export function threadTitle(location: string, date: string): string {
   const room = MAX_THREAD_NAME - TITLE_SEPARATOR.length - date.length;
   return `${shorten(location, room)}${TITLE_SEPARATOR}${date}`;
+}
+
+/**
+ * `**When:** Sat, 5 Dec 2026 · 11:00 (<t:1796497200:R>)`: the date's label
+ * and Discord's relative timestamp of its start in `timeZone`, which each
+ * member sees in their own words ("in 3 days"). A date with no value shows
+ * the label alone.
+ */
+export function whenLine(date: OptionView | null, timeZone: string): string {
+  const start =
+    date === null || date.dateValue === null
+      ? NaN
+      : hikeStart(date.dateValue, timeZone);
+  const label = date?.label ?? "?";
+  return Number.isNaN(start)
+    ? `**When:** ${label}`
+    : `**When:** ${label} (<t:${String(Math.floor(start / 1000))}:R>)`;
 }
 
 /** The winning option of a closed poll, if any. */
@@ -94,20 +117,22 @@ function resultLine(
 
 /**
  * The thread's first message: the location and its details, who proposed
- * it (a mention that pings no one), the date, and the result of both votes
+ * it (a mention that pings no one), the date with its start in the guild's
+ * time zone as a relative timestamp, and the result of both votes
  * with links to their messages. Location labels (80) and details (300) are
  * bounded, so it stays far within 40 components and 4000 characters.
  */
 export function renderThreadMessage(
   round: RoundView,
   guildId: string,
+  timeZone: string,
 ): APIMessageTopLevelComponent[] {
   const location = winnerOf(round.locationPoll);
   const date = winnerOf(round.datePoll);
   const head = [`## ${location?.label ?? "?"}`];
   if (location?.details) head.push(location.details);
   if (location) head.push(`Proposed by <@${location.proposedBy}>`);
-  head.push(`**When:** ${date?.label ?? "?"}`);
+  head.push(whenLine(date, timeZone));
   return [
     container([
       textDisplay(head.join("\n")),
@@ -136,7 +161,9 @@ async function createHikeThread(
   context: HandlerContext,
 ): Promise<Created> {
   const store = new PollStore(context.storage);
-  const forumId = new GuildConfig(context.storage).get().forumChannelId;
+  const { forumChannelId: forumId, timezone } = new GuildConfig(
+    context.storage,
+  ).get();
   if (forumId === null) {
     const reason =
       "No hike threads channel is set. Pick one under Settings, then click Create hike thread.";
@@ -149,7 +176,7 @@ async function createHikeThread(
         winnerOf(round.locationPoll)?.label ?? "Hike",
         winnerOf(round.datePoll)?.label ?? "?",
       ),
-      message: messageBody(renderThreadMessage(round, guildId)),
+      message: messageBody(renderThreadMessage(round, guildId, timezone)),
     });
     store.setRoundThread(round.id, thread.id);
     clearHikeThreadAttempt(context.storage, round.id);

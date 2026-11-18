@@ -96,8 +96,7 @@ export function normalizeTimeZone(input: string): string | null {
   const name = input.trim();
   const alias = TIMEZONE_ALIASES[name.toUpperCase()];
   if (alias !== undefined) return alias;
-  if (!/^[A-Za-z][A-Za-z0-9_+\-]*(\/[A-Za-z0-9_+\-]+)*$/.test(name))
-    return null;
+  if (!/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)*$/.test(name)) return null;
   let resolved: string;
   try {
     resolved = new Intl.DateTimeFormat("en-US", {

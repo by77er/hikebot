@@ -283,15 +283,19 @@ describe("renderVoteSelect", () => {
 describe("renderAnnouncement", () => {
   it("names the winner, its votes, the tie and links the poll message", () => {
     const view = renderAnnouncement(
-      poll({
-        status: "closed",
-        options: [option(1, "Ridge", 2, "Trail link"), option(2, "Lake", 2)],
-        winnerOptionId: 2,
-        tieBroken: true,
-        tiedOptionIds: [1, 2],
-      }),
+      {
+        poll: poll({
+          status: "closed",
+          options: [option(1, "Ridge", 2, "Trail link"), option(2, "Lake", 2)],
+          winnerOptionId: 2,
+          tieBroken: true,
+          tiedOptionIds: [1, 2],
+        }),
+        round: null,
+        guildId: "200000000000000001",
+        timeZone: "America/Los_Angeles",
+      },
       LOCATION_POLL,
-      "200000000000000001",
     );
     const shown = text(view);
     expect(shown).toContain("## Hike location decided");

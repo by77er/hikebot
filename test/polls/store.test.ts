@@ -428,9 +428,9 @@ describe("startDatePoll", () => {
         openedBy: "u-admin",
       });
       expect(poll.options.map((o) => [o.dateValue, o.label])).toEqual([
-        ["2026-12-05", "Sat, 5 Dec 2026"],
         ["2026-12-05 09:00", "Sat, 5 Dec 2026 · 09:00"],
-        ["2026-12-12", "Sat, 12 Dec 2026"],
+        ["2026-12-05 11:00", "Sat, 5 Dec 2026 · 11:00"],
+        ["2026-12-12 11:00", "Sat, 12 Dec 2026 · 11:00"],
       ]);
       expect(store.getActiveRound()).toMatchObject({
         status: "date_voting",
@@ -449,6 +449,11 @@ describe("startDatePoll", () => {
       expectCode(() => start([...dates(25), "2027-02-01"]), "too_many_options");
       expectCode(
         () => start(["2027-01-01", " 2027-01-01 "]),
+        "duplicate_option",
+      );
+      // A date without a time is the same option as that date at 11:00.
+      expectCode(
+        () => start(["2027-01-01", "2027-01-01 11:00"]),
         "duplicate_option",
       );
       expectCode(() => start(["2027-01-01", "2027-02-30"]), "invalid_date");
