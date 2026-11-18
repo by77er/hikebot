@@ -2,8 +2,8 @@
  * The parts of a poll every kind shares: the public poll message, the Vote
  * button and its ephemeral multi-select, the debounced refresh of the poll
  * message through the Durable Object alarm, and the admin's close and
- * cancel flows. A poll kind (`location-vote.ts`, later the date vote)
- * supplies its wording and extra buttons as a `PollWording`.
+ * cancel flows. A poll kind (`location-vote.ts`, `date-vote.ts`) supplies
+ * its wording, extra buttons and close steps as a `PollWording`.
  */
 import {
   ButtonStyle,
@@ -48,6 +48,7 @@ import {
   type OptionView,
   type PollKind,
   type PollView,
+  type RoundView,
 } from "../polls/store";
 import { rankOptions } from "../polls/tally";
 import {
@@ -59,8 +60,8 @@ import {
 /** What a poll kind says and adds; the shared code does the rest. */
 export interface PollWording {
   kind: PollKind;
-  /** The poll message's heading. */
-  title: string;
+  /** The poll message's heading, from the poll's round when there is one. */
+  title: (round: RoundView | null) => string;
   /** One line under the heading while the poll is open. */
   instructions: string;
   /** Shown in place of the options while there are none. */
@@ -74,10 +75,51 @@ export interface PollWording {
   name: string;
   /** Whether each option shows who proposed it. */
   showProposer: boolean;
+  /**
+   * How the poll message orders the options: by votes (most first, ties in
+   * the order they were added) or by date (chronological).
+   */
+  order: "votes" | "date";
   /** Buttons after Vote while the poll is open. */
   extraButtons: (poll: PollView) => APIButtonComponentWithCustomId[];
   /** The announcement's heading: "Hike location decided". */
   announcement: string;
+  /** Lines the announcement opens with, under its heading. */
+  announcementLines: (poll: PollView, round: RoundView | null) => string[];
+  /**
+   * Steps the close flow runs after the poll message is final and before
+   * the announcement, in order; what they return goes into the
+   * announcement and the panel.
+   */
+  closeSteps: CloseStep[];
+}
+
+/** What a closed poll's steps work from. */
+export interface ClosedPoll {
+  poll: PollView;
+  round: RoundView | null;
+  guildId: string;
+}
+
+/**
+ * One step of the close flow that runs before the announcement, such as
+ * creating the hike's forum thread. A step that throws is named in the
+ * panel with the error; the announcement is still posted.
+ */
+export interface CloseStep {
+  /** What the step does, for the panel when it fails: "create the hike thread". */
+  name: string;
+  run: (
+    closed: ClosedPoll,
+    context: HandlerContext,
+  ) => Promise<CloseStepResult>;
+}
+
+export interface CloseStepResult {
+  /** Lines for the announcement, such as a link to what the step made. */
+  announce?: string[];
+  /** A line for the panel, such as why the step did nothing. */
+  note?: string;
 }
 
 /** The poll kinds the shared handlers serve, by kind. */
@@ -118,13 +160,14 @@ export const POLL_IDS = {
 export function renderPollMessage(
   poll: PollView,
   wording: PollWording,
+  round: RoundView | null = null,
 ): APIMessageTopLevelComponent[] {
   const open = poll.status === "open";
   const cancelled = !open && poll.winnerOptionId === null;
   const winner = poll.options.find((o) => o.id === poll.winnerOptionId);
 
   const head: string[] = [
-    `## ${wording.title}${open ? "" : cancelled ? " (cancelled)" : " (closed)"}`,
+    `## ${wording.title(round)}${open ? "" : cancelled ? " (cancelled)" : " (closed)"}`,
   ];
   if (open) head.push(wording.instructions);
   else if (cancelled) head.push("This vote was cancelled.");
@@ -134,7 +177,10 @@ export function renderPollMessage(
   }
   const foot = voters(poll.voterCount);
 
-  const ranked = rankOptions(poll.options);
+  const ranked =
+    wording.order === "date"
+      ? chronological(poll.options)
+      : rankOptions(poll.options);
   const titles = ranked.map((option) => optionTitle(option, poll));
   const proposers = ranked.map((option) =>
     wording.showProposer ? `Proposed by <@${option.proposedBy}>` : "",
@@ -175,6 +221,14 @@ export function renderPollMessage(
     );
   }
   return [container(body)];
+}
+
+/** Date options by date, earliest first; others in the order they were added. */
+export function chronological(options: readonly OptionView[]): OptionView[] {
+  return [...options].sort(
+    (a, b) =>
+      (a.dateValue ?? "").localeCompare(b.dateValue ?? "") || a.id - b.id,
+  );
 }
 
 function optionTitle(option: OptionView, poll: PollView): string {
@@ -232,12 +286,13 @@ export function renderVoteSelect(
   poll: PollView,
   wording: PollWording,
   notice?: string,
+  round: RoundView | null = null,
 ): APIMessageTopLevelComponent[] {
   return [
     container([
       textDisplay(
         notice ??
-          `**${wording.title}**\nPick every ${wording.noun} you would go to, then click away. Pick none to clear your votes.`,
+          `**${wording.title(round)}**\nPick every ${wording.noun} you would go to, then click away. Pick none to clear your votes.`,
       ),
       actionRow(
         stringSelect({
@@ -372,7 +427,9 @@ export async function refreshPollMessages(
         await discordApi(context.env).editMessage(
           poll.channelId,
           poll.messageId,
-          messageBody(renderPollMessage(poll, wording)),
+          messageBody(
+            renderPollMessage(poll, wording, store.getRound(poll.roundId)),
+          ),
         );
       } catch (error) {
         console.error(
@@ -393,10 +450,9 @@ export async function refreshPollMessages(
 function openVoteSelect(wordings: PollWordings): ComponentHandler {
   return (interaction, context) => {
     const pollId = numericArg(interaction);
+    const store = new PollStore(context.storage);
     const poll =
-      pollId === null
-        ? null
-        : new PollStore(context.storage).getPoll(pollId, userIdOf(interaction));
+      pollId === null ? null : store.getPoll(pollId, userIdOf(interaction));
     const wording = poll && wordings[poll.kind];
     if (!poll || !wording) {
       return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
@@ -407,7 +463,16 @@ function openVoteSelect(wordings: PollWordings): ComponentHandler {
     if (poll.options.length === 0) {
       return { response: ephemeralNotice(wording.noOptions) };
     }
-    return { response: ephemeralReply(renderVoteSelect(poll, wording)) };
+    return {
+      response: ephemeralReply(
+        renderVoteSelect(
+          poll,
+          wording,
+          undefined,
+          store.getRound(poll.roundId),
+        ),
+      ),
+    };
   };
 }
 
@@ -458,7 +523,11 @@ function saveVotes(wordings: PollWordings): ComponentHandler {
       chosen.length === 0
         ? "Your votes are cleared. Pick again any time while the vote is open."
         : `Your votes are saved: ${chosen.join(", ")}. Change them here any time while the vote is open.`;
-    return { response: update(renderVoteSelect(poll, wording, notice)) };
+    return {
+      response: update(
+        renderVoteSelect(poll, wording, notice, store.getRound(poll.roundId)),
+      ),
+    };
   };
 }
 
@@ -517,9 +586,9 @@ function noOptionsToClose(wording: PollWording): string {
 
 /**
  * Closes the poll through the poll core (the result is stored before the
- * response), then in the follow-up edits the poll message to its final
- * state, posts the announcement and redraws the panel, naming any step that
- * failed and why.
+ * response), then in the follow-up runs the close flow: the final edit of
+ * the poll message, the kind's close steps, the announcement and the panel
+ * redraw, naming any step that failed and why.
  */
 export function closePoll(
   interaction: APIMessageComponentInteraction,
@@ -545,66 +614,113 @@ export function closePoll(
     }
     throw error;
   }
-  const winner = poll.options.find((o) => o.id === poll.winnerOptionId);
-  const announceChannelId = new GuildConfig(context.storage).get()
-    .announceChannelId;
+  const closed: ClosedPoll = {
+    poll,
+    round: store.getRound(poll.roundId),
+    guildId: interaction.guild_id ?? "",
+  };
   return {
     response: deferPanel(interaction),
     followUp: async () => {
-      const api = discordApi(context.env);
-      const notes = [
-        `The ${wording.name} is closed: **${winner?.label ?? "?"}** won with ${votes(winner?.votes ?? 0)}${poll.tieBroken ? ", drawn at random from a tie" : ""}.`,
-      ];
-      if (poll.channelId === null || poll.messageId === null) {
-        notes.push("The poll message was never posted, so it was not updated.");
-      } else {
-        const { channelId, messageId } = poll;
-        try {
-          await queuePollEdit(context.storage, () =>
-            api.editMessage(
-              channelId,
-              messageId,
-              messageBody(renderPollMessage(poll, wording)),
-            ),
-          );
-        } catch (error) {
-          notes.push(
-            `Could not update the poll message in <#${channelId}>: ${errorText(error)}.`,
-          );
-        }
-      }
-      if (announceChannelId === null) {
-        notes.push(
-          "No announcements channel is set, so the result was not announced.",
-        );
-      } else {
-        try {
-          await api.createMessage(
-            announceChannelId,
-            messageBody(
-              renderAnnouncement(poll, wording, interaction.guild_id ?? ""),
-            ),
-          );
-        } catch (error) {
-          notes.push(
-            `Could not post the announcement in <#${announceChannelId}>: ${errorText(error)}.`,
-          );
-        }
-      }
+      const notes = await runCloseFlow(closed, wording, context);
       await finishPanel(context, interaction, notes.join("\n"));
     },
   };
 }
 
-/** The announcement of a closed poll's winner. */
+/**
+ * The close flow after the result is stored, in order: the final edit of
+ * the poll message, the kind's `closeSteps` (each may add lines to the
+ * announcement), then the announcement. Returns the panel's notes: the
+ * result, then one line per step that failed or had something to say.
+ */
+export async function runCloseFlow(
+  closed: ClosedPoll,
+  wording: PollWording,
+  context: HandlerContext,
+): Promise<string[]> {
+  const { poll, round } = closed;
+  const winner = poll.options.find((o) => o.id === poll.winnerOptionId);
+  const notes = [
+    `The ${wording.name} is closed: **${winner?.label ?? "?"}** won with ${votes(winner?.votes ?? 0)}${poll.tieBroken ? ", drawn at random from a tie" : ""}.`,
+  ];
+  const note = await finalizePollMessage(closed, wording, context);
+  if (note !== null) notes.push(note);
+
+  const extra: string[] = [];
+  for (const step of wording.closeSteps) {
+    try {
+      const result = await step.run(closed, context);
+      extra.push(...(result.announce ?? []));
+      if (result.note !== undefined) notes.push(result.note);
+    } catch (error) {
+      notes.push(`Could not ${step.name}: ${errorText(error)}.`);
+    }
+  }
+
+  const announceChannelId = new GuildConfig(context.storage).get()
+    .announceChannelId;
+  if (announceChannelId === null) {
+    notes.push(
+      "No announcements channel is set, so the result was not announced.",
+    );
+  } else {
+    try {
+      await discordApi(context.env).createMessage(
+        announceChannelId,
+        messageBody(
+          renderAnnouncement(poll, wording, closed.guildId, round, extra),
+        ),
+      );
+    } catch (error) {
+      notes.push(
+        `Could not post the announcement in <#${announceChannelId}>: ${errorText(error)}.`,
+      );
+    }
+  }
+  return notes;
+}
+
+/** Edits the poll message to its final state; a note if that failed. */
+async function finalizePollMessage(
+  { poll, round }: ClosedPoll,
+  wording: PollWording,
+  context: HandlerContext,
+): Promise<string | null> {
+  if (poll.channelId === null || poll.messageId === null) {
+    return "The poll message was never posted, so it was not updated.";
+  }
+  const { channelId, messageId } = poll;
+  try {
+    await queuePollEdit(context.storage, () =>
+      discordApi(context.env).editMessage(
+        channelId,
+        messageId,
+        messageBody(renderPollMessage(poll, wording, round)),
+      ),
+    );
+    return null;
+  } catch (error) {
+    return `Could not update the poll message in <#${channelId}>: ${errorText(error)}.`;
+  }
+}
+
+/**
+ * The announcement of a closed poll's winner: the heading, the kind's own
+ * lines, the winner and its votes, its details, the tie note, the link to
+ * the poll message, then `extra` lines from the close steps.
+ */
 export function renderAnnouncement(
   poll: PollView,
   wording: PollWording,
   guildId: string,
+  round: RoundView | null = null,
+  extra: readonly string[] = [],
 ): APIMessageTopLevelComponent[] {
   const winner = poll.options.find((o) => o.id === poll.winnerOptionId);
   const lines = [
     `## ${wording.announcement}`,
+    ...wording.announcementLines(poll, round),
     `**${winner?.label ?? "?"}** won the ${wording.name} with ${votes(winner?.votes ?? 0)}.`,
   ];
   if (winner?.details) lines.push(winner.details);
@@ -614,6 +730,7 @@ export function renderAnnouncement(
       `[See the vote](https://discord.com/channels/${guildId}/${poll.channelId}/${poll.messageId})`,
     );
   }
+  lines.push(...extra);
   return [container([textDisplay(lines.join("\n"))])];
 }
 
@@ -677,7 +794,9 @@ function cancelRound(wordings: PollWordings): ComponentHandler {
               discordApi(context.env).editMessage(
                 channelId,
                 messageId,
-                messageBody(renderPollMessage(poll, wording)),
+                messageBody(
+                  renderPollMessage(poll, wording, store.getRound(roundId)),
+                ),
               ),
             );
           } catch (error) {
