@@ -15,7 +15,12 @@ import {
 } from "discord-api-types/v10";
 import { vi } from "vitest";
 import type { FakeDiscord, FakeMessage } from "./fake-discord";
-import type { Actor, InteractionClient, SourceMessage } from "./interactions";
+import type {
+  Actor,
+  Interaction,
+  InteractionClient,
+  SourceMessage,
+} from "./interactions";
 
 type Json = Record<string, unknown>;
 
@@ -132,17 +137,43 @@ export function waitForOriginalResponse(
 
 /** A guild member who uses the bot through the interaction client. */
 export class Member {
+  /** The token of the last interaction this member sent. */
+  lastToken: string | undefined;
+
   constructor(
     private readonly client: InteractionClient,
     readonly actor: Actor,
   ) {}
+
+  private send(interaction: Interaction): Promise<APIInteractionResponse> {
+    this.lastToken = interaction.token;
+    return this.client.send(interaction);
+  }
+
+  /**
+   * The reply to this member's last interaction as the fake stores it, after
+   * any follow-up edits: the message they see, for example a panel to click
+   * on next.
+   */
+  lastReply(): FakeMessage {
+    const reply =
+      this.lastToken === undefined
+        ? undefined
+        : this.client.discord.originalResponse(this.lastToken);
+    if (!reply) {
+      throw new Error(
+        "the member's last interaction has no reply message; it was answered with an update, a modal or not at all",
+      );
+    }
+    return reply;
+  }
 
   /** Runs a slash command. */
   run(
     name: string,
     options: APIApplicationCommandInteractionDataOption[] = [],
   ): Promise<APIInteractionResponse> {
-    return this.client.send(this.client.command(this.actor, name, options));
+    return this.send(this.client.command(this.actor, name, options));
   }
 
   /**
@@ -174,7 +205,7 @@ export class Member {
     if (button.style === ButtonStyle.Link || button.disabled === true) {
       throw new Error(`the button "${customId}" cannot be clicked`);
     }
-    return this.client.send(this.client.button(this.actor, customId, shown));
+    return this.send(this.client.button(this.actor, customId, shown));
   }
 
   /**
@@ -192,11 +223,11 @@ export class Member {
     checkSelection(select, customId, values);
     switch (select.type) {
       case ComponentType.StringSelect:
-        return this.client.send(
+        return this.send(
           this.client.stringSelect(this.actor, customId, values, shown),
         );
       case ComponentType.RoleSelect:
-        return this.client.send(
+        return this.send(
           this.client.roleSelect(this.actor, customId, values, shown),
         );
       case ComponentType.ChannelSelect: {
@@ -209,7 +240,7 @@ export class Member {
           }
           return { id, type: channel.type };
         });
-        return this.client.send(
+        return this.send(
           this.client.channelSelect(this.actor, customId, channels, shown),
         );
       }
@@ -269,7 +300,7 @@ export class Member {
       submitted[id] =
         values[id] ?? (field.type === ComponentType.TextInput ? "" : []);
     }
-    return this.client.send(
+    return this.send(
       this.client.modalSubmit(
         this.actor,
         modal.custom_id,

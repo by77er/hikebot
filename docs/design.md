@@ -154,7 +154,76 @@ ones are appended. `0001_polls` creates the poll tables described under
   No discord.js or other Discord client library.
 - Randomness and time are injected where behaviour depends on them, so tests
   are deterministic.
-- Tests run in the Workers runtime through `@cloudflare/vitest-plugin`.
+- Tests come in two layers, described under "Testing".
+
+## Testing
+
+`npm test` runs two Vitest projects; both must pass.
+
+- **Unit** (`test/`, except `test/e2e/`): tests run inside the Workers
+  runtime through `@cloudflare/vitest-plugin`, with real Durable Object
+  SQLite storage. They import modules from `src/` and test them directly:
+  poll rules, the router, the REST client with a stubbed `fetch`, the
+  builders.
+- **End to end** (`test/e2e/`, `npm run test:e2e`): tests run in Node. Each
+  test file starts the Worker from `wrangler.jsonc` in local workerd with
+  Wrangler's `createTestHarness`, with fresh in-memory Durable Object
+  storage, a signing key pair generated for the file as
+  `DISCORD_PUBLIC_KEY`, a dummy bot token and application id, and
+  `DISCORD_API_BASE` pointing at a fake Discord API on a free local port.
+  Tests reach the Worker only as Discord does, with signed
+  `POST /interactions` requests, and import nothing from `src/` (ESLint
+  enforces this). The suite needs no network beyond localhost, no
+  credentials and no writable home directory; it stops workerd and the fake
+  after each file, also when a test fails or times out.
+
+The e2e harness (`test/e2e/harness/`) has four parts:
+
+- An interaction client that builds realistic slash command, button,
+  string/role/channel select and modal submit (fields inside Labels)
+  payloads, signs them and sends them. It fails the test when the Worker
+  takes more than 3 seconds, answers with anything but 200 and JSON, or
+  answers with a response Discord would refuse for that interaction: a
+  callback type the interaction does not accept (a modal in reply to a modal
+  submit, an update to a modal not opened from a message), flags a message
+  or deferred response cannot set, or data that breaks the rules below.
+- A fake Discord API on `node:http` with the routes the bot uses: create and
+  edit message, start forum thread, get guild, edit original interaction
+  response, create follow-up and bulk overwrite global commands. It keeps
+  guilds (with owner), channels (with type), threads, messages and
+  interaction replies in memory, so tests assert on what the channel shows.
+  Tests can make a channel fail as Discord does (403/50013 missing
+  permissions, 403/50001 missing access, 404/10003 unknown channel) and
+  answer one request with a 429 and `retry_after`.
+- Discord's rules, which the fake enforces on every message, edit, thread
+  and command it receives and the client on every interaction response,
+  answering a 400 that names the rule and links the docs page stating it:
+  bot routes need `Authorization: Bot <token>` (401 otherwise); a Components
+  V2 message has no `content` or `embeds` and keeps its flag; at most 40
+  components and 4000 characters of Text Display text per message; action
+  rows hold up to 5 buttons or one select; selects have 1-25 options and
+  `min_values` 0-25, `max_values` 1-25 within the option count; option
+  label, value and description up to 100 characters; button labels up to
+  80; `custom_id` 1-100 characters and unique within a message; modal titles
+  and Label text up to 45, 1-5 modal components; text input limits; thread
+  names 1-100 characters and forum threads only in forum or media channels;
+  command names and descriptions. A request the fake refuses fails the test
+  that caused it.
+- Helpers that read a message's text, find a component by `custom_id` in a
+  nested Components V2 tree, act as a member who clicks, selects and submits
+  only controls on messages the fake stores (or in the modal the Worker
+  returned), and wait for background work by polling the fake with a
+  timeout.
+
+Harness self-tests check every rule of the fake against a payload at the
+limit and one past it, and the client against a stand-in server. Those that
+need the bot to call Discord before a feature does run a probe Worker
+(`test/e2e/probe/worker.ts`, never deployed): the real Worker and the real
+`GuildHike` with one extra `/e2e-probe` command on its router, whose
+follow-ups call the fake through the real `DiscordApi`. They show that each
+guild's state stays in its own object, that the REST client retries a 429
+and surfaces 403 and 404 failures as `DiscordApiError`, and that the
+signature check, guild routing and follow-up path work in workerd.
 
 ## Commands
 
