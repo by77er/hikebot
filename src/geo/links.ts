@@ -7,6 +7,9 @@ import type { Point } from "./coordinates";
 /** The attribution line, in Discord's small text. */
 export const OSM_ATTRIBUTION = "-# © OpenStreetMap contributors";
 
+/** Opens a line that shows where a location is. */
+export const PLACE_MARK = "📍 ";
+
 /** Degrees to five decimals (about a metre), without trailing zeros. */
 export function formatDegrees(value: number): string {
   const fixed = value.toFixed(5).replace(/\.?0+$/, "");
@@ -38,4 +41,20 @@ export function googleLink({ lat, lon }: Point): string {
 /** `[OpenStreetMap](…) · [Google Maps](…)`, for messages. */
 export function mapLinks(point: Point): string {
   return `[OpenStreetMap](${osmLink(point)}) · [Google Maps](${googleLink(point)})`;
+}
+
+/**
+ * The line that shows where a decided location is:
+ * `📍 <place name> · [OpenStreetMap](…) · [Google Maps](…)`, without the name
+ * when there is none.
+ */
+export function placeLine(point: Point, name: string | null): string {
+  return `${PLACE_MARK}${name ? `${name} · ` : ""}${mapLinks(point)}`;
+}
+
+/** `lines`, ending with the attribution when one of them shows a place. */
+export function withAttribution(lines: readonly string[]): string[] {
+  return lines.some((line) => line.startsWith(PLACE_MARK))
+    ? [...lines, OSM_ATTRIBUTION]
+    : [...lines];
 }

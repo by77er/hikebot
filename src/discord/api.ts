@@ -9,6 +9,8 @@ import type {
   RESTGetAPIGuildResult,
   RESTPatchAPIChannelMessageJSONBody,
   RESTPatchAPIChannelMessageResult,
+  RESTPatchAPIGuildScheduledEventJSONBody,
+  RESTPatchAPIGuildScheduledEventResult,
   RESTPatchAPIWebhookWithTokenMessageJSONBody,
   RESTPatchAPIWebhookWithTokenMessageResult,
   RESTPostAPIChannelMessageJSONBody,
@@ -240,6 +242,20 @@ export class DiscordApi {
     return this.call({
       method: "POST",
       path: `/guilds/${guildId}/scheduled-events`,
+      body,
+      auth: true,
+    });
+  }
+
+  /** Edits a scheduled event, such as its description. */
+  editGuildScheduledEvent(
+    guildId: string,
+    eventId: string,
+    body: RESTPatchAPIGuildScheduledEventJSONBody,
+  ): Promise<RESTPatchAPIGuildScheduledEventResult> {
+    return this.call({
+      method: "PATCH",
+      path: `/guilds/${guildId}/scheduled-events/${eventId}`,
       body,
       auth: true,
     });

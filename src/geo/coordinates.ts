@@ -60,7 +60,8 @@ const PATTERNS: readonly { re: RegExp; lat: number; lon: number }[] = [
  * Plain decimal `lat, lon` with at least two decimals each, so "Trail 3, 5
  * miles" is not read as a point.
  */
-const DECIMAL = /(?<![\w.:/@=-])([-+]?\d{1,2}\.\d{2,})\s*,\s*([-+]?\d{1,3}\.\d{2,})(?![\w.])/;
+const DECIMAL =
+  /(?<![\w.:/@=-])([-+]?\d{1,2}\.\d{2,})\s*,\s*([-+]?\d{1,3}\.\d{2,})(?![\w.])/;
 
 function inRange(lat: number, lon: number): boolean {
   return (

@@ -58,6 +58,7 @@ import {
   type RestingLocation,
 } from "../polls/store";
 import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
+import { givenPlace, scheduleLocate } from "./locate";
 import {
   VOTE_CLOSED_MESSAGE,
   actorOf,
@@ -75,6 +76,7 @@ export const LOCATION_IDS = {
   propose: (pollId: number) => customId("location", "propose", String(pollId)),
   name: customId("location", "name"),
   details: customId("location", "details"),
+  map: customId("location", "map"),
   again: (pollId: number) => customId("location", "again", String(pollId)),
   newLocation: (pollId: number) => customId("location", "new", String(pollId)),
 } as const;
@@ -294,6 +296,9 @@ export function renderSuggestAgain(
   return [container(body)];
 }
 
+/** The longest map link or coordinates the propose modal takes. */
+const MAX_MAP_INPUT = 1000;
+
 function proposeModal(pollId: number): APIModalInteractionResponse {
   return modal(LOCATION_IDS.propose(pollId), "Propose a location", [
     label(
@@ -313,6 +318,16 @@ function proposeModal(pollId: number): APIModalInteractionResponse {
         max_length: MAX_DETAILS_LENGTH,
       }),
       "Optional: a trail link, the distance, notes",
+    ),
+    label(
+      "Map link or coordinates",
+      textInput({
+        custom_id: LOCATION_IDS.map,
+        required: false,
+        max_length: MAX_MAP_INPUT,
+        placeholder: "47.4875, -121.7234",
+      }),
+      "Optional: a Google Maps, OpenStreetMap or Apple Maps link, or lat, lon",
     ),
   ]);
 }
@@ -390,8 +405,10 @@ const pickPastLocation: ComponentHandler = async (interaction, context) => {
       label: source.label,
       details: source.details,
       proposedBy: userId,
+      ...(source.place === null ? {} : { place: source.place }),
     });
     await scheduleRefresh(context.storage, pollId, store.now());
+    await scheduleLocate(context.storage, store, store.now());
     notice = added(option.label);
   } catch (error) {
     if (!isPollError(error)) throw error;
@@ -417,7 +434,12 @@ const pickPastLocation: ComponentHandler = async (interaction, context) => {
   };
 };
 
-/** The propose modal: adds the option and refreshes the poll message. */
+/**
+ * The propose modal: adds the option, with the coordinates written in its
+ * map field, name or details if any, and refreshes the poll message.
+ * Without coordinates the option is looked up later by the `geo:locate`
+ * job; a map field that holds none is said so in the answer.
+ */
 const saveProposal: ModalHandler = async (interaction, context) => {
   const pollId = pollIdArg(interaction.data.custom_id);
   if (pollId === null) {
@@ -425,14 +447,23 @@ const saveProposal: ModalHandler = async (interaction, context) => {
   }
   const store = new PollStore(context.storage);
   const name = textInputValue(interaction.data, LOCATION_IDS.name) ?? "";
+  const details = textInputValue(interaction.data, LOCATION_IDS.details);
+  const map = textInputValue(interaction.data, LOCATION_IDS.map)?.trim();
+  const place = givenPlace([map, name, details]);
   try {
     const option = store.addOption(pollId, {
       label: name,
-      details: textInputValue(interaction.data, LOCATION_IDS.details) ?? null,
+      details: details ?? null,
       proposedBy: interaction.member?.user.id ?? "",
+      ...(place === undefined ? {} : { place }),
     });
     await scheduleRefresh(context.storage, pollId, store.now());
-    return { response: ephemeralNotice(added(option.label)) };
+    await scheduleLocate(context.storage, store, store.now());
+    const unread =
+      map && givenPlace([map]) === undefined
+        ? ` The map field holds no coordinates I can read (short links are not opened), so the location will be looked up by its name; an admin can set its pin if it wins.`
+        : "";
+    return { response: ephemeralNotice(`${added(option.label)}${unread}`) };
   } catch (error) {
     if (isPollError(error)) {
       return { response: ephemeralNotice(proposalRefusal(error, name.trim())) };
