@@ -142,10 +142,8 @@ example is `/trails` again, now for signed-in members only.
 
 ## Add a form that changes something
 
-Every request that changes something is a `POST` from a form with a CSRF
-token; `checkPost` refuses it with 403 unless the token is the signed-in
-user's and the browser says it came from this site. The example adds a
-trail from a form on `/trails`.
+The example adds a trail from a form on `/trails`; "Sign-in and sessions"
+in `docs/design.md` says which POSTs are refused.
 
 1. In the route that renders the form, make a token with
    `csrfToken(env, session, now)` and pass it to the page; put
