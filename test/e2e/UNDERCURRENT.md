@@ -148,19 +148,20 @@ the request, before its answer reaches the Worker, and the Worker stores the
 new id only once that answer arrives. A wait on the fake's state
 (`e2e.discord.threads(...)`, `channelMessages(...)`, `requests`) therefore
 ends before the bot has stored anything, and an interaction sent next, such
-as Refresh, can be answered without it. After an action whose follow-up
-creates something on Discord, wait with `eventually` or
-`waitForOriginalResponse` until the reply or panel shows the follow-up's
-result, and only then send the next interaction or assert on what the bot
-shows. Assertions on the fake's state may follow that wait, as "Write an
-end-to-end scenario" in `test/AGENTS.md` says.
+as Refresh, can be answered without it. A follow-up's edit is no proof
+either when another interaction edits the same message, since the update
+that lands last stays. After an action whose follow-up creates something on
+Discord, wait with `eventually` until what the bot shows from storage holds
+it, clicking Refresh inside the `eventually`, and only then assert on what
+the bot shows. Assertions on the fake's state may follow that wait, as
+"Write an end-to-end scenario" in `test/AGENTS.md` says.
 
 ```ts good
 await Promise.all([g.owner.click(panel, id), g.owner.click(panel, id)]);
-await eventually(() => {
-  expect(messageText(play.shown(panel))).toContain("The hike thread is open");
+await eventually(async () => {
+  await g.owner.click(panel, ROUND_IDS.refresh);
+  expect(messageText(play.shown(panel))).toContain("**Hike thread:** <#");
 });
-await g.owner.click(panel, ROUND_IDS.refresh);
 const [thread] = e2e.discord.threads(g.channels.forum);
 expect(messageText(play.shown(panel))).toContain(
   `**Hike thread:** <#${thread?.id ?? ""}>`,
