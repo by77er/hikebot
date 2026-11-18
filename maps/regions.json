@@ -13,7 +13,7 @@
       "name": "region",
       "bbox": [-125.0, 32.0, -114.0, 49.5],
       "minzoom": 9,
-      "maxzoom": 13
+      "maxzoom": 14
     }
   ],
   "sample": {
