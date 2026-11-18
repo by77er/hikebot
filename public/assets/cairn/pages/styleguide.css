@@ -303,13 +303,16 @@
 
 .styleguide-states {
   display: grid;
-  grid-template-columns: repeat(
-    auto-fill,
-    minmax(min(100%, var(--width-state)), 1fr)
-  );
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4) var(--space-3);
   padding: 0;
   list-style: none;
+}
+
+@media (min-width: 48rem) {
+  .styleguide-states {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 
 .styleguide-states li {

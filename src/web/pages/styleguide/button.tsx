@@ -27,7 +27,7 @@ const VARIANTS: {
   },
   {
     variant: "secondary",
-    label: "Propose a location",
+    label: "New location",
     icon: MapPinIcon,
     use: "Other actions.",
   },
@@ -68,35 +68,35 @@ function ButtonSection() {
           </h3>
           <p>{use}</p>
           <StateList
-            examples={[
-              ...STATES.map(({ state, preview, disabled }) => ({
-                state: `${state}, button`,
-                example: (
-                  <Button
-                    variant={variant}
-                    icon={icon}
-                    type="button"
-                    preview={preview}
-                    disabled={disabled}
-                  >
-                    {label}
-                  </Button>
-                ),
-              })),
-              ...STATES.map(({ state, preview, disabled }) => ({
-                state: `${state}, link`,
-                example: (
-                  <Button
-                    variant={variant}
-                    href="/styleguide#button"
-                    preview={preview}
-                    disabled={disabled}
-                  >
-                    {label}
-                  </Button>
-                ),
-              })),
-            ]}
+            examples={STATES.map(({ state, preview, disabled }) => ({
+              state: `${state}, button`,
+              example: (
+                <Button
+                  variant={variant}
+                  icon={icon}
+                  type="button"
+                  preview={preview}
+                  disabled={disabled}
+                >
+                  {label}
+                </Button>
+              ),
+            }))}
+          />
+          <StateList
+            examples={STATES.map(({ state, preview, disabled }) => ({
+              state: `${state}, link`,
+              example: (
+                <Button
+                  variant={variant}
+                  href="/styleguide#button"
+                  preview={preview}
+                  disabled={disabled}
+                >
+                  {label}
+                </Button>
+              ),
+            }))}
           />
         </div>
       ))}

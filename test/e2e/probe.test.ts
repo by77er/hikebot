@@ -166,7 +166,7 @@ describe.each([".dev.vars", ".env"])(
 
 describe("the probe Worker's static assets", () => {
   it("serves the checkout's public/ like the real Worker", async () => {
-    const css = await new PageClient(e2e.url).get("/assets/app.css");
+    const css = await new PageClient(e2e.url).get("/assets/cairn/cairn.css");
     expect(css.status).toBe(200);
     expect(css.headers.get("content-type")).toBe("text/css; charset=utf-8");
     expect(css.headers.get("cache-control")).toBe("public, max-age=300");

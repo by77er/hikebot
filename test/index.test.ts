@@ -90,7 +90,7 @@ describe("routes", () => {
 
   it("serves the stylesheet through the Worker's fetch", async () => {
     const response = await exports.default.fetch(
-      "https://hikebot.example/assets/app.css",
+      "https://hikebot.example/assets/cairn/cairn.css",
     );
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe(
@@ -98,6 +98,23 @@ describe("routes", () => {
     );
     expect(response.headers.get("Cache-Control")).toBe("public, max-age=300");
     await response.arrayBuffer();
+  });
+
+  it("links the stylesheet under the deployed version, cacheable for a year", async () => {
+    const page = await exports.default.fetch("https://hikebot.example/");
+    const html = await page.text();
+    const href = /<link rel="stylesheet" href="([^"]+)"/.exec(html)?.[1];
+    expect(href).toBe(
+      `/assets/v/${env.CF_VERSION_METADATA.id}/cairn/cairn.css`,
+    );
+    const response = await exports.default.fetch(
+      `https://hikebot.example${href ?? ""}`,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(await response.text()).toContain("@layer reset, tokens");
   });
 
   it("returns the HTML 404 page for unknown paths", async () => {
