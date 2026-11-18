@@ -424,6 +424,32 @@ export class PollStore {
     });
   }
 
+  /**
+   * Takes back a date poll whose message could not be posted: deletes the
+   * open poll with its options and votes and returns the round to
+   * `location_decided`, so the admin can start the date vote again.
+   */
+  withdrawDatePoll(pollId: number): RoundView {
+    return this.storage.transactionSync(() => {
+      const poll = this.openPollRow(pollId);
+      const round = this.roundRow(poll.round_id);
+      if (poll.kind !== "date" || round.status !== "date_voting") {
+        throw new PollError(
+          "invalid_state",
+          "Only an open date vote can be withdrawn.",
+        );
+      }
+      this.sql.exec("DELETE FROM poll_votes WHERE poll_id = ?", pollId);
+      this.sql.exec("DELETE FROM poll_options WHERE poll_id = ?", pollId);
+      this.sql.exec("DELETE FROM polls WHERE id = ?", pollId);
+      this.sql.exec(
+        "UPDATE rounds SET status = 'location_decided' WHERE id = ?",
+        round.id,
+      );
+      return this.roundView(this.roundRow(round.id), null);
+    });
+  }
+
   /** Closes any open poll without a winner and cancels the round. */
   cancelRound(roundId: number, userId: string): RoundView {
     return this.storage.transactionSync(() => {

@@ -2,30 +2,43 @@
 
 ## Add a poll kind to the shared poll UI
 
-The example adds a kind named `date` in `src/features/date-vote.ts`; use
-your kind's name and file.
+The example adds a kind named `route` in `src/features/route-vote.ts`; use
+your kind's name and file. A new kind needs the poll core changed first:
+`PollKind` in `src/polls/store.ts` and the `kind` check of the `polls`
+table, through a migration as "Add a column or table for polls" in
+`src/polls/AGENTS.md` says. Model the kind on the location vote
+(`src/features/location-vote.ts`) or the date vote
+(`src/features/date-vote.ts`).
 
 1. Export a `PollWording` for the kind, with its own buttons after Vote in
-   `extraButtons` (return `[]` for none) and `showProposer: false` when the
-   admin enters the options:
+   `extraButtons` (return `[]` for none), `showProposer: false` when the
+   admin enters the options, and `order: "date"` to list options by date
+   rather than by votes:
 
    ```ts
    import type { PollWording } from "./poll-ui";
 
-   export const DATE_POLL: PollWording = {
-     kind: "date",
-     title: "When should we hike?",
-     instructions: "Vote for every date you could make.",
-     empty: "No dates yet.",
-     noOptions: "There are no dates to vote for yet.",
-     noun: "date",
-     nouns: "dates",
-     name: "date vote",
+   export const ROUTE_POLL: PollWording = {
+     kind: "route",
+     title: () => "Which way up?",
+     instructions: "Vote for every route you would take.",
+     empty: "No routes yet.",
+     noOptions: "There are no routes to vote for yet.",
+     noun: "route",
+     nouns: "routes",
+     name: "route vote",
      showProposer: false,
+     order: "votes",
      extraButtons: () => [],
-     announcement: "Hike date decided",
+     announcement: "Hike route decided",
+     announcementLines: () => [],
+     closeSteps: [],
    };
    ```
+
+   To name what the round decided earlier, read it from the round that
+   `title` and `announcementLines` receive, as `DATE_POLL` does for the
+   location.
 
 2. Add it to `POLL_KINDS` in `src/features/index.ts`:
 
@@ -33,21 +46,75 @@ your kind's name and file.
    const POLL_KINDS: PollWordings = {
      location: LOCATION_POLL,
      date: DATE_POLL,
+     route: ROUTE_POLL,
    };
    ```
 
 3. Post the poll message with
-   `messageBody(renderPollMessage(poll, DATE_POLL))` in a follow-up and
-   record it with `store.setPollMessage(poll.id, channelId, message.id)`, as
-   `startLocationVote` in `src/features/location-vote.ts` does. Register the
-   kind's own controls in a `registerDateVote(router)` called from
+   `messageBody(renderPollMessage(poll, ROUTE_POLL, store.getRound(poll.roundId)))`
+   in a follow-up and record it with
+   `store.setPollMessage(poll.id, channelId, message.id)`, as
+   `startDateVote` in `src/features/date-vote.ts` does. Register the kind's
+   own controls in a `registerRouteVote(router)` called from
    `registerFeatures`.
 4. Check that its poll message stays within Discord's limits by adding a
-   case with 25 options at the longest label to `renderPollMessage` in
-   `test/features/poll-ui.test.ts`, then run:
+   case with 25 options at the longest label to the kind's tests, as "stays
+   within Discord's limits with 25 dates" in
+   `test/features/date-vote.test.ts` does, then run:
 
    ```sh
-   npx vitest run test/features/poll-ui.test.ts
+   npx vitest run test/features/date-vote.test.ts test/features/poll-ui.test.ts
+   ```
+
+## Add a step to the close flow
+
+The example adds a step that posts a note in the voting channel; use your
+step's name and work.
+
+1. In the kind's file (`src/features/date-vote.ts` for the date vote),
+   write a `CloseStep` (see `src/features/poll-ui.ts`). Return `announce`
+   lines for the announcement or a `note` for the panel, and throw on a
+   failed Discord call:
+
+   ```ts
+   import { discordApi } from "../discord/api";
+   import { container, messageBody, textDisplay } from "../discord/components";
+   import { GuildConfig } from "../guild/config";
+   import type { CloseStep } from "./poll-ui";
+
+   const postNote: CloseStep = {
+     name: "post the note",
+     run: async ({ poll, guildId }, context) => {
+       const channelId = new GuildConfig(context.storage).get().voteChannelId;
+       if (channelId === null) return { note: "No voting channel is set." };
+       const message = await discordApi(context.env).createMessage(
+         channelId,
+         messageBody([
+           container([textDisplay(`Poll ${String(poll.id)} closed.`)]),
+         ]),
+       );
+       return {
+         announce: [
+           `[The note](https://discord.com/channels/${guildId}/${channelId}/${message.id})`,
+         ],
+       };
+     },
+   };
+   ```
+
+2. Add it to the kind's wording, in the order the steps should run:
+   `closeSteps: [postNote]`.
+3. Test it the way "runs the kind's close steps after the final edit and
+   before the announcement" in `test/features/date-vote.test.ts` does: run
+   `closePoll(...).followUp` with `fetch` stubbed, then check the order of
+   the requests, the announcement's last lines and the panel's notes. Add
+   the step's message or link to the end-to-end scenario that closes that
+   vote (for the date vote, `test/e2e/full-round.test.ts`).
+4. Run them:
+
+   ```sh
+   npx vitest run test/features/date-vote.test.ts
+   npx vitest run --project e2e test/e2e/full-round.test.ts
    ```
 
 ## Refresh a poll message after a change

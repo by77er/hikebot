@@ -1,5 +1,6 @@
 import type { HandlerContext, Router } from "../guild/router";
 import { registerAdminPanel } from "./admin-panel";
+import { DATE_POLL, registerDateVote } from "./date-vote";
 import { hikeCommand } from "./hike";
 import { LOCATION_POLL, registerLocationVote } from "./location-vote";
 import {
@@ -9,7 +10,10 @@ import {
 } from "./poll-ui";
 
 /** The poll kinds the shared poll controls serve. */
-const POLL_KINDS: PollWordings = { location: LOCATION_POLL };
+const POLL_KINDS: PollWordings = {
+  location: LOCATION_POLL,
+  date: DATE_POLL,
+};
 
 /**
  * Registers every feature's handlers. A feature keeps its handlers in its own
@@ -27,6 +31,7 @@ export function registerFeatures(router: Router): Router {
   registerAdminPanel(router);
   registerPollUi(router, POLL_KINDS);
   registerLocationVote(router);
+  registerDateVote(router);
   return router;
 }
 

@@ -63,7 +63,7 @@ export const LOCATION_IDS = {
 
 export const LOCATION_POLL: PollWording = {
   kind: "location",
-  title: "Where should we hike?",
+  title: () => "Where should we hike?",
   instructions:
     "Vote for every location you would go to; you can change your votes until the vote closes.",
   empty: "No locations yet. Propose one with **Propose a location**.",
@@ -72,6 +72,7 @@ export const LOCATION_POLL: PollWording = {
   nouns: "locations",
   name: "location vote",
   showProposer: true,
+  order: "votes",
   extraButtons: (poll) => [
     button({
       custom_id: LOCATION_IDS.propose(poll.id),
@@ -80,6 +81,8 @@ export const LOCATION_POLL: PollWording = {
     }),
   ],
   announcement: "Hike location decided",
+  announcementLines: () => [],
+  closeSteps: [],
 };
 
 /** The initial locations an admin typed, or why they are refused. */

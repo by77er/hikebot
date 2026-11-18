@@ -50,6 +50,8 @@ export interface AdminPanelState {
   settings: GuildSettings;
   /** The active round (neither complete nor cancelled), if any. */
   round: RoundView | null;
+  /** The last round, when no round is active and it was completed. */
+  finished?: RoundView | null;
 }
 
 export const ADMIN_PANEL_IDS = {
@@ -65,6 +67,7 @@ export const ADMIN_PANEL_IDS = {
 /** The panel's poll controls; their handlers live with the poll features. */
 export const POLL_CONTROL_IDS = {
   startLocationVote: customId("location", "start"),
+  startDateVote: customId("date", "start"),
   closePoll: (pollId: number) => customId("poll", "close", String(pollId)),
   cancelRound: (roundId: number) =>
     customId("round", "cancel", String(roundId)),
@@ -112,9 +115,13 @@ const CHANNEL_SETTINGS = [
 export function loadAdminPanelState(
   storage: DurableObjectStorage,
 ): AdminPanelState {
+  const store = new PollStore(storage);
+  const round = store.getActiveRound();
+  const last = round === null ? store.getLastRound() : null;
   return {
     settings: new GuildConfig(storage).get(),
-    round: new PollStore(storage).getActiveRound(),
+    round,
+    finished: last?.status === "complete" ? last : null,
   };
 }
 
@@ -143,6 +150,14 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
   }
   const open = openPoll(round);
   return [
+    ...(round.status === "location_decided"
+      ? [
+          button({
+            custom_id: POLL_CONTROL_IDS.startDateVote,
+            label: "Start date vote",
+          }),
+        ]
+      : []),
     ...(open === null
       ? []
       : [
@@ -225,14 +240,15 @@ function openPoll(round: RoundView): PollView | null {
 
 /** What the round is doing: the open vote's tallies, or the decided location. */
 function roundSection(state: AdminPanelState) {
-  const { round } = state;
+  const { round, finished } = state;
   if (round === null) {
-    return setupComplete(state.settings)
-      ? [
-          separator(),
-          textDisplay("No hike is being planned. Start a location vote."),
-        ]
-      : [];
+    const lines = finished ? [`**Last hike:** ${hikeSummary(finished)}`] : [];
+    if (setupComplete(state.settings)) {
+      lines.push("No hike is being planned. Start a location vote.");
+    }
+    return lines.length === 0
+      ? []
+      : [separator(), textDisplay(lines.join("\n"))];
   }
   const lines: string[] = [];
   const open = openPoll(round);
@@ -267,6 +283,17 @@ function roundSection(state: AdminPanelState) {
     }
   }
   return [separator(), textDisplay(lines.join("\n"))];
+}
+
+/** A completed round's location and date: "Ridge Trail on Sat, 5 Dec 2026". */
+export function hikeSummary(round: RoundView): string {
+  const location = round.locationPoll?.options.find(
+    (option) => option.id === round.locationOptionId,
+  );
+  const date = round.datePoll?.options.find(
+    (option) => option.id === round.dateOptionId,
+  );
+  return `**${location?.label ?? "?"}** on **${date?.label ?? "?"}**.`;
 }
 
 function votes(n: number): string {

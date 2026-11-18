@@ -221,7 +221,9 @@ The e2e harness (`test/e2e/harness/`) has four parts:
   nested Components V2 tree, act as a member who clicks, selects and submits
   only controls on messages the fake stores (or in the modal the Worker
   returned), and wait for background work by polling the fake with a
-  timeout.
+  timeout. `RoundPlayer` (`test/e2e/harness/rounds.ts`) plays the steps of a
+  round with them: a guild with its channels, the panel set up, starting,
+  voting in, closing and cancelling the location and date votes.
 
 Harness self-tests check every rule of the fake against a payload at the
 limit and one past it, and the client against a stand-in server. Those that
@@ -307,11 +309,14 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   controls first, then Settings (primary until setup is complete) and
   Refresh. The poll controls are **Start location vote** (`hb:location:start`)
   when setup is complete and no round is active; while a poll is open,
-  **Close location vote** (`hb:poll:close:<poll id>`) and **Cancel round**
-  (`hb:round:cancel:<round id>`); once the location is decided, **Cancel
-  round**. With a round active the view lists the open vote's tallies (most
-  votes first) and voter count, or the decided location and whether it was
-  drawn from a tie.
+  **Close location vote** or **Close date vote** (`hb:poll:close:<poll id>`)
+  and **Cancel round** (`hb:round:cancel:<round id>`); once the location is
+  decided, **Start date vote** (`hb:date:start`) and **Cancel round**. With a
+  round active the view lists the decided location (and whether it was drawn
+  from a tie) and the open vote's tallies (most votes first) and voter count.
+  With no round active, when the last round was completed, it sums up that
+  hike: "**Last hike:** **Lake Loop** on **Sat, 15 Jun 2030 · 09:00**."
+  (`finished` in `AdminPanelState`).
 - **Confirmation view**: Close and Cancel round first replace the status view
   with a question and a confirm button (`hb:poll:close-confirm:<poll id>`,
   `hb:round:cancel-confirm:<round id>`) next to Back; only the confirm button
@@ -337,7 +342,8 @@ All tables live in the guild's `GuildHike` SQLite database.
 
 - `rounds`: one hike being planned. `status` is `location_voting` ->
   `location_decided` -> `date_voting` -> `complete`, or `cancelled` from any
-  of the first three. A guild has at most one active round (status other than
+  of the first three; `date_voting` goes back to `location_decided` when the
+  date poll's message could not be posted. A guild has at most one active round (status other than
   `complete` / `cancelled`), enforced by the code and by a partial unique
   index. Also `location_option_id` and `date_option_id` (the winners),
   `thread_id` (the hike's forum thread), `started_by` / `started_at`, and
@@ -377,6 +383,7 @@ for example to schedule an alarm. Every operation that writes more than one row 
 | `setVotes(pollId, userId, optionIds)`               | replaces the member's votes in the poll with exactly that set; empty clears them                                               | `poll_not_found`, `poll_closed`, `unknown_option`                                                                           |
 | `closePoll(pollId, userId)`                         | picks the winner (below), closes the poll, and moves the round to `location_decided` (location poll) or `complete` (date poll) | `poll_not_found`, `poll_closed`, `no_options`, `invalid_state`                                                              |
 | `startDatePoll(roundId, userId, dates)`             | from `location_decided` only: opens the date poll with 2-25 distinct dates, sorted chronologically; round -> `date_voting`     | `round_not_found`, `invalid_state`, `invalid_date`, `duplicate_option`, `too_few_options`, `too_many_options`               |
+| `withdrawDatePoll(pollId)`                          | deletes an open date poll with its options and votes; round `date_voting` -> `location_decided`                                | `poll_not_found`, `poll_closed`, `invalid_state`                                                                            |
 | `cancelRound(roundId, userId)`                      | closes any open poll without a winner; round -> `cancelled`                                                                    | `round_not_found`, `invalid_state` (already ended)                                                                          |
 | `setPollMessage(pollId, channelId, messageId)`      | records the poll's Discord message                                                                                             | `poll_not_found`                                                                                                            |
 | `setRoundThread(roundId, threadId)`                 | records the hike's forum thread                                                                                                | `round_not_found`                                                                                                           |
@@ -410,8 +417,10 @@ conversion.
 ## Round lifecycle
 
 A guild has at most one active round: `location_voting` ->
-`location_decided` -> `date_voting` -> `complete`. An admin can cancel an
-active round. A new round can start when there is none or the last one is
+`location_decided` -> `date_voting` -> `complete`. If the date poll's
+message cannot be posted, `withdrawDatePoll` takes the date poll back and
+the round returns to `location_decided`. An admin can cancel an active
+round. A new round can start when there is none or the last one is
 `complete` or cancelled.
 
 ## Voting
@@ -427,19 +436,25 @@ timezone conversion.
 
 The poll message, the vote flow, the refresh and the close and cancel flows
 are shared by every poll kind (`src/features/poll-ui.ts`). A kind supplies a
-`PollWording`: its heading, instructions, nouns, whether options show their
-proposer, the buttons after Vote and the announcement's heading. The
-location vote's wording and its own controls (start, propose) are in
-`src/features/location-vote.ts`; `registerFeatures` passes the wordings by
-kind to `registerPollUi`.
+`PollWording`: its heading (from the poll's round, so the date vote can name
+the decided location), instructions, nouns, whether options show their
+proposer, the order of the options (by votes or by date), the buttons after
+Vote, the announcement's heading and opening lines, and its close steps
+(see "Closing"). The location vote's wording and its own controls (start,
+propose) are in `src/features/location-vote.ts`, the date vote's (start) in
+`src/features/date-vote.ts`; `registerFeatures` passes the wordings by kind
+to `registerPollUi`.
 
 ### Poll message
 
 One Components V2 container: the heading and one line of instructions, then
-one Text Display per option, most votes first and ties in the order the
-options were added (`rankOptions` in `src/polls/tally.ts`), each with its vote
-count, its details and, for the location vote, "Proposed by" and the
-proposer's mention (which pings no one). Then the number of members who have
+one Text Display per option, each with its vote count, its details and, for
+the location vote, "Proposed by" and the proposer's mention (which pings no
+one). Location options are listed most votes first, ties in the order they
+were added (`rankOptions` in `src/polls/tally.ts`); date options in
+chronological order whatever their votes (`chronological`). The location
+vote's heading is "Where should we hike?", the date vote's "When should we
+hike <decided location>?". Then the number of members who have
 voted, and while open the buttons **Vote** (`hb:poll:vote:<poll id>`) and,
 for the location vote, **Propose a location**
 (`hb:location:propose:<poll id>`). With no options it says so and invites a
@@ -503,6 +518,31 @@ with `setPollMessage` and redraws the panel. If Discord refuses the post, the
 follow-up cancels the round again, so no round is left active, and the panel
 names the channel and Discord's error.
 
+## Starting the date vote
+
+Once the location is decided, **Start date vote** opens a modal
+(`hb:date:start`) with one required paragraph, "Candidate dates (one per
+line)" (up to 1000 characters), whose placeholder shows both formats:
+`2026-12-05 or 2026-12-05 09:00`. `parseCandidateDates` reads it with the
+store's clock: blank lines are dropped and a repeated date counts once.
+Every line must parse with `parseDateOption`; no date may fall on a calendar
+day before yesterday in UTC (lenient, because the bot does not know the
+group's timezone: yesterday and today are accepted at any time); and there
+must be 2 to 25 different dates. Otherwise nothing starts and the admin gets
+an ephemeral message listing each offending line by number (as typed, cut to
+40 characters; the first 25 such lines, then a count of the rest), the count
+problem if any, and the accepted formats with examples.
+
+Valid dates open the date poll through `startDatePoll`, which stores the
+options in date order, and the handler answers with a deferred update of the
+panel. The follow-up posts the poll message in the voting channel, records it
+with `setPollMessage` and redraws the panel. If Discord refuses the post, the
+follow-up takes the poll back with `withdrawDatePoll`, so the round stays
+`location_decided` with **Start date vote** offered again, and the panel
+names the channel and Discord's error.
+
+The date vote has only a **Vote** button: members cannot propose dates.
+
 ## Closing
 
 Closing a poll picks the option with the most votes; ties are broken
@@ -515,11 +555,30 @@ The confirm button closes the poll through `closePoll` before answering, so
 the result stands whatever Discord does next, and answers with a deferred
 update of the panel. Closing a poll without options is refused in the panel
 with an explanation, at the first click and at the confirmation. The
-follow-up edits the poll message to its final state, posts the announcement
-(heading "Hike location decided", the winner and its votes, its details, the
-tie note, and a link to the poll message) and redraws the panel, which now
-shows the decided location. If the edit or the announcement fails, the panel
-says which step failed, in which channel, and Discord's error.
+follow-up runs the close flow (`runCloseFlow` in `src/features/poll-ui.ts`)
+in this order:
+
+1. Edit the poll message to its final state.
+2. Run the kind's close steps (`PollWording.closeSteps`), in order. A
+   `CloseStep` has a `name` and a `run(closed, context)` that gets the
+   closed poll, its round and the guild id, and returns lines to add to the
+   announcement (such as a link to what it created) and a note for the
+   panel. This is where the date vote's forum thread is created, before the
+   announcement so that the announcement can link it. A step that throws is
+   named in the panel ("Could not <name>: <error>") and the flow goes on.
+3. Post the announcement: the kind's heading and opening lines, the winner
+   and its votes, its details, the tie note, the link to the poll message,
+   then the close steps' lines. The location vote's heading is "Hike
+   location decided"; the date vote's is "Hike planned", opening with
+   "**Where:**" (the decided location and its details) and "**When:**" (the
+   date).
+4. Redraw the panel with the result and a line per failed step: after the
+   location vote it shows the decided location and **Start date vote**;
+   after the date vote the round is `complete` and the panel sums up the
+   hike and offers **Start location vote** for the next round.
+
+If the edit or the announcement fails, the panel says which step failed, in
+which channel, and Discord's error.
 
 **Cancel round**, confirmed, cancels the round through `cancelRound` and
 answers with a deferred update; the follow-up rewrites the message of each
@@ -527,6 +586,6 @@ poll that was open as cancelled, without buttons, and redraws the panel,
 which offers **Start location vote** again. A failed rewrite is named in the
 panel. No announcement is posted.
 
-Every admin control (start button and modal, close, cancel and their
-confirmations) is registered through `adminOnly`, so a member who replays its
-`custom_id` is refused.
+Every admin control (the start buttons and modals of both votes, close,
+cancel and their confirmations) is registered through `adminOnly`, so a
+member who replays its `custom_id` is refused.
