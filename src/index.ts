@@ -10,6 +10,7 @@ import { webRouter } from "./web/routes";
 import type { GuildHike } from "./guild/guild-hike";
 
 export { GuildHike } from "./guild/guild-hike";
+export { MapPainter } from "./maps/map-painter";
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
