@@ -223,3 +223,53 @@ for (const p of problems) console.log(`${process.argv[1]}: ${p}; restore the pol
 process.exit(problems.length > 0 ? 1 : 0);
 ' "$FILE"
 ```
+
+## Pages read a server only through readGuild
+only: *.{ts,tsx}
+
+A page never opens a guild object's storage. It reads a server with
+`readGuild(env, guildId, userId)` from `src/web/guild.ts`, which calls the
+guild object's `webView` method through the `GUILD_HIKE` binding: inside the
+object, that read checks with Discord that the user is a member, decides
+whether they are an admin with the same rule as the bot's interactions, and
+builds everything the page shows from the existing stores. Nothing under
+`src/web/` imports `PollStore` (`src/polls/store.ts`), `GuildConfig` or the
+other storage modules of `src/guild/` (`config.ts`, `schema.ts`,
+`schedule.ts`), or a feature's state module (`src/features/*-state.ts`);
+nothing here touches `DurableObjectStorage`, `storage.sql` or `storage.kv`,
+or calls `readWebView` itself. When a page needs data the view lacks, add a
+field to the view, as "Add a field to the web view" in
+`src/guild/AGENTS.md` says. Type-only imports of the view's types are fine.
+
+```tsx good
+import { readGuild } from "../guild";
+
+const result = await readGuild(env, guildId, session.userId, { page: 2 });
+if (result.kind !== "view") return notFoundPage();
+return htmlResponse(<ServerPage view={result.view} />);
+```
+
+```ts good
+import type { WebView } from "../../guild/web-view";
+```
+
+```ts bad
+import { PollStore } from "../polls/store";
+
+const stub = env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(guildId));
+const round = await runInDurableObject(stub, (_i, state) =>
+  new PollStore(state.storage).getActiveRound(),
+);
+```
+
+```ts bad
+import { hikeThreadStatus } from "../features/hike-thread-state";
+import { GuildConfig } from "../guild/config";
+```
+
+```sh
+if grep -HnE "(from|import\()[[:space:]]*[\"'][./]*(polls/store|guild/(config|schema|schedule)|features/[a-z0-9-]*-state)[\"']|\b(PollStore|GuildConfig|DurableObjectStorage|readWebView|WebViewCache)\b|storage\.(sql|kv)\b|ctx\.storage\b" "$FILE"; then
+  echo "$FILE: reads a guild object's storage; read the server with readGuild from src/web/guild.ts instead, and add what is missing to the web view (\"Add a field to the web view\" in src/guild/AGENTS.md)"
+  exit 1
+fi
+```
