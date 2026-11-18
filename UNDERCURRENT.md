@@ -546,3 +546,60 @@ awk '
   END { exit bad }
 ' "$FILE"
 ```
+
+## A web UI pull request carries a design review and its screenshots
+only: {src/web/**,public/**,docs/screenshots/**}
+
+A pull request that changes `src/web/`, `public/` or `docs/screenshots/`
+must not be marked ready without a `## Design review` section and a
+`## Screenshots` section in its description. Review the change as "Review
+your own UI change as a designer" in `src/web/AGENTS.md` says and write
+each finding, with its severity and what was done about it, under
+`## Design review`; after your last push, paste the output of
+`npm run screenshots:table` as `## Screenshots`, so it names every changed
+PNG or says `No visual change.` ("Describe a UI change in the pull
+request"). This check reads the description from the pull request event
+that started the run, so after fixing it, push, or turn the pull request
+back into a draft and mark it ready again. With no pull request event, as
+on a push to main or a local run, it passes.
+
+```sh
+npm run --if-present --silent description:check
+```
+
+## Screenshots are made only by npm run screenshots
+only: {docs/screenshots/**,test/screenshots/pages.json}
+
+`docs/screenshots/` holds exactly the PNGs `npm run screenshots` makes from
+`test/screenshots/pages.json`: four per page, named
+`<page>--<viewport>--<scheme>.png`. Never edit, add, rename, resize,
+optimise or delete one by hand, and never commit a screenshot taken another
+way: a hand-made image shows what nobody will see, and the check "Check the
+screenshots are current" fails on it. To change a screenshot, change the
+page, its seed or its entry in the page list, then follow "Take the
+screenshots" in `src/web/AGENTS.md`, which also deletes the files of a
+page taken off the list.
+
+```sh
+node -e '
+const fs = require("node:fs");
+const { pages } = JSON.parse(fs.readFileSync("test/screenshots/pages.json", "utf8"));
+const expected = new Set(
+  pages.flatMap((page) =>
+    ["phone", "desktop"].flatMap((viewport) =>
+      ["light", "dark"].map((scheme) => `${page.name}--${viewport}--${scheme}.png`),
+    ),
+  ),
+);
+const present = fs.existsSync("docs/screenshots") ? fs.readdirSync("docs/screenshots") : [];
+const problems = [];
+for (const file of present) {
+  if (!expected.has(file)) problems.push(`docs/screenshots/${file} is not a screenshot npm run screenshots makes from test/screenshots/pages.json; delete it and run npm run screenshots`);
+}
+for (const file of expected) {
+  if (!present.includes(file)) problems.push(`docs/screenshots/${file} is missing; run npm run screenshots and commit it`);
+}
+for (const problem of problems) console.log(problem);
+process.exit(problems.length > 0 ? 1 : 0);
+'
+```
