@@ -218,7 +218,9 @@ describe("the hike thread", () => {
     expect(buttonLabels(play.shown(panel))).not.toContain("Create hike thread");
     expect(
       e2e.discord.requests.filter(
-        (r) => r.method === "POST" && r.path.endsWith("/threads"),
+        (r) =>
+          r.method === "POST" &&
+          r.path === `/channels/${g.channels.forum}/threads`,
       ),
     ).toHaveLength(2);
     expect(announcements(g)).toHaveLength(2);
