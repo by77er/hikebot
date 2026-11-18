@@ -54,6 +54,10 @@ The Worker (`src/index.ts`) handles the rest:
     `hikebot is running`.
   - `GET /assets/*`: the file from `public/` through the `ASSETS` binding,
     for a request that reaches the Worker.
+  - `GET /calendar/<guild id>/<signature>.ics` (or `HEAD`): the guild's
+    calendar feed, described under "Calendar feed". The Worker checks the
+    signature before it reaches any Durable Object; a bad address gets the
+    HTML 404 page.
   - A known path with another method: an HTML 405 page with `Allow`.
   - Any other path: an HTML 404 page.
 
@@ -142,6 +146,10 @@ Scheduled jobs are registered the same way, by name:
 `GuildHike.alarm()` hands the object's Durable Object alarm to `runAlarm`
 (`src/features/index.ts`), which runs the jobs that are due, as "Deferred
 work" describes.
+
+Besides `handleInteraction` and `runFollowUp`, the object has one read for
+the web: `calendarFeed(guildId)`, a one-line call into
+`src/features/calendar-feed.ts` (see "Calendar feed").
 
 ## Deferred work
 
@@ -248,6 +256,11 @@ now)` returns the payload, or null when the token is malformed, changed,
   | `oauth-state` | The sealed OAuth `state`, checked on the callback            |
   | `csrf`        | A form's CSRF token, bound to the session                    |
   | `calendar`    | A calendar feed address, so it can be shared without sign-in |
+
+- A calendar feed address is `/calendar/<guild id>/<signature>.ics` with the
+  signature `sign(SIGNING_SECRET, "calendar", <guild id>)`
+  (`src/calendar/address.ts`). It never expires: it is the same for as long
+  as `SIGNING_SECRET` is, so a calendar app's subscription keeps working.
 
 - A `SIGNING_SECRET` shorter than 32 characters is refused with an error
   that names the variable and never shows its value.
@@ -912,14 +925,75 @@ characters (`LOG_DETAILS_CAP`) with "…", and on one line "Thread:
 when it has a scheduled event, joined by " · ". With no hikes it says "No hikes yet. The first one
 appears here when a date vote closes."
 
+The message always ends, after a separator, with "Calendar: <address>", the
+guild's calendar feed address built with `absoluteUrl` from `PUBLIC_URL`,
+and "Calendar apps can subscribe to this address to show every hike; anyone
+who has it can see them." (see "Calendar feed").
+
 A page holds ten hikes (`HIKES_PER_PAGE`). With more than ten, the message
 ends with **Newer** and **Older** buttons (`hb:log:page:<n>`, `n` the
 1-based page they go to) that redraw it in place with an update; the one
 with nowhere to go is disabled. A page number past the end shows the last
 page, and one before the first (or not a number) the first. With ten or
 fewer hikes there are no buttons. At ten hikes with the longest label (80)
-and details (300) and 20-digit thread, guild and event ids, a page takes
-about 3,700 characters and 17 components, within Discord's 4000 and 40.
+and details (300) and 20-digit thread, guild and event ids, and the
+calendar address on `https://hiking.bitcru.sh`, a page takes about 3,900
+characters and 19 components, within Discord's 4000 and 40.
+
+## Calendar feed
+
+Each guild has an iCalendar feed of its hikes that any calendar app can
+subscribe to: `GET /calendar/<guild id>/<signature>.ics`, with the
+signature described under "Signing". There is no sign-in, so anyone who has
+the address can read the guild's hikes (locations, details, dates and
+Discord links); `/hike log` shows it, ephemerally, to members only. The
+signature means the address cannot be worked out from a server's id, and
+the Worker (`src/web/calendar.ts`) checks it before it touches the
+`GUILD_HIKE` namespace, so a made-up address never creates a Durable
+Object. A wrong, truncated or missing signature, another guild's signature,
+or a guild id that is not a snowflake (17 to 20 digits) gets the HTML 404
+page, like any unknown path. With a valid address the Worker calls
+`calendarFeed(guildId)` on the guild's object, which reads every hike with
+`listHikes` (`src/features/calendar-feed.ts`), and writes the text with
+`buildCalendar` (`src/calendar/ical.ts`), a pure function of the data and
+the build time that imports no Discord code.
+
+**Calendar.** `VERSION:2.0`, `PRODID:-//hikebot//Hike calendar//EN`,
+`CALSCALE:GREGORIAN`, `METHOD:PUBLISH`, the name "Hikes" (`NAME` and
+`X-WR-CALNAME`), and a one-hour refresh hint
+(`REFRESH-INTERVAL;VALUE=DURATION:PT1H` and `X-PUBLISHED-TTL:PT1H`). A guild
+without hikes gets a valid calendar with no events.
+
+**Events.** One `VEVENT` per hike, that is per completed round, past and
+future, newest date first; cancelled rounds and rounds still voting have
+none.
+
+| Property      | Value                                                                                                                                                                                          |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UID`         | `hike-<round id>-<guild id>@hikebot`, the same on every fetch                                                                                                                                  |
+| `DTSTAMP`     | When the feed was built (the object's clock), in UTC                                                                                                                                           |
+| `DTSTART`     | `hikeStart(date, guild's time zone)`, in UTC (`20300615T160000Z`)                                                                                                                              |
+| `DTEND`       | `DTSTART` plus `HIKE_DURATION_HOURS` (4)                                                                                                                                                       |
+| `SUMMARY`     | `Hike: <location>`                                                                                                                                                                             |
+| `LOCATION`    | The location's label                                                                                                                                                                           |
+| `DESCRIPTION` | The location's details, a blank line, then "Hike thread: https://discord.com/channels/<guild>/<thread>" and "Discord event: https://discord.com/events/<guild>/<event>" for each the round has |
+| `URL`         | The thread's link, else the event's; left out when the round has neither                                                                                                                       |
+
+**Text.** Lines end in CRLF. Text values escape backslash, semicolon and
+comma with a backslash and write a line break as `\n`; other control
+characters are dropped. A line longer than 75 octets of UTF-8 is folded
+(CRLF and a space) between characters, never inside one, so every physical
+line is at most 75 octets. Tests check the exact text and parse the feed
+with an independent parser, `ical.js`.
+
+**Response.** `200` with `Content-Type: text/calendar; charset=utf-8`,
+`Content-Disposition: inline; filename="hikes.ics"`,
+`Cache-Control: public, max-age=300` (five minutes) and a weak `ETag`, a
+SHA-256 over the feed's name and events. It leaves out `DTSTAMP`, so it
+changes when a hike is added or changed (or the time zone) and not on every
+fetch. A request whose `If-None-Match` names it (weak comparison, or `*`)
+gets `304` with no body. `HEAD` answers the same headers without a body;
+other methods get 405.
 
 ## Hike thread
 

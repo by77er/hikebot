@@ -139,3 +139,32 @@ and which headers they carry.
    npx vitest run --project e2e test/e2e/web.test.ts
    pgrep -x workerd || echo "no workerd left"
    ```
+
+## Check that a route turns a request away before it reaches a guild object
+
+1. In the route's unit test, pass the router an `env` whose `GUILD_HIKE`
+   records every call, as `spyNamespace` in `test/web/calendar.test.ts`
+   does:
+
+   ```ts
+   const idFromName = vi.fn();
+   const get = vi.fn();
+   const bindings = {
+     ...env,
+     GUILD_HIKE: { idFromName, get, idFromString: get },
+   } as unknown as Env;
+   const response = await webRouter.handle(
+     new Request("https://hikebot.example/calendar/1/x.ics"),
+     bindings,
+     createExecutionContext(),
+   );
+   expect(response.status).toBe(404);
+   expect(idFromName).not.toHaveBeenCalled();
+   expect(get).not.toHaveBeenCalled();
+   ```
+
+2. Run it:
+
+   ```sh
+   npx vitest run test/web/calendar.test.ts
+   ```
