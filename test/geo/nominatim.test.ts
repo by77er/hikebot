@@ -27,7 +27,7 @@ function stub(answer: (request: Request) => Promise<Response> | Response) {
     requests.push(request);
     return Promise.resolve(answer(request));
   };
-  return { fetch: fetch as typeof globalThis.fetch, requests };
+  return { fetch: fetch, requests };
 }
 
 describe("Nominatim", () => {
