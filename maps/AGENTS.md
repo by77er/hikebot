@@ -50,15 +50,14 @@
    gh run watch <run-id> --exit-status
    ```
 
-3. Read its annotations as "Read the sizes a map-data run reported" says. A
-   good build has a `Build` notice, one `Uploaded world` and one
+3. Read its annotations as "Read the sizes a map-data run reported" says.
+   Check that it has a `Build` notice, one `Uploaded world` and one
    `Uploaded region` notice with each object key and size, and a `Manifest`
-   notice with the total. A failed or cancelled build leaves the previous
-   manifest and its archives in place, so readers keep the old data.
+   notice with the total.
+4. If the run failed, act on its `failure` annotation, then start it again
+   from step 1.
 
 ## Read the sizes a map-data run reported
-
-Job logs are not readable from every machine; the run's annotations are.
 
 1. Find the run and its jobs:
 
@@ -74,11 +73,15 @@ Job logs are not readable from every machine; the run's annotations are.
    gh api repos/by77er/hikebot/check-runs/<job-id>/annotations --jq '.[] | "\(.annotation_level) \(.title): \(.message)"'
    ```
 
-   `Dry run: world` and `Dry run: region z<n>` give each archive's tile bytes
-   and the total with the world, `Total` the configured total against the
-   budget, and `R2 access` and `R2 bucket` what the CI token could do. A
-   `failure` line holds Cloudflare's or the tool's message. The run's page on
-   GitHub shows the same numbers as a table in its summary.
+3. Take each archive's size from the `Dry run: world` and
+   `Dry run: region z<n>` lines (or `Uploaded <name>` in a build), and the
+   total against the budget from `Total` (or `Manifest`). For a `failure`
+   line, follow the fix its message names. To see the same numbers as a
+   table, open the run's summary:
+
+   ```sh
+   gh run view <run-id> --web
+   ```
 
 ## Refresh the sample archive
 
