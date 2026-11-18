@@ -15,10 +15,16 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   LOCATION_IDS,
   parseInitialLocations,
+  renderSuggestAgain,
+  restingRefusal,
 } from "../../src/features/location-vote";
 import { VOTE_CLOSED_MESSAGE } from "../../src/features/poll-ui";
 import { GuildConfig } from "../../src/guild/config";
-import { PollStore } from "../../src/polls/store";
+import {
+  PollStore,
+  type PastLocation,
+  type RestingLocation,
+} from "../../src/polls/store";
 import {
   callWorker,
   componentInteraction,
@@ -27,6 +33,7 @@ import {
   signedRequest,
   type Signer,
 } from "../helpers";
+import { playRound } from "../polls/helpers";
 
 const OWNER = "400000000000000001";
 const MEMBER = "400000000000000002";
@@ -46,6 +53,8 @@ interface Node {
   type: number;
   content?: string;
   custom_id?: string;
+  label?: string;
+  options?: { label: string; value: string; description?: string }[];
   components?: Node[];
   component?: Node;
 }
@@ -387,5 +396,282 @@ describe("proposing a location", () => {
       componentInteraction(LOCATION_IDS.propose(pollId), guild),
     );
     expect(text(reply.data.components)).toBe(VOTE_CLOSED_MESSAGE);
+  });
+});
+
+function past(n: number, overrides: Partial<PastLocation> = {}): PastLocation {
+  return {
+    optionId: n,
+    label: `Place ${String(n)}`,
+    key: `place ${String(n)}`,
+    details: null,
+    proposedByViewer: false,
+    lastProposedAt: 1_800_000_000_000 - n,
+    timesHiked: 0,
+    cooldownHikesLeft: 0,
+    onPoll: false,
+    ...overrides,
+  };
+}
+
+function selectOf(components: readonly unknown[]): Node | undefined {
+  return flatten(components as Node[]).find(
+    (c) => c.type === ComponentType.StringSelect,
+  );
+}
+
+function customIds(components: readonly unknown[]): string[] {
+  return flatten(components as Node[]).flatMap((c) =>
+    c.custom_id === undefined ? [] : [c.custom_id],
+  );
+}
+
+describe("renderSuggestAgain", () => {
+  it("offers only New location when there is nothing to suggest again", () => {
+    const components = renderSuggestAgain(7, []);
+    expect(selectOf(components)).toBeUndefined();
+    expect(customIds(components)).toEqual([LOCATION_IDS.newLocation(7)]);
+    expect(LOCATION_IDS.newLocation(7)).toBe("hb:location:new:7");
+  });
+
+  it("lists one past location with its details cut to 100 characters", () => {
+    const details = "d".repeat(150);
+    const components = renderSuggestAgain(7, [past(1, { details })]);
+    const select = selectOf(components);
+    expect(select?.custom_id).toBe("hb:location:again:7");
+    expect(select?.options).toEqual([
+      { label: "Place 1", value: "1", description: `${"d".repeat(99)}…` },
+    ]);
+    expect(customIds(components)).toEqual([
+      "hb:location:again:7",
+      "hb:location:new:7",
+    ]);
+    expect(text(components)).not.toContain("Resting");
+  });
+
+  it("holds 25 past locations, and the first 25 of 30 in order", () => {
+    const list = (n: number) =>
+      Array.from({ length: n }, (_, i) =>
+        past(i + 1, { label: `${String(i + 1)} ${"x".repeat(76)}` }),
+      );
+    expect(selectOf(renderSuggestAgain(7, list(25)))?.options).toHaveLength(25);
+    const options = selectOf(renderSuggestAgain(7, list(30)))?.options ?? [];
+    expect(options.map((o) => o.value)).toEqual(
+      Array.from({ length: 25 }, (_, i) => String(i + 1)),
+    );
+  });
+
+  it("names resting locations with their hikes left and never offers them or the poll's own", () => {
+    const components = renderSuggestAgain(7, [
+      past(1, { label: "Eagle Peak", cooldownHikesLeft: 2 }),
+      past(2, { label: "On the poll", onPoll: true }),
+      past(3, { label: "Lake", cooldownHikesLeft: 1 }),
+      past(4, { label: "Ridge" }),
+    ]);
+    expect(selectOf(components)?.options?.map((o) => o.label)).toEqual([
+      "Ridge",
+    ]);
+    expect(text(components)).toContain(
+      "Resting: **Eagle Peak** (2 more hikes), **Lake** (1 more hike)",
+    );
+  });
+});
+
+describe("restingRefusal", () => {
+  const resting: RestingLocation[] = [
+    {
+      label: "Eagle Peak",
+      key: "eagle peak",
+      hikedOn: "Sat, 5 Dec 2026",
+      hikesLeft: 2,
+    },
+    { label: "Lake", key: "lake", hikedOn: "Sat, 9 Jan 2027", hikesLeft: 1 },
+  ];
+
+  it("names each resting line, compared as labelKey does", () => {
+    expect(restingRefusal(["Ridge", " eagle  PEAK", "lake"], resting)).toBe(
+      [
+        "Nothing was started. Remove these locations and try again:",
+        "- **Eagle Peak** was the hike on Sat, 5 Dec 2026. It can be suggested again after 2 more hikes.",
+        "- **Lake** was the hike on Sat, 9 Jan 2027. It can be suggested again after 1 more hike.",
+      ].join("\n"),
+    );
+    expect(restingRefusal(["Lake"], resting)).toContain(
+      "Remove this location and try again:",
+    );
+    expect(restingRefusal(["Ridge"], resting)).toBeNull();
+  });
+});
+
+describe("suggesting a past location again", () => {
+  /**
+   * A guild whose first round completed with Ridge as the hike (Lake lost,
+   * with details), and whose second round's location vote is open.
+   */
+  async function secondRound(guild: string, initial: string[] = []) {
+    return runInDurableObject(stub(guild), (_i, state) => {
+      const store = new PollStore(state.storage);
+      playRound(
+        store,
+        [
+          { label: "Ridge", proposedBy: OWNER },
+          {
+            label: "Lake",
+            details: "https://example.com/lake",
+            proposedBy: OWNER,
+          },
+        ],
+        "Ridge",
+        "2026-12-05",
+      );
+      const lake = store
+        .listPastLocations(MEMBER, 0)
+        .find((p) => p.label === "Lake");
+      const round = store.startRound(
+        OWNER,
+        initial.map((label) => ({ label, proposedBy: OWNER })),
+      );
+      return {
+        pollId: round.locationPoll?.id ?? 0,
+        lakeId: lake?.optionId ?? 0,
+      };
+    });
+  }
+
+  function click(customId: string, guild: string) {
+    const interaction = componentInteraction(customId, guild);
+    Object.assign(interaction, { member: { user: { id: MEMBER }, roles: [] } });
+    return interaction;
+  }
+
+  function pick(guild: string, pollId: number, optionId: number) {
+    const interaction = click(LOCATION_IDS.again(pollId), guild);
+    Object.assign(interaction.data, {
+      component_type: ComponentType.StringSelect,
+      values: [String(optionId)],
+    });
+    return interaction;
+  }
+
+  it("offers the past locations that are neither on the poll nor resting, with New location", async () => {
+    const guild = "location-again-offer";
+    const { pollId, lakeId } = await secondRound(guild);
+    const reply = await send(click(LOCATION_IDS.propose(pollId), guild));
+    expect(reply.type).toBe(InteractionResponseType.ChannelMessageWithSource);
+    expect(reply.data).toMatchObject({ flags: 32768 | 64 });
+    expect(selectOf(reply.data.components)).toMatchObject({
+      custom_id: `hb:location:again:${String(pollId)}`,
+      placeholder: "Suggest one again",
+      options: [
+        {
+          label: "Lake",
+          value: String(lakeId),
+          description: "https://example.com/lake",
+        },
+      ],
+    });
+    expect(customIds(reply.data.components)).toContain(
+      `hb:location:new:${String(pollId)}`,
+    );
+    expect(text(reply.data.components)).toContain(
+      "Resting: **Ridge** (2 more hikes)",
+    );
+
+    const form = await send(click(LOCATION_IDS.newLocation(pollId), guild));
+    expect(form.type).toBe(InteractionResponseType.Modal);
+    expect(form.data.custom_id).toBe(LOCATION_IDS.propose(pollId));
+  });
+
+  it("opens the modal directly when every past location is on the poll or resting", async () => {
+    const guild = "location-again-none";
+    const { pollId } = await secondRound(guild, ["Lake"]);
+    const reply = await send(click(LOCATION_IDS.propose(pollId), guild));
+    expect(reply.type).toBe(InteractionResponseType.Modal);
+    expect(reply.data.custom_id).toBe(LOCATION_IDS.propose(pollId));
+  });
+
+  it("adds the pick with its saved details and the member as proposer, and schedules a refresh", async () => {
+    const guild = "location-again-pick";
+    const { pollId, lakeId } = await secondRound(guild);
+    const reply = await send(pick(guild, pollId, lakeId));
+    expect(reply.type).toBe(InteractionResponseType.UpdateMessage);
+    expect(text(reply.data.components)).toContain(
+      "Added **Lake** to the location vote. Use **Vote** to vote for it.",
+    );
+    expect(selectOf(reply.data.components)).toBeUndefined();
+    await runInDurableObject(stub(guild), async (_i, state) => {
+      expect(new PollStore(state.storage).getPoll(pollId)?.options).toEqual([
+        expect.objectContaining({
+          label: "Lake",
+          details: "https://example.com/lake",
+          proposedBy: MEMBER,
+        }),
+      ]);
+      expect(await state.storage.getAlarm()).not.toBeNull();
+    });
+  });
+
+  it("answers a stale pick as a typed proposal is answered, and adds nothing", async () => {
+    const guild = "location-again-stale";
+    const { pollId, lakeId } = await secondRound(
+      guild,
+      Array.from({ length: 24 }, (_, i) => `Place ${String(i)}`),
+    );
+    await send(pick(guild, pollId, lakeId));
+    let reply = await send(pick(guild, pollId, lakeId));
+    expect(text(reply.data.components)).toBe(
+      "This vote already has 25 locations, the most it can hold. Vote for one of them instead.",
+    );
+
+    const other = "location-again-duplicate";
+    const second = await secondRound(other, ["lake"]);
+    reply = await send(pick(other, second.pollId, second.lakeId));
+    expect(text(reply.data.components)).toContain(
+      "**Lake** is already on the list. Vote for it instead.",
+    );
+
+    await runInDurableObject(stub(other), (_i, state) => {
+      new PollStore(state.storage).closePoll(second.pollId, OWNER);
+    });
+    reply = await send(pick(other, second.pollId, second.lakeId));
+    expect(reply.type).toBe(InteractionResponseType.UpdateMessage);
+    expect(text(reply.data.components)).toBe(VOTE_CLOSED_MESSAGE);
+    await runInDurableObject(stub(other), (_i, state) => {
+      expect(
+        new PollStore(state.storage).getPoll(second.pollId)?.options,
+      ).toHaveLength(1);
+    });
+
+    reply = await send(pick(other, second.pollId, 9999));
+    expect(text(reply.data.components)).toContain("no longer available");
+  });
+
+  it("refuses a resting location typed in the propose modal", async () => {
+    const guild = "location-again-typed";
+    const { pollId } = await secondRound(guild);
+    const reply = await send(proposeSubmit(guild, pollId, "ridge"));
+    expect(text(reply.data.components)).toBe(
+      "**Ridge** was the hike on Sat, 5 Dec 2026. It can be suggested again after 2 more hikes.",
+    );
+  });
+
+  it("refuses an initial list holding a resting location and starts nothing", async () => {
+    const guild = "200000000000000107";
+    await configure(guild);
+    await runInDurableObject(stub(guild), (_i, state) => {
+      playRound(
+        new PollStore(state.storage),
+        [{ label: "Ridge", proposedBy: OWNER }],
+        "Ridge",
+        "2026-12-05",
+      );
+    });
+    discord(guild, () => Response.json({}));
+    const reply = await send(startSubmit(guild, "Lake\nRIDGE"));
+    expect(reply.type).toBe(InteractionResponseType.ChannelMessageWithSource);
+    expect(text(reply.data.components)).toBe(
+      "Nothing was started. Remove this location and try again:\n- **Ridge** was the hike on Sat, 5 Dec 2026. It can be suggested again after 2 more hikes.",
+    );
+    expect(await activeRound(guild)).toBeNull();
   });
 });

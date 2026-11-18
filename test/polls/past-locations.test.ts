@@ -1,38 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { isPollError } from "../../src/polls/errors";
+import { COOLDOWN_HIKES, cooldownMessage } from "../../src/polls/store";
 import {
-  COOLDOWN_HIKES,
-  cooldownMessage,
-  type NewOption,
-  type PollStore,
-} from "../../src/polls/store";
-import { count, expectCode, locations, withStore } from "./helpers";
-
-/**
- * Plays a round to `complete`: a location poll with `options`, won by
- * `winner`, then a date poll won by `date`.
- */
-function completeRound(
-  store: PollStore,
-  options: readonly NewOption[],
-  winner: string,
-  date: string,
-): number {
-  const round = store.startRound("u-admin", options);
-  const poll = round.locationPoll;
-  if (!poll) throw new Error("no location poll");
-  const won = poll.options.find((o) => o.label === winner);
-  store.setVotes(poll.id, "u-voter", [won?.id ?? 0]);
-  store.closePoll(poll.id, "u-admin");
-  const datePoll = store.startDatePoll(round.id, "u-admin", [
-    date,
-    "2040-01-01",
-  ]);
-  const day = datePoll.options.find((o) => o.dateValue === date);
-  store.setVotes(datePoll.id, "u-voter", [day?.id ?? 0]);
-  store.closePoll(datePoll.id, "u-admin");
-  return round.id;
-}
+  playRound,
+  count,
+  expectCode,
+  locations,
+  withStore,
+} from "./helpers";
 
 /** The message `fn` is refused with, as `location_on_cooldown`. */
 function cooldownRefusal(fn: () => unknown): string {
@@ -48,7 +23,7 @@ function cooldownRefusal(fn: () => unknown): string {
 describe("listPastLocations", () => {
   it("merges every round's locations by label_key, newest label and details first", async () => {
     const past = await withStore((store) => {
-      completeRound(
+      playRound(
         store,
         [
           { label: "Ridge", details: "old notes", proposedBy: "u-admin" },
@@ -135,7 +110,7 @@ describe("listPastLocations", () => {
   it("is empty before any location was proposed and ignores date options", async () => {
     const result = await withStore((store) => {
       const before = store.listPastLocations("u1", 1);
-      completeRound(store, locations("Ridge"), "Ridge", "2030-06-08");
+      playRound(store, locations("Ridge"), "Ridge", "2030-06-08");
       return {
         before,
         after: store.listPastLocations("u1", 1).map((p) => p.label),
@@ -150,7 +125,7 @@ describe("the location cooldown", () => {
   it("rests the hike of the last two complete rounds, ignoring a cancelled one, over four rounds", async () => {
     await withStore((store, storage) => {
       // Round 1 completes with Eagle Peak.
-      completeRound(
+      playRound(
         store,
         locations("Eagle Peak", "Lake"),
         "Eagle Peak",
@@ -191,7 +166,7 @@ describe("the location cooldown", () => {
         "location_on_cooldown",
       );
       expect(count(storage, "rounds")).toBe(rounds);
-      completeRound(
+      playRound(
         store,
         locations("Lake", "Ridge"),
         "Lake",
@@ -215,7 +190,7 @@ describe("the location cooldown", () => {
         "**Eagle Peak** was the hike on Sat, 5 Dec 2026. It can be suggested again after 1 more hike.",
       );
       store.cancelRound(four.id, "u-admin");
-      completeRound(store, locations("Ridge"), "Ridge", "2027-02-06");
+      playRound(store, locations("Ridge"), "Ridge", "2027-02-06");
 
       // Two rounds completed since: Eagle Peak is accepted again.
       expect(store.restingLocations().map((r) => r.label)).toEqual([
@@ -240,7 +215,7 @@ describe("the location cooldown", () => {
 
   it("does not apply to date polls", async () => {
     await withStore((store) => {
-      completeRound(store, locations("Ridge"), "Ridge", "2030-06-08");
+      playRound(store, locations("Ridge"), "Ridge", "2030-06-08");
       const round = store.startRound("u-admin", locations("Lake"));
       store.closePoll(round.locationPoll?.id ?? 0, "u-admin");
       const datePoll = store.startDatePoll(round.id, "u-admin", [

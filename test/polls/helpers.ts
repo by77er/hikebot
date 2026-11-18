@@ -2,7 +2,11 @@ import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { expect } from "vitest";
 import { isPollError, type PollErrorCode } from "../../src/polls/errors";
-import { PollStore, type PollStoreOptions } from "../../src/polls/store";
+import {
+  PollStore,
+  type NewOption,
+  type PollStoreOptions,
+} from "../../src/polls/store";
 import type { RandomSource } from "../../src/polls/tally";
 
 let counter = 0;
@@ -93,5 +97,31 @@ export function completeRound(
   if (!pick) throw new Error(`no date option ${date}`);
   store.setVotes(when.id, "u1", [pick.id]);
   store.closePoll(when.id, "u-admin");
+  return round.id;
+}
+
+/**
+ * Plays a round to `complete`: a location poll with `options`, won by
+ * `winner`, then a date poll won by `date`.
+ */
+export function playRound(
+  store: PollStore,
+  options: readonly NewOption[],
+  winner: string,
+  date: string,
+): number {
+  const round = store.startRound("u-admin", options);
+  const poll = round.locationPoll;
+  if (!poll) throw new Error("no location poll");
+  const won = poll.options.find((o) => o.label === winner);
+  store.setVotes(poll.id, "u-voter", [won?.id ?? 0]);
+  store.closePoll(poll.id, "u-admin");
+  const datePoll = store.startDatePoll(round.id, "u-admin", [
+    date,
+    "2040-01-01",
+  ]);
+  const day = datePoll.options.find((o) => o.dateValue === date);
+  store.setVotes(datePoll.id, "u-voter", [day?.id ?? 0]);
+  store.closePoll(datePoll.id, "u-admin");
   return round.id;
 }
