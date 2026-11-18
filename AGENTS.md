@@ -139,10 +139,8 @@ To exercise interactions, write a test that sends a signed interaction, as
 
 ## Sign in to Cloudflare for production commands
 
-The `npx wrangler` commands in the procedures below act on the production
-Worker `hiking` and need a Cloudflare login with access to its account.
-
-1. Sign in through the browser:
+1. Sign in through the browser, with a Cloudflare user that has access to
+   the account holding the Worker `hiking`:
 
    ```sh
    npx wrangler login
