@@ -40,12 +40,18 @@ function from(
   } as unknown as APIChatInputApplicationCommandInteraction;
 }
 
+/** The URL a fetch call was made with. */
+function urlOf(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  return input instanceof URL ? input.href : input.url;
+}
+
 /** A Discord API whose getGuild answers with `owners` in turn. */
 function guildApi(...owners: (string | Response | Error)[]) {
   const fetch = vi.fn((input: RequestInfo | URL) => {
     const next = owners.shift();
     if (next === undefined)
-      throw new Error(`unexpected request ${String(input)}`);
+      throw new Error(`unexpected request ${urlOf(input)}`);
     if (next instanceof Error) return Promise.reject(next);
     if (next instanceof Response) return Promise.resolve(next);
     return Promise.resolve(Response.json({ id: "1", owner_id: next }));
@@ -77,8 +83,8 @@ describe("checkAdmin", () => {
       const check = await checkAdmin(from("perm-owner", OWNER), context, api);
       expect(check.allowed).toBe(true);
       expect(fetch).toHaveBeenCalledTimes(1);
-      const [input] = fetch.mock.calls[0] ?? [];
-      expect(String(input)).toMatch(/\/guilds\/perm-owner$/);
+      const [input] = fetch.mock.calls[0] ?? [""];
+      expect(urlOf(input)).toMatch(/\/guilds\/perm-owner$/);
       expect(config.get()).toMatchObject({
         ownerId: OWNER,
         ownerFetchedAt: T0,
