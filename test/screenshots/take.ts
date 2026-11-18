@@ -17,17 +17,23 @@
  * from what is committed, listing them: the screenshots are stale.
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Browser, CDPSession } from "puppeteer-core";
 import { launchBrowser } from "./browser";
 import {
-  readPageList,
   SCHEMES,
   screenshotFile,
   screenshotFiles,
   VIEWPORTS,
+  type PageList,
   type ScreenshotPage,
   type ViewportName,
 } from "./pages";
@@ -53,7 +59,9 @@ process.env.XDG_CONFIG_HOME = join(ROOT, ".wrangler", "e2e-config");
 
 async function main(): Promise<void> {
   const check = process.argv.includes("--check");
-  const list = readPageList();
+  const list = JSON.parse(
+    readFileSync(new URL("./pages.json", import.meta.url), "utf8"),
+  ) as PageList;
   for (const page of list.pages) {
     if (!(page.seed in SEEDS)) {
       throw new Error(
@@ -62,7 +70,7 @@ async function main(): Promise<void> {
     }
     if (page.user !== null) {
       throw new Error(
-        `pages.json signs in "${page.user}" for page ${page.name}, but test/screenshots/take.ts cannot sign a member in yet; teach it in signIn()`,
+        `pages.json signs in "${page.user}" for page ${page.name}, but test/screenshots/take.ts opens pages signed out only; add signing in to capture() there first`,
       );
     }
   }

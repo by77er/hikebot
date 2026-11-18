@@ -4,8 +4,6 @@
  * are not pages, each with the reason. The coverage test in
  * `test/web/screenshot-pages.test.ts` checks it against the web router.
  */
-import { readFileSync } from "node:fs";
-
 export interface ScreenshotPage {
   /** Lower-case words joined by single hyphens; names the PNG files. */
   name: string;
@@ -15,7 +13,11 @@ export interface ScreenshotPage {
   status: number;
   /** A key of `SEEDS` in `seeds.ts`: the data the Worker holds first. */
   seed: string;
-  /** The member signed in when the page is opened, or null for nobody. */
+  /**
+   * The member signed in when the page is opened, or null for a signed-out
+   * visitor. `take.ts` opens pages signed out only, and refuses another
+   * value until signing in is added to its `capture`.
+   */
   user: string | null;
 }
 
@@ -27,12 +29,6 @@ export interface ExcludedRoute {
 export interface PageList {
   pages: ScreenshotPage[];
   excluded: ExcludedRoute[];
-}
-
-export const PAGES_FILE = new URL("./pages.json", import.meta.url);
-
-export function readPageList(): PageList {
-  return JSON.parse(readFileSync(PAGES_FILE, "utf8")) as PageList;
 }
 
 export const VIEWPORTS = {

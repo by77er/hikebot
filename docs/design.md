@@ -134,8 +134,10 @@ so a name or title from Discord or a form cannot inject markup.
   and fails when a committed one differs. A pull request that changes
   `src/web/`, `public/` or `docs/screenshots/` carries a written design
   review and a before/after table of the changed screenshots in its
-  description (`npm run screenshots:table`), and `npm run description:check`
-  checks both from the pull request event.
+  description (`npm run screenshots:table`). The Undercurrent rule "A web
+  UI pull request carries a design review and its screenshots" checks both
+  in the `commands` check, by running `npm run description:check` on the
+  pull request event.
 
 ## GuildHike and the handler registry
 

@@ -191,10 +191,10 @@ script makes them; never edit, add or delete a PNG there by hand.
 
 2. If Chromium does not start (for example
    `libnspr4.so: cannot open shared object file`), delete what the
-   `@sparticuz/chromium` package unpacked into `/tmp` and run it again:
+   `@sparticuz/chromium` package unpacked and run it again:
 
    ```sh
-   rm -rf /tmp/chromium /tmp/al2023 /tmp/fonts /tmp/fonts-cache /tmp/swiftshader /tmp/locales /tmp/libEGL.so /tmp/libGLESv2.so /tmp/libvk_swiftshader.so /tmp/libvulkan.so.1 /tmp/vk_swiftshader_icd.json
+   rm -rf "${TMPDIR:-/tmp}/hikebot-chromium"
    npm run screenshots
    ```
 
@@ -222,9 +222,11 @@ script makes them; never edit, add or delete a PNG there by hand.
 1. Add an entry for the page to `"pages"` in `test/screenshots/pages.json`:
    its `name` (lower-case words joined by hyphens; it names the PNG files),
    the `path` to open, the `status` it must answer with, the `seed` that
-   sets up the data it shows, and the `user` signed in (`null` for a page a
-   signed-out visitor sees). Add one entry per state worth seeing, such as
-   `hike-empty` and `hike-many-locations`.
+   sets up the data it shows, and the `user` signed in: `null` for a
+   signed-out visitor. The script opens pages signed out only and refuses
+   any other `user`; a page that needs a member signed in needs signing in
+   added to `capture` in `test/screenshots/take.ts` first. Add one entry per
+   state worth seeing, such as `hike-empty` and `hike-many-locations`.
 
    ```json
    {
@@ -333,8 +335,10 @@ before marking the pull request ready.
 ## Describe a UI change in the pull request
 
 A pull request that changes `src/web/`, `public/` or `docs/screenshots/`
-needs two sections in its description; the `commands` check fails without
-them.
+needs two sections in its description. The `commands` check fails without
+them: the Undercurrent rule "A web UI pull request carries a design review
+and its screenshots" in the root `UNDERCURRENT.md` runs
+`npm run description:check` on the pull request event.
 
 1. After your last push, print the screenshot table. It lists each PNG that
    differs between the merge base with `main` and your pushed head commit,

@@ -6,17 +6,9 @@
 import { describe, expect, it } from "vitest";
 import { webRouter } from "../../src/web/routes";
 import list from "../screenshots/pages.json";
+import type { PageList } from "../screenshots/pages";
 
-interface Page {
-  name: string;
-  path: string;
-  status: number;
-  seed: string;
-  user: string | null;
-}
-
-const pages: Page[] = list.pages;
-const excluded: { route: string; reason: string }[] = list.excluded;
+const { pages, excluded }: PageList = list;
 const routes = webRouter.paths("GET");
 
 /** Whether `route` answers `path`, as the router matches them. */
