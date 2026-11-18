@@ -751,20 +751,22 @@ describe("Create hike event", () => {
     expect((await lastRound(guild))?.eventId).toBe(EVENT);
   });
 
-  it("is refused once the start has passed", async () => {
+  it("is refused once the start has passed, and the panel offers it no more", async () => {
     const guild = "200000000000000503";
     await failedClose(guild);
-    const spy = discord(guild, created);
-    await runInDurableObject(stub(guild), async (_i, state) => {
-      const store = new PollStore(state.storage, {
-        now: () => Date.UTC(2030, 5, 15, 16),
-      });
-      const round = store.getLastRound();
-      expect(round).not.toBeNull();
-      expect(
-        claimHikeEvent(state.storage, round as RoundView, store.now(), LA),
-      ).toBe(false);
+    await runInDurableObject(stub(guild), (_i, state) => {
+      // The hike's date has gone by since Discord refused.
+      state.storage.sql.exec(
+        "UPDATE poll_options SET date_value = '2020-06-15 09:00' WHERE date_value = '2030-06-15 09:00'",
+      );
     });
+    const spy = discord(guild, created);
+    const reply = await send(click(HIKE_EVENT_IDS.create(1), guild));
+    expect(reply.type).toBe(InteractionResponseType.UpdateMessage);
+    const panel = reply.data?.components ?? [];
+    expect(text(panel)).toContain(START_PASSED_MESSAGE);
+    expect(text(panel)).toContain(`**Hike event:** ${START_PASSED_MESSAGE}`);
+    expect(ids(panel)).not.toContain(HIKE_EVENT_IDS.create(1));
     expect(eventRequests(spy)).toEqual([]);
   });
 

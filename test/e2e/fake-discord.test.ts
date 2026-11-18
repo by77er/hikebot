@@ -664,6 +664,13 @@ describe("scheduled events", () => {
     description: x(1000),
   };
 
+  /** `body` without the field `key`. */
+  function without(body: object, key: string): object {
+    return Object.fromEntries(
+      Object.entries(body).filter(([name]) => name !== key),
+    );
+  }
+
   /** Checks a refusal Discord makes in a state, not for the payload. */
   function expectStateRefusal(
     reply: Reply,
@@ -709,8 +716,10 @@ describe("scheduled events", () => {
   });
 
   it("refuses an event without its required fields", async () => {
-    const { name: _name, ...noName } = hike;
-    expectRefused(await call("POST", path(), noName), RULES.eventName);
+    expectRefused(
+      await call("POST", path(), without(hike, "name")),
+      RULES.eventName,
+    );
     expectRefused(
       await call("POST", path(), { ...hike, privacy_level: 1 }),
       RULES.eventRequired,
@@ -748,11 +757,12 @@ describe("scheduled events", () => {
   });
 
   it("refuses an EXTERNAL event without an end, without a location, or with a channel", async () => {
-    const { scheduled_end_time: _end, ...noEnd } = hike;
-    expectRefused(await call("POST", path(), noEnd), RULES.externalEventEnd);
-    const { entity_metadata: _metadata, ...noLocation } = hike;
     expectRefused(
-      await call("POST", path(), noLocation),
+      await call("POST", path(), without(hike, "scheduled_end_time")),
+      RULES.externalEventEnd,
+    );
+    expectRefused(
+      await call("POST", path(), without(hike, "entity_metadata")),
       RULES.externalEventLocation,
     );
     expectRefused(
