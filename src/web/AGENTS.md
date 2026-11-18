@@ -330,11 +330,8 @@ before marking the pull request ready.
 
 ## Describe a UI change in the pull request
 
-A pull request that changes `src/web/`, `public/` or `docs/screenshots/`
-needs two sections in its description. The `commands` check fails without
-them: the Undercurrent rule "A web UI pull request carries a design review
-and its screenshots" in the root `UNDERCURRENT.md` runs
-`npm run description:check` on the pull request event.
+Do this for every pull request that changes `src/web/`, `public/` or
+`docs/screenshots/`.
 
 1. After your last push, print the screenshot table. It lists each PNG that
    differs between the merge base with `main` and your pushed head commit,
