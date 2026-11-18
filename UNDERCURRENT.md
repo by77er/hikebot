@@ -32,8 +32,50 @@ npm run typecheck
 A failing test means the change is wrong or the test is out of date; fix
 whichever it is. Never delete or skip a test to get past this rule.
 
+Only the first lines of a failing rule's output are shown, so on failure the
+command prints the file holding `npm test`'s full output, then one `FAIL`
+line per failing test with its error, then the end of Vitest's output.
+
 ```sh
-npm test
+out="${TMPDIR:-/tmp}/hikebot-npm-test.$$"
+rm -rf "$out"
+mkdir -p "$out"
+status=0
+npm test -- --reporter=default --reporter=json --outputFile.json="$out/report.json" > "$out/output.txt" 2>&1 || status=$?
+if [ "$status" -eq 0 ]; then
+  tail -n 6 "$out/output.txt"
+  rm -rf "$out"
+  exit 0
+fi
+echo "npm test failed (exit $status). Full output: $out/output.txt"
+node -e '
+const fs = require("node:fs");
+const path = require("node:path");
+const firstLine = (text) =>
+  String(text ?? "").replace(/\x1b\[[0-9;]*m/g, "").split("\n").map((line) => line.trim()).find(Boolean) ?? "(no message)";
+let report;
+try {
+  report = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+} catch {
+  console.log("Vitest wrote no report; the end of its output follows.");
+  process.exit(0);
+}
+const failures = [];
+for (const file of report.testResults ?? []) {
+  const name = path.relative(process.cwd(), file.name);
+  const failed = (file.assertionResults ?? []).filter((test) => test.status === "failed");
+  for (const test of failed) {
+    failures.push(`FAIL ${name} > ${[...test.ancestorTitles, test.title].join(" > ")}: ${firstLine(test.failureMessages?.[0])}`.slice(0, 400));
+  }
+  if (failed.length === 0 && file.status === "failed") {
+    failures.push(`FAIL ${name}: ${firstLine(file.message)}`.slice(0, 400));
+  }
+}
+for (const line of failures) console.log(line);
+if (failures.length === 0) console.log("No test failed; the end of the output says what did.");
+' "$out/report.json"
+tail -n 12 "$out/output.txt"
+exit "$status"
 ```
 
 ## No Discord SDK
