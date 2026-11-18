@@ -161,6 +161,7 @@ describe("migrations", () => {
           forum_channel_id: null,
           owner_id: null,
           owner_fetched_at: null,
+          timezone: null,
         },
       ]);
       state.storage.sql.exec(
@@ -176,6 +177,47 @@ describe("migrations", () => {
     await runInDurableObject(stub, (_instance, state) => {
       expect(appliedNames(state.storage)).toEqual(shipped);
       expect(rows(state.storage)).toMatchObject([{ vote_channel_id: "12" }]);
+    });
+  });
+
+  it("add the timezone column to a database at 0002, keeping its settings", async () => {
+    const stub = stubFor("schema-timezone");
+    await runInDurableObject(stub, (_instance, state) => {
+      // Take the database back to 0002_guild_settings, with settings in it.
+      state.storage.sql.exec("ALTER TABLE guild_settings DROP COLUMN timezone");
+      state.storage.sql.exec(
+        "DELETE FROM _migrations WHERE name = '0003_guild_timezone'",
+      );
+      state.storage.sql.exec(
+        "UPDATE guild_settings SET vote_channel_id = '12', owner_id = '21' WHERE id = 1",
+      );
+      expect(appliedNames(state.storage)).toEqual(
+        shipped.slice(0, shipped.indexOf("0003_guild_timezone")),
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(appliedNames(state.storage)).toEqual(shipped);
+      expect(
+        state.storage.sql.exec("SELECT * FROM guild_settings").toArray(),
+      ).toMatchObject([
+        { vote_channel_id: "12", owner_id: "21", timezone: null },
+      ]);
+      state.storage.sql.exec(
+        "UPDATE guild_settings SET timezone = 'Europe/Berlin' WHERE id = 1",
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(
+        state.storage.sql
+          .exec<{ timezone: string }>("SELECT timezone FROM guild_settings")
+          .one().timezone,
+      ).toBe("Europe/Berlin");
     });
   });
 

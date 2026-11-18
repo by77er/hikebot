@@ -25,12 +25,12 @@ it("shows a member who is not an admin the group's hikes, newest first", async (
   await play.playHike(g, panel, {
     location: "Ridge",
     dates: ["2030-06-08", "2030-06-15"],
-    date: "Sat, 15 Jun 2030",
+    date: "Sat, 15 Jun 2030 · 11:00",
   });
   await play.playHike(g, panel, {
     location: "Lake",
     dates: ["2030-03-02", "2030-03-09"],
-    date: "Sat, 2 Mar 2030",
+    date: "Sat, 2 Mar 2030 · 11:00",
   });
 
   await eventually(async () => {
@@ -47,9 +47,9 @@ it("shows a member who is not an admin the group's hikes, newest first", async (
   expect(shown).toContain("2 hikes");
   expect(shown).toContain(
     [
-      "Sat, 15 Jun 2030 · **Ridge**",
+      "Sat, 15 Jun 2030 · 11:00 · **Ridge**",
       `Thread: <#${ridge.id}>`,
-      "Sat, 2 Mar 2030 · **Lake**",
+      "Sat, 2 Mar 2030 · 11:00 · **Lake**",
       `Thread: <#${lake.id}>`,
     ].join("\n"),
   );
@@ -76,15 +76,17 @@ it("pages more than ten hikes with Newer and Older, in place", async () => {
         `2031-01-${String(day).padStart(2, "0")}`,
         `2031-01-${String(day + 14).padStart(2, "0")}`,
       ],
-      date: `${weekdays[(day - 1) % 7] ?? ""}, ${String(day)} Jan 2031`,
+      date: `${weekdays[(day - 1) % 7] ?? ""}, ${String(day)} Jan 2031 · 11:00`,
     });
   }
 
   await member.run("hike", [subcommand("log")]);
   const log = member.lastReply();
   expectEphemeral(member, "11 hikes · page 1 of 2");
-  expect(messageText(log)).not.toContain("Wed, 1 Jan 2031");
-  expect(messageText(log)).toMatch(/Sat, 11 Jan 2031 · \*\*Hike 11\*\*/);
+  expect(messageText(log)).not.toContain("Wed, 1 Jan 2031 · 11:00");
+  expect(messageText(log)).toMatch(
+    /Sat, 11 Jan 2031 · 11:00 · \*\*Hike 11\*\*/,
+  );
   expect(messageText(log)).not.toContain("**Hike 1**");
   expect(pageButtons(log)).toEqual([
     ["Newer", "hb:log:page:0", true],
@@ -95,7 +97,7 @@ it("pages more than ten hikes with Newer and Older, in place", async () => {
   expect(older.type).toBe(InteractionResponseType.UpdateMessage);
   const second = play.shown(log);
   expect(messageText(second)).toContain("11 hikes · page 2 of 2");
-  expect(messageText(second)).toContain("Wed, 1 Jan 2031 · **Hike 1**");
+  expect(messageText(second)).toContain("Wed, 1 Jan 2031 · 11:00 · **Hike 1**");
   expect(messageText(second)).not.toContain("**Hike 2**");
   expect(pageButtons(second)).toEqual([
     ["Newer", "hb:log:page:1", false],

@@ -22,6 +22,8 @@ export const ROUND_IDS = {
   voteChannel: "hb:admin:vote-channel",
   announceChannel: "hb:admin:announce-channel",
   forumChannel: "hb:admin:forum-channel",
+  timezone: "hb:admin:timezone",
+  timezoneName: "hb:admin:timezone-name",
   startLocation: "hb:location:start",
   initial: "hb:location:initial",
   startDate: "hb:date:start",
@@ -140,6 +142,28 @@ export class RoundPlayer {
     await g.owner.select(panel, ROUND_IDS.forumChannel, [g.channels.forum]);
     await g.owner.click(panel, ROUND_IDS.back);
     return panel;
+  }
+
+  /**
+   * Sets the time zone through Settings and its modal, then goes back to
+   * the status view, which shows the zone.
+   */
+  async setTimezone(
+    g: TestGuild,
+    panel: FakeMessage,
+    typed: string,
+    zone: string,
+  ): Promise<void> {
+    await g.owner.click(panel, ROUND_IDS.settings);
+    const form = await g.owner.click(panel, ROUND_IDS.timezone);
+    await g.owner.submitModal(form, { [ROUND_IDS.timezoneName]: typed }, panel);
+    expect(messageText(this.shown(panel))).toContain(
+      `Time zone set to ${zone}.`,
+    );
+    await g.owner.click(panel, ROUND_IDS.back);
+    expect(messageText(this.shown(panel))).toContain(
+      `**Time zone:** ${zone} · now `,
+    );
   }
 
   /** Starts the location vote from the panel and returns the poll message. */

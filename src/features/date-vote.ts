@@ -20,7 +20,7 @@ import { ephemeralNotice } from "../discord/responses";
 import { setupComplete } from "../guild/config";
 import { adminOnly } from "../guild/permissions";
 import type { ComponentHandler, ModalHandler, Router } from "../guild/router";
-import { parseDateOption } from "../polls/dates";
+import { DEFAULT_HIKE_TIME, parseDateOption, todayIn } from "../polls/dates";
 import { isPollError } from "../polls/errors";
 import {
   MAX_OPTIONS,
@@ -35,7 +35,7 @@ import {
   listing,
   missingSettings,
 } from "./admin-panel";
-import { createHikeThreadStep } from "./hike-thread";
+import { createHikeThreadStep, whenLine } from "./hike-thread";
 import {
   deferPanel,
   errorText,
@@ -55,10 +55,7 @@ export const MAX_DATES_INPUT = 1000;
 /** Offending lines listed in one refusal; the rest are counted. */
 const MAX_LISTED_LINES = 25;
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-const FORMAT_HELP =
-  "Write one date per line as `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` (24-hour), for example `2026-12-05` or `2026-12-05 09:00`.";
+const FORMAT_HELP = `Write one date per line as \`YYYY-MM-DD\` or \`YYYY-MM-DD HH:MM\` (24-hour), for example \`2026-12-05\` or \`2026-12-05 09:00\`; a date without a time starts at ${DEFAULT_HIKE_TIME}.`;
 
 /** The decided location of a round, if it has one. */
 export function decidedLocation(round: RoundView | null) {
@@ -88,13 +85,13 @@ export const DATE_POLL: PollWording = {
   order: "date",
   extraButtons: () => [],
   announcement: "Hike planned",
-  announcementLines: (poll, round) => {
+  announcementLines: (poll, round, timeZone) => {
     const location = decidedLocation(round);
     const date = poll.options.find((o) => o.id === poll.winnerOptionId);
     return [
       `**Where:** ${location?.label ?? "?"}`,
       ...(location?.details ? [location.details] : []),
-      `**When:** ${date?.label ?? "?"}`,
+      whenLine(date ?? null, timeZone),
     ];
   },
   closeSteps: [createHikeThreadStep],
@@ -106,13 +103,17 @@ export type ParsedDates =
 
 /**
  * Reads the "Candidate dates" field: one date per line, blank lines
- * dropped and repeated dates collapsed. Refuses lines that do not parse,
- * dates on a calendar day before yesterday in UTC (lenient, as the group's
- * timezone is unknown), and fewer than 2 or more than 25 distinct dates,
- * listing every offending line and the accepted formats.
+ * dropped and repeated dates collapsed, each without a time given
+ * `DEFAULT_HIKE_TIME`. Refuses lines that do not parse, dates on a calendar
+ * day before today in `timeZone` at `now`, and fewer than 2 or more than 25
+ * distinct dates, listing every offending line and the accepted formats.
  */
-export function parseCandidateDates(text: string, now: number): ParsedDates {
-  const earliest = new Date(now - DAY_MS).toISOString().slice(0, 10);
+export function parseCandidateDates(
+  text: string,
+  now: number,
+  timeZone: string,
+): ParsedDates {
+  const today = todayIn(timeZone, now);
   const problems: string[] = [];
   const dates: string[] = [];
   for (const [i, raw] of text.split(/\r?\n/).entries()) {
@@ -122,8 +123,10 @@ export function parseCandidateDates(text: string, now: number): ParsedDates {
     const parsed = parseDateOption(line);
     if (parsed === null) {
       problems.push(`${where} is not a date.`);
-    } else if (parsed.value.slice(0, 10) < earliest) {
-      problems.push(`${where} (${parsed.label}) is in the past.`);
+    } else if (parsed.value.slice(0, 10) < today) {
+      problems.push(
+        `${where} (${parsed.label}) is in the past: today is ${today} in ${timeZone}.`,
+      );
     } else if (!dates.includes(parsed.value)) {
       dates.push(parsed.value);
     }
@@ -191,9 +194,9 @@ const openStartModal: ComponentHandler = adminOnly(
             style: TextInputStyle.Paragraph,
             required: true,
             max_length: MAX_DATES_INPUT,
-            placeholder: "2026-12-05 or 2026-12-05 09:00",
+            placeholder: `2026-12-05 (starts at ${DEFAULT_HIKE_TIME}) or 2026-12-05 09:00`,
           }),
-          `${String(MIN_DATE_OPTIONS)} to ${String(MAX_OPTIONS)} dates, as YYYY-MM-DD or YYYY-MM-DD HH:MM (24-hour).`,
+          `${String(MIN_DATE_OPTIONS)} to ${String(MAX_OPTIONS)} dates, as YYYY-MM-DD or YYYY-MM-DD HH:MM (24-hour); the time defaults to ${DEFAULT_HIKE_TIME}.`,
         ),
       ]),
     };
@@ -212,6 +215,7 @@ const startDateVote: ModalHandler = adminOnly(
     const parsed = parseCandidateDates(
       textInputValue(interaction.data, DATE_IDS.dates) ?? "",
       store.now(),
+      settings.timezone,
     );
     if (!parsed.ok) return { response: ephemeralNotice(parsed.error) };
     const channelId = settings.voteChannelId;

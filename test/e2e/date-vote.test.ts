@@ -24,7 +24,7 @@ const e2e = useE2E();
 const play = new RoundPlayer(e2e);
 
 const FORMATS =
-  "Write one date per line as `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` (24-hour), for example `2026-12-05` or `2026-12-05 09:00`.";
+  "Write one date per line as `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` (24-hour), for example `2026-12-05` or `2026-12-05 09:00`; a date without a time starts at 11:00.";
 
 /** Sets up the panel and decides the location as Ridge Trail. */
 async function decided(g: TestGuild): Promise<FakeMessage> {
@@ -59,10 +59,12 @@ describe("the date vote", () => {
         components: [
           {
             label: "Candidate dates (one per line)",
+            description:
+              "2 to 25 dates, as YYYY-MM-DD or YYYY-MM-DD HH:MM (24-hour); the time defaults to 11:00.",
             component: {
               custom_id: ROUND_IDS.dates,
               required: true,
-              placeholder: "2026-12-05 or 2026-12-05 09:00",
+              placeholder: "2026-12-05 (starts at 11:00) or 2026-12-05 09:00",
             },
           },
         ],
@@ -96,8 +98,9 @@ describe("the date vote", () => {
       [
         "2020-03-01\n2030-06-08\n2020-03-08 10:00",
         [
-          "Line 1: `2020-03-01` (Sun, 1 Mar 2020) is in the past.",
-          "Line 3: `2020-03-08 10:00` (Sun, 8 Mar 2020 · 10:00) is in the past.",
+          "Line 1: `2020-03-01` (Sun, 1 Mar 2020 · 11:00) is in the past: today is ",
+          "Line 3: `2020-03-08 10:00` (Sun, 8 Mar 2020 · 10:00) is in the past: today is ",
+          " in America/Los_Angeles.",
         ],
       ],
     ];
@@ -127,23 +130,26 @@ describe("the date vote", () => {
     const text = messageText(poll);
     expect(text).toContain("## When should we hike Ridge Trail?");
     const order = [
-      "**Sat, 8 Jun 2030** · 0 votes",
+      "**Sat, 8 Jun 2030 · 11:00** · 0 votes",
       "**Sat, 15 Jun 2030 · 09:00** · 0 votes",
-      "**Sat, 22 Jun 2030** · 0 votes",
+      "**Sat, 22 Jun 2030 · 11:00** · 0 votes",
     ].map((line) => text.indexOf(line));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(buttonLabels(poll)).toEqual(["Vote"]);
 
-    await play.vote(ana, poll, ["Sat, 8 Jun 2030", "Sat, 22 Jun 2030"]);
-    await play.vote(ben, poll, ["Sat, 22 Jun 2030"]);
-    await play.vote(cy, poll, ["Sat, 8 Jun 2030"]);
+    await play.vote(ana, poll, [
+      "Sat, 8 Jun 2030 · 11:00",
+      "Sat, 22 Jun 2030 · 11:00",
+    ]);
+    await play.vote(ben, poll, ["Sat, 22 Jun 2030 · 11:00"]);
+    await play.vote(cy, poll, ["Sat, 8 Jun 2030 · 11:00"]);
     await eventually(() => {
       expect(messageText(play.shown(poll))).toContain("3 members have voted.");
     });
     // Votes do not reorder the dates.
     const voted = messageText(play.shown(poll));
-    expect(voted.indexOf("**Sat, 8 Jun 2030** · 2 votes")).toBeLessThan(
+    expect(voted.indexOf("**Sat, 8 Jun 2030 · 11:00** · 2 votes")).toBeLessThan(
       voted.indexOf("**Sat, 15 Jun 2030 · 09:00** · 0 votes"),
     );
 
@@ -160,10 +166,13 @@ describe("the date vote", () => {
     await play.closeVote(g.owner, panel, "date vote");
 
     const final = messageText(play.shown(poll));
-    const winner = /🏆 \*\*(Sat, \d+ Jun 2030)\*\* won with 2 votes\./.exec(
-      final,
-    )?.[1];
-    expect(["Sat, 8 Jun 2030", "Sat, 22 Jun 2030"]).toContain(winner);
+    const winner =
+      /🏆 \*\*(Sat, \d+ Jun 2030 · 11:00)\*\* won with 2 votes\./.exec(
+        final,
+      )?.[1];
+    expect(["Sat, 8 Jun 2030 · 11:00", "Sat, 22 Jun 2030 · 11:00"]).toContain(
+      winner,
+    );
     expect(final).toContain(
       "2 options tied with 2 votes each; the winner was drawn at random.",
     );
@@ -176,7 +185,14 @@ describe("the date vote", () => {
     );
     const announced = messageText(announcement);
     expect(announced).toContain("**Where:** Ridge Trail");
-    expect(announced).toContain(`**When:** ${winner ?? "?"}`);
+    // 11:00 in Los Angeles, the default zone, is 18:00 UTC in June.
+    const starts: Record<string, number> = {
+      "Sat, 8 Jun 2030 · 11:00": 1907172000,
+      "Sat, 22 Jun 2030 · 11:00": 1908381600,
+    };
+    expect(announced).toContain(
+      `**When:** ${winner ?? "?"} (<t:${String(starts[winner ?? ""])}:R>)`,
+    );
     expect(announced).toContain(
       `**${winner ?? "?"}** won the date vote with 2 votes.`,
     );
@@ -198,15 +214,15 @@ describe("the date vote", () => {
     const poll = await play.startDateVote(g, panel, "2030-06-08\n2030-06-15");
     await ana.click(poll, idStarting(play.shown(poll), "hb:poll:vote:"));
     const stale = ana.lastReply();
-    await play.vote(ben, poll, ["Sat, 15 Jun 2030"]);
+    await play.vote(ben, poll, ["Sat, 15 Jun 2030 · 11:00"]);
     await play.closeVote(g.owner, panel, "date vote");
     expectNoButtons(play.shown(poll));
     await ana.select(stale, idStarting(stale, "hb:poll:choose:"), [
-      optionValues(stale)["Sat, 8 Jun 2030"] ?? "",
+      optionValues(stale)["Sat, 8 Jun 2030 · 11:00"] ?? "",
     ]);
     expect(messageText(play.shown(stale))).toBe("This vote has closed.");
     expect(messageText(play.shown(poll))).toContain(
-      "🏆 **Sat, 15 Jun 2030** won with 1 vote.",
+      "🏆 **Sat, 15 Jun 2030 · 11:00** won with 1 vote.",
     );
   });
 
@@ -236,7 +252,7 @@ describe("the date vote", () => {
     const [ana] = g.members as [Member];
     const panel = await decided(g);
     const poll = await play.startDateVote(g, panel, "2030-06-08\n2030-06-15");
-    await play.vote(ana, poll, ["Sat, 8 Jun 2030"]);
+    await play.vote(ana, poll, ["Sat, 8 Jun 2030 · 11:00"]);
     await play.cancelRound(g.owner, panel);
     expect(messageText(play.shown(poll))).toContain("This vote was cancelled.");
     expectNoButtons(play.shown(poll));

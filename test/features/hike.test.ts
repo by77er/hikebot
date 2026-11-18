@@ -61,8 +61,14 @@ describe("/hike", () => {
         { type: ApplicationCommandOptionType.Subcommand, name: "admin" },
       ]),
     );
-    expect(result.response).toEqual(
-      ephemeralReply(renderAdminPanel({ settings, round: null })),
+    // The panel shows the time in the guild's zone, which the test cannot fix.
+    const shown = JSON.stringify(result.response);
+    const now = / · now (?:Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d\d:\d\d/.exec(shown);
+    expect(now).not.toBeNull();
+    expect(shown.replace(now?.[0] ?? "", "")).toBe(
+      JSON.stringify(
+        ephemeralReply(renderAdminPanel({ settings, round: null })),
+      ),
     );
   });
 

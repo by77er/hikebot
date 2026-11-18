@@ -8,8 +8,10 @@ import {
   MessageFlags,
   type APIChatInputApplicationCommandInteraction,
   type APIInteractionResponse,
+  TextInputStyle,
   type APIMessageComponentInteraction,
   type APIMessageTopLevelComponent,
+  type APIModalSubmitInteraction,
 } from "discord-api-types/v10";
 import {
   afterEach,
@@ -21,6 +23,7 @@ import {
   vi,
 } from "vitest";
 import {
+  ADMIN_PANEL_FIELDS,
   ADMIN_PANEL_IDS,
   POLL_CONTROL_IDS,
   actionButtons,
@@ -39,6 +42,7 @@ import {
   commandInteraction,
   componentInteraction,
   createSigner,
+  modalInteraction,
   signedRequest,
   type Signer,
 } from "../helpers";
@@ -63,6 +67,7 @@ const EMPTY: GuildSettings = {
   forumChannelId: null,
   ownerId: null,
   ownerFetchedAt: null,
+  timezone: "America/Los_Angeles",
 };
 const COMPLETE: GuildSettings = {
   ...EMPTY,
@@ -155,6 +160,34 @@ function click(
 ): APIMessageComponentInteraction {
   const interaction = componentInteraction(customId, guildId);
   Object.assign(interaction, { member: member(userId, roles) });
+  return interaction;
+}
+
+function submitTimezone(
+  guildId: string,
+  userId: string,
+  value: string,
+  fromMessage = true,
+): APIModalSubmitInteraction {
+  const interaction = modalInteraction(ADMIN_PANEL_IDS.timezone, guildId);
+  Object.assign(interaction, {
+    member: member(userId),
+    ...(fromMessage
+      ? { message: { id: "800000000000000001", components: [] } }
+      : {}),
+  });
+  Object.assign(interaction.data, {
+    components: [
+      {
+        type: ComponentType.Label,
+        component: {
+          type: ComponentType.TextInput,
+          custom_id: ADMIN_PANEL_FIELDS.timezone,
+          value,
+        },
+      },
+    ],
+  });
   return interaction;
 }
 
@@ -473,6 +506,25 @@ describe("renderAdminPanel", () => {
     });
   });
 
+  it("shows the time zone and the time there now", () => {
+    // 2026-11-18 19:42 UTC is Wednesday 11:42 in Los Angeles.
+    const now = Date.UTC(2026, 10, 18, 19, 42);
+    expect(
+      text(asNodes(renderAdminPanel({ settings: EMPTY, round: null, now }))),
+    ).toContain("**Time zone:** America/Los_Angeles · now Wed 11:42");
+    expect(
+      text(
+        asNodes(
+          renderAdminPanel({
+            settings: { ...EMPTY, timezone: "Asia/Kolkata" },
+            round: null,
+            now,
+          }),
+        ),
+      ),
+    ).toContain("**Time zone:** Asia/Kolkata · now Thu 01:12");
+  });
+
   it("shows a notice above the settings", () => {
     const view = renderAdminPanel({ settings: EMPTY, round: null }, "Saved.");
     expect(text(asNodes(view))).toContain("Saved.");
@@ -573,6 +625,26 @@ describe("renderAdminSettings", () => {
     expectWithinLimits(view);
   });
 
+  it("shows the time zone, the time there and Set time zone", () => {
+    const view = renderAdminSettings({
+      settings: { ...COMPLETE, timezone: "Europe/Berlin" },
+      round: null,
+      now: Date.UTC(2026, 10, 18, 19, 42),
+    });
+    const nodes = asNodes(view);
+    expect(text(nodes)).toContain(
+      "**Time zone:** Europe/Berlin · now Wed 20:42",
+    );
+    expect(text(nodes)).toContain(
+      "a date typed without a time starts at 11:00",
+    );
+    expect(find(nodes, ADMIN_PANEL_IDS.timezone)).toMatchObject({
+      type: ComponentType.Button,
+      label: "Set time zone",
+    });
+    expectWithinLimits(view);
+  });
+
   it("shows each current value as the select's default", () => {
     const view = renderAdminSettings(
       { settings: COMPLETE, round: null },
@@ -632,7 +704,10 @@ describe("the admin panel", () => {
       await send(click(ADMIN_PANEL_IDS.refresh, guild, OWNER)),
     );
     expect(refresh.type).toBe(InteractionResponseType.UpdateMessage);
-    expect(refresh.data.components).toEqual(back.data.components);
+    // The clock in the time zone line may have moved on between the two.
+    const steady = (view: Node[]) =>
+      JSON.stringify(view).replace(/ · now \w{3} \d\d:\d\d/, "");
+    expect(steady(refresh.data.components)).toBe(steady(back.data.components));
   });
 
   it("saves each select and shows the saved values", async () => {
@@ -737,6 +812,120 @@ describe("the admin panel", () => {
     expect((await settingsOf(guild)).voteChannelId).toBeNull();
   });
 
+  it("shows the time zone in both views as it was drawn", async () => {
+    const guild = "panel-timezone-views";
+    const status = message(await send(hikeAdmin(guild, OWNER)));
+    expect(text(status.data.components)).toMatch(
+      /\*\*Time zone:\*\* America\/Los_Angeles · now (Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d\d:\d\d/,
+    );
+    const settings = message(
+      await send(click(ADMIN_PANEL_IDS.settings, guild, OWNER)),
+    );
+    expect(text(settings.data.components)).toContain(
+      "**Time zone:** America/Los_Angeles · now ",
+    );
+  });
+
+  it("opens Set time zone as a modal with a Label, prefilled with the zone", async () => {
+    const guild = "panel-timezone-modal";
+    let reply = (await send(
+      click(ADMIN_PANEL_IDS.timezone, guild, OWNER),
+    )) as unknown as {
+      type: InteractionResponseType;
+      data: { custom_id: string; title: string; components: Node[] };
+    };
+    expect(reply.type).toBe(InteractionResponseType.Modal);
+    expect(reply.data.custom_id).toBe(ADMIN_PANEL_IDS.timezone);
+    expect(reply.data.title).toBe("Set time zone");
+    expect(reply.data.components).toMatchObject([
+      {
+        type: ComponentType.Label,
+        label: "Time zone",
+        component: {
+          type: ComponentType.TextInput,
+          custom_id: ADMIN_PANEL_FIELDS.timezone,
+          style: TextInputStyle.Short,
+          required: true,
+          value: "America/Los_Angeles",
+        },
+      },
+    ]);
+
+    await send(submitTimezone(guild, OWNER, "Europe/Berlin"));
+    reply = (await send(
+      click(ADMIN_PANEL_IDS.timezone, guild, OWNER),
+    )) as unknown as typeof reply;
+    expect(reply.data.components).toMatchObject([
+      { component: { value: "Europe/Berlin" } },
+    ]);
+  });
+
+  it.each([
+    ["america/denver", "America/Denver"],
+    ["MT", "America/Denver"],
+    ["Europe/Berlin", "Europe/Berlin"],
+    [" pt ", "America/Los_Angeles"],
+    ["utc", "UTC"],
+  ])("stores %j as %s and redraws Settings in place", async (typed, zone) => {
+    const guild = `panel-timezone-${typed}`;
+    const view = message(await send(submitTimezone(guild, OWNER, typed)));
+    expect(view.type).toBe(InteractionResponseType.UpdateMessage);
+    expect(text(view.data.components)).toContain(`Time zone set to ${zone}.`);
+    expect(text(view.data.components)).toContain(
+      `**Time zone:** ${zone} · now `,
+    );
+    expect((await settingsOf(guild)).timezone).toBe(zone);
+  });
+
+  it("answers a modal sent without its message with the settings as an ephemeral reply", async () => {
+    const guild = "panel-timezone-no-message";
+    const view = message(
+      await send(submitTimezone(guild, OWNER, "Europe/Berlin", false)),
+    );
+    expect(view.type).toBe(InteractionResponseType.ChannelMessageWithSource);
+    expect(view.data.flags).toBe(
+      MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+    );
+    expect((await settingsOf(guild)).timezone).toBe("Europe/Berlin");
+  });
+
+  it.each([
+    [
+      "Mars/Olympus",
+      "`Mars/Olympus` is not a time zone, so it is still Asia/Kolkata.",
+    ],
+    ["   ", "No time zone was entered, so it is still Asia/Kolkata."],
+    ["", "No time zone was entered, so it is still Asia/Kolkata."],
+    ["+05:00", "`+05:00` is not a time zone"],
+  ])(
+    "changes nothing for %j and says what would work",
+    async (typed, start) => {
+      const guild = `panel-timezone-bad-${typed}`;
+      await send(submitTimezone(guild, OWNER, "Asia/Kolkata"));
+      const reply = message(await send(submitTimezone(guild, OWNER, typed)));
+      expect(reply.type).toBe(InteractionResponseType.ChannelMessageWithSource);
+      expect(reply.data.flags).toBe(
+        MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+      );
+      const shown = text(reply.data.components);
+      expect(shown).toContain(start);
+      expect(shown).toContain(
+        "`America/Los_Angeles`, `Europe/Berlin` or `Asia/Kolkata`",
+      );
+      expect((await settingsOf(guild)).timezone).toBe("Asia/Kolkata");
+    },
+  );
+
+  it("refuses a non-admin submitting the time zone modal", async () => {
+    const guild = "panel-replay-timezone-modal";
+    await send(pickRole(guild, OWNER, ROLE));
+    const reply = message(
+      await send(submitTimezone(guild, STRANGER, "Europe/Berlin")),
+    );
+    expect(text(reply.data.components)).toBe(ADMIN_ONLY_MESSAGE);
+    expect((await settingsOf(guild)).timezone).toBe("America/Los_Angeles");
+  });
+
   it("lets a member with the admin role in", async () => {
     const guild = "panel-role-member";
     await send(pickRole(guild, OWNER, ROLE));
@@ -758,6 +947,10 @@ describe("the admin panel", () => {
         (g) => click(ADMIN_PANEL_IDS.refresh, g, STRANGER),
       ],
       [ADMIN_PANEL_IDS.back, (g) => click(ADMIN_PANEL_IDS.back, g, STRANGER)],
+      [
+        ADMIN_PANEL_IDS.timezone,
+        (g) => click(ADMIN_PANEL_IDS.timezone, g, STRANGER),
+      ],
       [
         POLL_CONTROL_IDS.startDateVote,
         (g) => click(POLL_CONTROL_IDS.startDateVote, g, STRANGER),

@@ -302,8 +302,9 @@ refused like one who runs the command.
 ## Guild settings
 
 Each guild's settings are one row of `guild_settings` in its `GuildHike`
-database (migration `0002_guild_settings`, read and written by `GuildConfig`
-in `src/guild/config.ts`):
+database (migration `0002_guild_settings`, with `timezone` added by
+`0003_guild_timezone`; read and written by `GuildConfig` in
+`src/guild/config.ts`):
 
 | Column                | Meaning                                                      |
 | --------------------- | ------------------------------------------------------------ |
@@ -314,9 +315,17 @@ in `src/guild/config.ts`):
 | `forum_channel_id`    | Forum channel that gets a thread per hike                    |
 | `owner_id`            | The guild owner's user id, as `getGuild` last returned it    |
 | `owner_fetched_at`    | When `owner_id` was fetched, in milliseconds since the epoch |
+| `timezone`            | IANA time zone the group plans hikes in                      |
 
 Every column but `id` is null until it is set. Setup is complete when the
 three channels are set.
+
+The time zone is the group's own: dates are wall-clock times there, "today"
+is judged there, and a hike's start instant is computed there. A null
+`timezone` means the default, `America/Los_Angeles` (`DEFAULT_TIMEZONE` in
+`src/polls/dates.ts`); `GuildConfig.get()` returns the effective zone as a
+non-null `timezone`, so callers never handle null. An admin sets it from the
+panel's Settings view; it is not part of setup.
 
 ## Admin panel
 
@@ -325,7 +334,9 @@ ephemeral Components V2 reply; its buttons and selects update that message
 in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
 
 - **Status view**: the bot's name, the admin role and the three channels as
-  mentions or "not set", whether setup is complete (and if not, which
+  mentions or "not set", the time zone and the time there now
+  (`**Time zone:** America/Los_Angeles · now Wed 11:42`, from the store's
+  clock, kept as `now` in `AdminPanelState`), whether setup is complete (and if not, which
   channels are still missing), the active round, and the action buttons.
   `AdminPanelState` holds the settings and the active round.
   `actionButtons(state)` returns the buttons for the current state: the poll
@@ -356,7 +367,22 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   The bot checks the pick again: the `@everyone` role (whose id is the
   guild's) is refused as the admin role, and a channel missing from the
   interaction's `resolved` channels or of a type the setting does not take
-  is refused. Back returns to the status view.
+  is refused. Under the selects, the time zone line as in the status view,
+  saying that a date typed without a time starts at 11:00, and **Set time
+  zone** (`hb:admin:timezone`), which opens a modal of the same `custom_id`
+  with one Label and short text input (`hb:admin:timezone-name`, up to 64
+  characters) prefilled with the current zone. A submit is read by
+  `normalizeTimeZone` (`src/polls/dates.ts`): an IANA name in any case
+  (`america/denver`) is stored in its canonical spelling (`America/Denver`),
+  a link as the zone it links to (`US/Pacific` as `America/Los_Angeles`;
+  the runtime's older names such as `Asia/Calcutta` as the current
+  `Asia/Kolkata`), and the aliases PT/PST/PDT, MT/MST/MDT, CT/CST/CDT and
+  ET/EST/EDT become `America/Los_Angeles`, `America/Denver`,
+  `America/Chicago` and `America/New_York`, UTC and GMT `UTC`. A valid zone
+  is saved and the Settings view redrawn with "Time zone set to <zone>.";
+  anything else (an unknown name, an offset such as `+05:00`, nothing)
+  changes nothing and gets an ephemeral answer quoting what was typed, the
+  zone still in force and three examples. Back returns to the status view.
 
 ## Polls
 
@@ -385,7 +411,8 @@ All tables live in the guild's `GuildHike` SQLite database.
 - `poll_options`: belongs to a poll. `label` (trimmed, 1-80 characters),
   `details` (trimmed, at most 300 characters, null when blank),
   `proposed_by`, `created_at`, and for date options `date_value`
-  (`YYYY-MM-DD` or `YYYY-MM-DD HH:MM`). `label_key` (trimmed, whitespace
+  (`YYYY-MM-DD HH:MM`; rounds started before every date had a time may
+  hold `YYYY-MM-DD`, read as 11:00). `label_key` (trimmed, whitespace
   collapsed, lower-cased) is unique per poll, so `Ridge  Trail` and
   `ridge trail` are the same option. At most 25 options per poll, Discord's
   select limit.
@@ -471,11 +498,29 @@ records `tie_broken` and the tied option ids.
 
 `parseDateOption(line)` accepts `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` (24-hour,
 one or more spaces between date and time, surrounding whitespace ignored).
-It rejects dates and times that do not exist (`2026-02-30`, `25:00`) and any
-other format (`2026/12/05`, `2026-12-05T09:00`, `9:00`). It returns the
-normalized `value` and a `label` with the weekday of the calendar date, for
-example `Sat, 5 Dec 2026` or `Sat, 5 Dec 2026 · 09:00`. There is no timezone
-conversion.
+It rejects dates and times that do not exist on the calendar (`2026-02-30`,
+`25:00`) and any other format (`2026/12/05`, `2026-12-05T09:00`, `9:00`). A
+date typed without a time starts at `DEFAULT_HIKE_TIME`, 11:00, so every
+option has a time: it returns the normalized `value` (`YYYY-MM-DD HH:MM`)
+and a `label` with the weekday of the calendar date and the time, for
+example `Sat, 5 Dec 2026 · 11:00` or `Sat, 5 Dec 2026 · 09:00`. `2026-12-05`
+and `2026-12-05 11:00` are the same option.
+
+A value is a wall-clock time in the guild's time zone. The pure helpers in
+`src/polls/dates.ts` turn it into instants with `Intl.DateTimeFormat`, no
+library, and take the current time as a parameter:
+
+- `hikeStart(dateValue, timeZone)`: the epoch milliseconds of that time in
+  the zone; a value without a time is read as 11:00. A time skipped when the
+  clocks go forward (02:30 on 8 March 2026 in Los Angeles) maps to the
+  instant one hour later on the clock (03:30 PDT, 10:30 UTC); a time that
+  happens twice when they go back (01:30 on 1 November 2026) maps to its
+  first occurrence (01:30 PDT, 08:30 UTC). Half-hour zones such as
+  `Asia/Kolkata` work the same way.
+- `todayIn(timeZone, now)`: the calendar day in the zone, `YYYY-MM-DD`.
+- `clockIn(timeZone, now)`: the weekday and time there, `Wed 11:42`.
+- `normalizeTimeZone(input)`: the zone's stored name, or null (see "Admin
+  panel").
 
 ## Round lifecycle
 
@@ -495,8 +540,8 @@ Individual voters are not shown. A poll has at most 25 options (Discord's
 select limit). During the location vote, members add options with a Propose a
 location button: a new one in a modal, or one from an earlier round picked
 again from a select. Date options are entered by the admin as
-`YYYY-MM-DD` or `YYYY-MM-DD HH:MM` and shown as entered, with the weekday; no
-timezone conversion.
+`YYYY-MM-DD` or `YYYY-MM-DD HH:MM`, a wall-clock time in the guild's time
+zone (11:00 when no time is typed), and shown with the weekday and the time.
 
 The poll message, the vote flow, the refresh and the close and cancel flows
 are shared by every poll kind (`src/features/poll-ui.ts`). A kind supplies a
@@ -620,16 +665,19 @@ what they did:
 
 Once the location is decided, **Start date vote** opens a modal
 (`hb:date:start`) with one required paragraph, "Candidate dates (one per
-line)" (up to 1000 characters), whose placeholder shows both formats:
-`2026-12-05 or 2026-12-05 09:00`. `parseCandidateDates` reads it with the
-store's clock: blank lines are dropped and a repeated date counts once.
+line)" (up to 1000 characters), whose placeholder shows both formats,
+`2026-12-05 (starts at 11:00) or 2026-12-05 09:00`, and whose help text says
+the time defaults to 11:00. `parseCandidateDates` reads it with the store's
+clock and the guild's time zone: blank lines are dropped and a repeated date
+counts once (a date without a time and the same date at 11:00 are one).
 Every line must parse with `parseDateOption`; no date may fall on a calendar
-day before yesterday in UTC (lenient, because the bot does not know the
-group's timezone: yesterday and today are accepted at any time); and there
-must be 2 to 25 different dates. Otherwise nothing starts and the admin gets
-an ephemeral message listing each offending line by number (as typed, cut to
-40 characters; the first 25 such lines, then a count of the rest), the count
-problem if any, and the accepted formats with examples.
+day before today in the guild's time zone (`todayIn`; today is accepted at
+any time of day); and there must be 2 to 25 different dates. Otherwise
+nothing starts and the admin gets an ephemeral message listing each
+offending line by number (as typed, cut to 40 characters; the first 25 such
+lines, then a count of the rest; a past date with "today is <day> in
+<zone>"), the count problem if any, and the accepted formats with examples
+and the 11:00 default.
 
 Valid dates open the date poll through `startDatePoll`, which stores the
 options in date order, and the handler answers with a deferred update of the
@@ -659,7 +707,8 @@ in this order:
 1. Edit the poll message to its final state.
 2. Run the kind's close steps (`PollWording.closeSteps`), in order. A
    `CloseStep` has a `name` and a `run(closed, context)` that gets the
-   closed poll, its round and the guild id, and returns lines to add to the
+   closed poll, its round, the guild id and the guild's time zone as it was
+   when the poll closed, and returns lines to add to the
    announcement (such as a link to what it created) and a note for the
    panel. The date vote's one step creates the hike's forum thread (see
    "Hike thread"), before the announcement so that the announcement can
@@ -669,8 +718,11 @@ in this order:
    and its votes, its details, the tie note, the link to the poll message,
    then the close steps' lines. The location vote's heading is "Hike
    location decided"; the date vote's is "Hike planned", opening with
-   "**Where:**" (the decided location and its details) and "**When:**" (the
-   date), and ending with "**Hike thread:** <#thread>" when the thread was
+   "**Where:**" (the decided location and its details) and "**When:**": the
+   date's label and Discord's relative timestamp of its start in the guild's
+   time zone (`hikeStart`, in seconds), which each member sees in their own
+   words and locale, for example
+   `**When:** Sat, 5 Dec 2026 · 11:00 (<t:1796497200:R>)`; and ending with "**Hike thread:** <#thread>" when the thread was
    created.
 4. Redraw the panel with the result and a line per failed step: after the
    location vote it shows the decided location and **Start date vote**;
@@ -687,7 +739,8 @@ which offers **Start location vote** again. A failed rewrite is named in the
 panel. No announcement is posted.
 
 Every admin control (the start buttons and modals of both votes, close,
-cancel and their confirmations, Create hike thread) is registered through
+cancel and their confirmations, Create hike thread, Set time zone and its
+modal) is registered through
 `adminOnly`, so a member who replays its `custom_id` is refused.
 
 ## Hike log
@@ -720,12 +773,14 @@ configured hike threads channel with `startForumThread`, so the group has one
 place to organise that hike.
 
 - **Title**: `<location> — <date label>`, for example
-  `Eagle Peak — Sat, 5 Dec 2026 · 09:00`. Discord allows 100 characters, so
+  `Eagle Peak — Sat, 5 Dec 2026 · 11:00`. Discord allows 100 characters, so
   an over-long location is shortened with "…" (on a code point boundary)
   and the date is always kept whole (`threadTitle`).
 - **First message**, Components V2 in the thread's `message`, pinging no
   one: the location as a heading, its details, "Proposed by" and the
-  proposer's mention, "**When:**" and the date, then one line per vote: the
+  proposer's mention, the "**When:**" line as in the announcement (the
+  date's label and the relative timestamp of its start in the guild's time
+  zone when the date vote closed, or now for **Create hike thread**), then one line per vote: the
   winner, its votes and how many members voted, a note when the winner was
   drawn at random from a tie (with the number of tied options), and a link
   to the poll message. Labels and details are bounded (80 and 300

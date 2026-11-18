@@ -18,6 +18,7 @@ const empty: GuildSettings = {
   forumChannelId: null,
   ownerId: null,
   ownerFetchedAt: null,
+  timezone: "America/Los_Angeles",
 };
 
 describe("GuildConfig", () => {
@@ -48,6 +49,28 @@ describe("GuildConfig", () => {
       expect(config.set("adminRoleId", null).adminRoleId).toBeNull();
       expect(config.get().voteChannelId).toBe("12");
     });
+  });
+
+  it("defaults the time zone to America/Los_Angeles until one is set", async () => {
+    const stub = stubFor("config-timezone");
+    await runInDurableObject(stub, (_instance, state) => {
+      const config = new GuildConfig(state.storage);
+      expect(config.get().timezone).toBe("America/Los_Angeles");
+      expect(config.setTimezone("Europe/Berlin")).toEqual({
+        ...empty,
+        timezone: "Europe/Berlin",
+      });
+      config.set("voteChannelId", "12");
+      expect(config.get()).toMatchObject({
+        voteChannelId: "12",
+        timezone: "Europe/Berlin",
+      });
+    });
+    await evictDurableObject(stub);
+    const settings = await runInDurableObject(stub, (_instance, state) =>
+      new GuildConfig(state.storage).get(),
+    );
+    expect(settings.timezone).toBe("Europe/Berlin");
   });
 
   it("caches the owner id with its fetch time", async () => {

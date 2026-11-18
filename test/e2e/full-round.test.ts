@@ -71,31 +71,32 @@ describe("a whole hike round", () => {
     const datePoll = await play.startDateVote(
       g,
       panel,
-      "2030-06-15 09:00\n2030-06-08\n2030-06-16",
+      "2030-06-15\n2030-06-08 09:00\n2030-06-16",
     );
     expect(channel(g.channels.text)).toHaveLength(2);
     const dateText = messageText(datePoll);
     expect(dateText).toContain("## When should we hike Lake Loop?");
-    expect(dateText.indexOf("Sat, 8 Jun 2030")).toBeLessThan(
-      dateText.indexOf("Sat, 15 Jun 2030 · 09:00"),
+    expect(dateText).toContain("**Sat, 15 Jun 2030 · 11:00** · 0 votes");
+    expect(dateText.indexOf("Sat, 8 Jun 2030 · 09:00")).toBeLessThan(
+      dateText.indexOf("Sat, 15 Jun 2030 · 11:00"),
     );
-    expect(dateText.indexOf("Sat, 15 Jun 2030 · 09:00")).toBeLessThan(
-      dateText.indexOf("Sun, 16 Jun 2030"),
+    expect(dateText.indexOf("Sat, 15 Jun 2030 · 11:00")).toBeLessThan(
+      dateText.indexOf("Sun, 16 Jun 2030 · 11:00"),
     );
     expect(buttonLabels(datePoll)).toEqual(["Vote"]);
-    await play.vote(ana, datePoll, ["Sat, 15 Jun 2030 · 09:00"]);
+    await play.vote(ana, datePoll, ["Sat, 15 Jun 2030 · 11:00"]);
     await play.vote(ben, datePoll, [
-      "Sat, 15 Jun 2030 · 09:00",
-      "Sun, 16 Jun 2030",
+      "Sat, 15 Jun 2030 · 11:00",
+      "Sun, 16 Jun 2030 · 11:00",
     ]);
-    await play.vote(cy, datePoll, ["Sat, 8 Jun 2030"]);
+    await play.vote(cy, datePoll, ["Sat, 8 Jun 2030 · 09:00"]);
     // A member changes their mind: the select is preselected and replaced.
     const changed = await play.vote(cy, datePoll, [
-      "Sat, 8 Jun 2030",
-      "Sat, 15 Jun 2030 · 09:00",
+      "Sat, 8 Jun 2030 · 09:00",
+      "Sat, 15 Jun 2030 · 11:00",
     ]);
     expect(messageText(changed)).toContain(
-      "Your votes are saved: **Sat, 8 Jun 2030**, **Sat, 15 Jun 2030 · 09:00**.",
+      "Your votes are saved: **Sat, 8 Jun 2030 · 09:00**, **Sat, 15 Jun 2030 · 11:00**.",
     );
     await eventually(() => {
       expect(messageText(play.shown(datePoll))).toContain(
@@ -103,19 +104,22 @@ describe("a whole hike round", () => {
       );
     });
     expect(messageText(play.shown(datePoll))).toContain(
-      "**Sat, 15 Jun 2030 · 09:00** · 3 votes",
+      "**Sat, 15 Jun 2030 · 11:00** · 3 votes",
     );
     await g.owner.click(panel, ROUND_IDS.refresh);
     expect(messageText(play.shown(panel))).toContain(
-      "1. Sat, 15 Jun 2030 · 09:00: 3 votes",
+      "1. Sat, 15 Jun 2030 · 11:00: 3 votes",
     );
+    // The group plans in Berlin time, set while the vote is open: the date
+    // typed without a time starts at 11:00 there.
+    await play.setTimezone(g, panel, "europe/berlin", "Europe/Berlin");
     await play.closeVote(g.owner, panel, "date vote");
 
     // Complete: both polls final, both announcements out, the panel sums up.
     const dateFinal = messageText(play.shown(datePoll));
     expect(dateFinal).toContain("## When should we hike Lake Loop? (closed)");
     expect(dateFinal).toContain(
-      "🏆 **Sat, 15 Jun 2030 · 09:00** won with 3 votes.",
+      "🏆 **Sat, 15 Jun 2030 · 11:00** won with 3 votes.",
     );
     expect(dateFinal).not.toContain("drawn at random");
     expectNoButtons(play.shown(datePoll));
@@ -126,30 +130,32 @@ describe("a whole hike round", () => {
     // The hike's thread in the forum channel, linked from the announcement.
     const [thread] = e2e.discord.threads(g.channels.forum);
     expect(e2e.discord.threads(g.channels.forum)).toHaveLength(1);
-    expect(thread?.name).toBe("Lake Loop — Sat, 15 Jun 2030 · 09:00");
+    expect(thread?.name).toBe("Lake Loop — Sat, 15 Jun 2030 · 11:00");
     const threadText = channel(thread?.id ?? "")[0] ?? "";
     expect(threadText).toContain("## Lake Loop");
     expect(threadText).toContain(`Proposed by <@${g.owner.actor.userId}>`);
-    expect(threadText).toContain("**When:** Sat, 15 Jun 2030 · 09:00");
+    // 11:00 in Berlin on 15 June 2030 is 09:00 UTC.
+    const when = "**When:** Sat, 15 Jun 2030 · 11:00 (<t:1907744400:R>)";
+    expect(threadText).toContain(when);
     expect(threadText).toContain(
       "**Location vote:** **Lake Loop** won with 3 votes; 4 members voted.",
     );
     expect(threadText).toContain(
-      `**Date vote:** **Sat, 15 Jun 2030 · 09:00** won with 3 votes; 3 members voted. [See the date vote](https://discord.com/channels/${g.guildId}/${g.channels.text}/${datePoll.id})`,
+      `**Date vote:** **Sat, 15 Jun 2030 · 11:00** won with 3 votes; 3 members voted. [See the date vote](https://discord.com/channels/${g.guildId}/${g.channels.text}/${datePoll.id})`,
     );
     const [, hikeAnnouncement] = channel(g.channels.news);
     expect(hikeAnnouncement?.split("\n")).toEqual([
       "## Hike planned",
       "**Where:** Lake Loop",
-      "**When:** Sat, 15 Jun 2030 · 09:00",
-      "**Sat, 15 Jun 2030 · 09:00** won the date vote with 3 votes.",
+      when,
+      "**Sat, 15 Jun 2030 · 11:00** won the date vote with 3 votes.",
       `[See the vote](https://discord.com/channels/${g.guildId}/${g.channels.text}/${datePoll.id})`,
       `**Hike thread:** <#${thread?.id ?? ""}>`,
     ]);
     expect(channel(g.channels.text)).toHaveLength(2);
     const summary = messageText(play.shown(panel));
     expect(summary).toContain(
-      "**Last hike:** **Lake Loop** on **Sat, 15 Jun 2030 · 09:00**.",
+      "**Last hike:** **Lake Loop** on **Sat, 15 Jun 2030 · 11:00**.",
     );
     expect(summary).toContain(`**Hike thread:** <#${thread?.id ?? ""}>`);
     expect(summary).toContain("No hike is being planned.");
@@ -195,17 +201,17 @@ describe("a whole hike round", () => {
     expect(messageText(secondDates)).toContain(
       "When should we hike Summit Path?",
     );
-    await play.vote(ana, secondDates, ["Sun, 7 Jul 2030"]);
+    await play.vote(ana, secondDates, ["Sun, 7 Jul 2030 · 11:00"]);
     await play.closeVote(g.owner, panel, "date vote");
     expect(messageText(play.shown(panel))).toContain(
-      "**Last hike:** **Summit Path** on **Sun, 7 Jul 2030**.",
+      "**Last hike:** **Summit Path** on **Sun, 7 Jul 2030 · 11:00**.",
     );
     await eventually(() => {
       expect(channel(g.channels.news)).toHaveLength(4);
     });
     expect(e2e.discord.threads(g.channels.forum).map((t) => t.name)).toEqual([
-      "Lake Loop — Sat, 15 Jun 2030 · 09:00",
-      "Summit Path — Sun, 7 Jul 2030",
+      "Lake Loop — Sat, 15 Jun 2030 · 11:00",
+      "Summit Path — Sun, 7 Jul 2030 · 11:00",
     ]);
   });
 });

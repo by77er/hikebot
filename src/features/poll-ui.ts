@@ -85,8 +85,15 @@ export interface PollWording {
   extraButtons: (poll: PollView) => APIButtonComponentWithCustomId[];
   /** The announcement's heading: "Hike location decided". */
   announcement: string;
-  /** Lines the announcement opens with, under its heading. */
-  announcementLines: (poll: PollView, round: RoundView | null) => string[];
+  /**
+   * Lines the announcement opens with, under its heading; `timeZone` is the
+   * guild's, for times.
+   */
+  announcementLines: (
+    poll: PollView,
+    round: RoundView | null,
+    timeZone: string,
+  ) => string[];
   /**
    * Steps the close flow runs after the poll message is final and before
    * the announcement, in order; what they return goes into the
@@ -100,6 +107,8 @@ export interface ClosedPoll {
   poll: PollView;
   round: RoundView | null;
   guildId: string;
+  /** The guild's time zone when the poll closed. */
+  timeZone: string;
 }
 
 /**
@@ -619,6 +628,7 @@ export function closePoll(
     poll,
     round: store.getRound(poll.roundId),
     guildId: interaction.guild_id ?? "",
+    timeZone: new GuildConfig(context.storage).get().timezone,
   };
   return {
     response: deferPanel(interaction),
@@ -640,7 +650,7 @@ export async function runCloseFlow(
   wording: PollWording,
   context: HandlerContext,
 ): Promise<string[]> {
-  const { poll, round } = closed;
+  const { poll } = closed;
   const winner = poll.options.find((o) => o.id === poll.winnerOptionId);
   const notes = [
     `The ${wording.name} is closed: **${winner?.label ?? "?"}** won with ${votes(winner?.votes ?? 0)}${poll.tieBroken ? ", drawn at random from a tie" : ""}.`,
@@ -669,9 +679,7 @@ export async function runCloseFlow(
     try {
       await discordApi(context.env).createMessage(
         announceChannelId,
-        messageBody(
-          renderAnnouncement(poll, wording, closed.guildId, round, extra),
-        ),
+        messageBody(renderAnnouncement(closed, wording, extra)),
       );
     } catch (error) {
       notes.push(
@@ -712,16 +720,14 @@ async function finalizePollMessage(
  * the poll message, then `extra` lines from the close steps.
  */
 export function renderAnnouncement(
-  poll: PollView,
+  { poll, round, guildId, timeZone }: ClosedPoll,
   wording: PollWording,
-  guildId: string,
-  round: RoundView | null = null,
   extra: readonly string[] = [],
 ): APIMessageTopLevelComponent[] {
   const winner = poll.options.find((o) => o.id === poll.winnerOptionId);
   const lines = [
     `## ${wording.announcement}`,
-    ...wording.announcementLines(poll, round),
+    ...wording.announcementLines(poll, round, timeZone),
     `**${winner?.label ?? "?"}** won the ${wording.name} with ${votes(winner?.votes ?? 0)}.`,
   ];
   if (winner?.details) lines.push(winner.details);

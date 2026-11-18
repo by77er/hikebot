@@ -1,6 +1,7 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { expect } from "vitest";
+import { parseDateOption } from "../../src/polls/dates";
 import { isPollError, type PollErrorCode } from "../../src/polls/errors";
 import {
   PollStore,
@@ -93,7 +94,8 @@ export function completeRound(
   store.closePoll(where.id, "u-admin");
   const other = date.startsWith("2099-12-31") ? "2099-12-30" : "2099-12-31";
   const when = store.startDatePoll(round.id, "u-admin", [date, other]);
-  const pick = when.options.find((o) => o.dateValue === date.trim());
+  const value = parseDateOption(date)?.value;
+  const pick = when.options.find((o) => o.dateValue === value);
   if (!pick) throw new Error(`no date option ${date}`);
   store.setVotes(when.id, "u1", [pick.id]);
   store.closePoll(when.id, "u-admin");
@@ -120,7 +122,8 @@ export function playRound(
     date,
     "2040-01-01",
   ]);
-  const day = datePoll.options.find((o) => o.dateValue === date);
+  const value = parseDateOption(date)?.value;
+  const day = datePoll.options.find((o) => o.dateValue === value);
   store.setVotes(datePoll.id, "u-voter", [day?.id ?? 0]);
   store.closePoll(datePoll.id, "u-admin");
   return round.id;
