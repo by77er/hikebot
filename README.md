@@ -15,6 +15,9 @@ Requires Node.js 22.13 or later. To set up a checkout, run the bot locally,
 run the tests and check a change, follow [`AGENTS.md`](AGENTS.md); each
 directory with procedures of its own has an `AGENTS.md` too.
 
+Put your Discord application's values in `.dev.vars`; it is git-ignored, so
+they are never committed.
+
 To receive real interactions locally, expose the dev server with a tunnel
 (for example `cloudflared tunnel --url http://localhost:8787`) and use the
 tunnel's URL as the Interactions Endpoint URL below.

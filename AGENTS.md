@@ -35,6 +35,11 @@ the repository root unless a step says otherwise.
    cp .dev.vars.example .dev.vars
    ```
 
+   To run against a real Discord application, replace the example values in
+   `.dev.vars` with the application's, found where the secrets table in
+   `README.md` says. Git ignores `.dev.vars`, so the values stay on your
+   machine.
+
 3. Install `uc`, the Undercurrent command line, from the latest release of
    `by77er/undercurrent` into `~/.local/bin`. On other platforms replace
    `uc-linux-x86_64` with `uc-linux-aarch64` or `uc-macos-aarch64`:
@@ -96,6 +101,21 @@ To exercise interactions, write a test that sends a signed interaction, as
 4. Add a row for it to the secrets table in `README.md`, saying where to find
    its value.
 5. Follow "Change wrangler.jsonc" from step 2, then run `npm test`.
+6. Set the deployed value, typing it at the prompt so it stays out of files
+   and shell history:
+
+   ```sh
+   npx wrangler secret put <NAME>
+   ```
+
+## Add infrastructure
+
+1. If Cloudflare can create it from `wrangler.jsonc` (a binding such as a
+   Durable Object class, a KV namespace or a route), declare it there and
+   follow "Change wrangler.jsonc". `npm run deploy` creates it.
+2. Otherwise, write it with `by77er/inframe`, the owner's functional frontend
+   for OpenTofu, in a new directory, and give that directory an `AGENTS.md`
+   with the commands to plan and apply it.
 
 ## Check your change before opening a pull request
 
