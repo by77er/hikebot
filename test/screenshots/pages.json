@@ -67,6 +67,10 @@
     {
       "route": "/login",
       "reason": "Starts sign-in: sets the state cookie and redirects to Discord's authorize page, so it has no page of its own; the sign-in pages are screenshotted from the callback."
+    },
+    {
+      "route": "/maps/sample.png",
+      "reason": "The sample map picture (image/png) the deploy's smoke check fetches, not a page; its views are reviewed in docs/maps/samples/ (npm run maps:samples)."
     }
   ]
 }
