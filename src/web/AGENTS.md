@@ -43,7 +43,8 @@ and which headers they carry.
    Pass `{ status }` as the second argument for a page answered with
    another status, and `{ headers }` for extra headers such as `Location`.
 
-3. Write its tests as "Test a page" says, then check the whole change:
+3. Add it to the screenshots as "Add a page to the screenshots" says.
+4. Write its tests as "Test a page" says, then check the whole change:
 
    ```sh
    npm run typecheck
@@ -168,3 +169,241 @@ and which headers they carry.
    ```sh
    npx vitest run test/web/calendar.test.ts
    ```
+
+## Take the screenshots
+
+Every page has committed screenshots in `docs/screenshots/`, named
+`<page>--<viewport>--<scheme>.png`: a phone (390x844) and a desktop
+(1280x800) viewport, each in the light and the dark colour scheme. Only the
+script makes them; never edit, add or delete a PNG there by hand.
+
+1. Take them. The script starts the Worker with the fake Discord API, opens
+   every page in `test/screenshots/pages.json` in headless Chromium, prints
+   `wrote docs/screenshots/<file>` for each file and deletes the PNGs no page
+   makes any more. It exits non-zero, naming the page, viewport and scheme,
+   when a page answers with another status than its entry gives or a file
+   it loads fails:
+
+   ```sh
+   npm run screenshots
+   pgrep -x workerd || echo "no workerd left"
+   ```
+
+2. If Chromium does not start (for example
+   `libnspr4.so: cannot open shared object file`), delete what the
+   `@sparticuz/chromium` package unpacked into `/tmp` and run it again:
+
+   ```sh
+   rm -rf /tmp/chromium /tmp/al2023 /tmp/fonts /tmp/fonts-cache /tmp/swiftshader /tmp/locales /tmp/libEGL.so /tmp/libGLESv2.so /tmp/libvk_swiftshader.so /tmp/libvulkan.so.1 /tmp/vk_swiftshader_icd.json
+   npm run screenshots
+   ```
+
+3. Check that the files are what the script makes, as CI does on every pull
+   request. A second run on the same commit changes no byte, so it prints
+   `docs/screenshots/ matches what is committed.` once they are committed:
+
+   ```sh
+   git add docs/screenshots
+   git commit -m "<what changed on the pages>"
+   npm run screenshots:check
+   ```
+
+4. If the CI step "Check the screenshots are current" fails while your
+   check passes, download the screenshots CI made and compare them with
+   yours:
+
+   ```sh
+   gh run download <run-id> --name screenshots-<head sha> --dir ~/screenshots-ci
+   cmp ~/screenshots-ci/<file> docs/screenshots/<file>
+   ```
+
+## Add a page to the screenshots
+
+1. Add an entry for the page to `"pages"` in `test/screenshots/pages.json`:
+   its `name` (lower-case words joined by hyphens; it names the PNG files),
+   the `path` to open, the `status` it must answer with, the `seed` that
+   sets up the data it shows, and the `user` signed in (`null` for a page a
+   signed-out visitor sees). Add one entry per state worth seeing, such as
+   `hike-empty` and `hike-many-locations`.
+
+   ```json
+   {
+     "name": "trails",
+     "path": "/trails",
+     "status": 200,
+     "seed": "empty",
+     "user": null
+   }
+   ```
+
+2. If the page needs data, add a seed to `SEEDS` in
+   `test/screenshots/seeds.ts`. A seed gets the running Worker and fake
+   Discord API and sets the state up as members would, as "Play a hike
+   round in an end-to-end scenario" in `test/AGENTS.md` says, with fixed
+   names and dates written years ahead, never from today's date.
+3. A `GET` route that is not a page (a file, a redirect, a plain-text
+   answer) goes under `"excluded"` with its `route` as registered and the
+   `reason` it has no screenshot.
+4. Run the test that compares the list with the web router's `GET` routes:
+
+   ```sh
+   npx vitest run test/web/screenshot-pages.test.ts
+   ```
+
+5. Follow "Take the screenshots", then "Review your own UI change as a
+   designer".
+
+## Review your own UI change as a designer
+
+Do this for every change to `src/web/`, `public/` or `docs/screenshots/`,
+before marking the pull request ready.
+
+1. Follow "Take the screenshots", then list the screenshots your change
+   adds, changes or removes:
+
+   ```sh
+   git fetch origin main
+   git diff --stat origin/main... -- docs/screenshots
+   ```
+
+2. Open every PNG of each page you changed, at both viewports and in both
+   schemes, and the same file from `main` next to it. Judge from the
+   images, not from the code: open the files in an image viewer (an agent
+   reads them with its file-reading tool, which shows images):
+
+   ```sh
+   mkdir -p /tmp/before
+   git show origin/main:docs/screenshots/<file> > /tmp/before/<file>
+   ```
+
+3. Go through this checklist for each page, as a critical designer who has
+   never seen it:
+   - **Purpose and hierarchy.** Within a few seconds it is clear what the
+     page is, what state the hike is in, and what the visitor can do next.
+     There is one primary action, and it looks like one.
+   - **Consistency.** Headings, buttons, forms, spacing, colours and wording
+     look and behave like the existing pages and components.
+   - **Every state.** Empty, error, success and disabled states, very long
+     text (a 100-character location name) and many items (25 options) each
+     look right. Add a page entry with a seed for each state that differs.
+   - **Phone layout.** Nothing scrolls sideways at 390px, and every tap
+     target is at least 44px high and wide.
+   - **Accessibility.** Text contrast is at least 4.5:1 (3:1 for large
+     text); focus is visible and moves in a sensible order; every control
+     has a label; headings go in order without skipping a level; everything
+     works from the keyboard alone; nothing is conveyed by colour alone;
+     motion stops under `prefers-reduced-motion`.
+   - **Wording.** Plain words, and the same words the bot uses in Discord
+     for the same things.
+   - **Dark scheme.** Every colour, border, image and focus ring still
+     works on the dark background.
+
+   A screenshot does not show focus, keyboard order or motion: check those
+   in a browser against the dev server ("Run the bot locally" in the root
+   `AGENTS.md`). Without a browser, list a page's controls in focus order
+   and read their labels from the HTML:
+
+   ```sh
+   curl -fsS http://localhost:8787/ | grep -oE '<(a|button|input|select|textarea|label|h[1-6])\b[^>]*>'
+   ```
+
+4. Give each finding a severity:
+   - **blocker**: a visitor cannot do the job, or the page breaks or shuts
+     someone out (unreadable text, a control without a label, sideways
+     scrolling on a phone, a dead end).
+   - **major**: the job is hard, slow or misleading (no clear primary action
+     or two of them, contrast below the minimum, a target under 44px, a
+     state that looks broken, words that differ from the bot's).
+   - **minor**: noticeably off without getting in the way (uneven spacing,
+     misalignment, a component that differs from its siblings).
+   - **nit**: taste.
+5. Fix every blocker and major, take the screenshots again and repeat from
+   step 1. Fix or explain the rest.
+6. Write the findings into the `## Design review` section of the pull
+   request description, one line each: the severity, the page, viewport and
+   scheme, what you saw, and what was done about it:
+
+   ```text
+   - **major** home (phone, dark): the link colour is hard to tell from the text. Fixed: links are underlined.
+   - **nit** not-found (desktop, light): the page is short and leaves the screen empty below. Left: an error page stays short.
+   ```
+
+   When you find nothing, say what you checked, page by page.
+
+## Describe a UI change in the pull request
+
+A pull request that changes `src/web/`, `public/` or `docs/screenshots/`
+needs two sections in its description; the `commands` check fails without
+them.
+
+1. After your last push, print the screenshot table. It lists each PNG that
+   differs between the merge base with `main` and your pushed head commit,
+   with the image before and after, or `No visual change.`:
+
+   ```sh
+   git push
+   git fetch origin main
+   npm run screenshots:table
+   ```
+
+2. Write the description with a `## Design review` section, from "Review
+   your own UI change as a designer", and the table as the `## Screenshots`
+   section, then set it as step 3 of "Get a pull request checked" in the
+   root `AGENTS.md` says.
+3. Check the description as CI will, from the pull request as GitHub has
+   it:
+
+   ```sh
+   gh api repos/by77er/hikebot/pulls/<n> --jq '{pull_request: .}' > /tmp/pr-event.json
+   GITHUB_EVENT_PATH=/tmp/pr-event.json npm run description:check
+   ```
+
+   It prints `the description has what it needs`, or what is missing.
+
+4. Every push changes the head commit, so run step 1 again after each push
+   and replace the section. The check reads the description as it was when
+   its run started: after editing the description of a ready pull request,
+   start a new run with `gh pr ready <n> --undo` and `gh pr ready <n>`.
+
+## Review a pull request that changes the web UI
+
+As the reviewer of a pull request that changes `src/web/`, `public/` or
+`docs/screenshots/`:
+
+1. Check out the pull request and check that its screenshots are what the
+   script makes; it prints `docs/screenshots/ matches what is committed.`:
+
+   ```sh
+   gh pr checkout <n>
+   npm run screenshots:check
+   ```
+
+2. Check that the `## Screenshots` section lists every changed PNG, and
+   that each image in it is the committed file: download each before and
+   after image from its URL and compare it with the file at the merge base
+   and at the head:
+
+   ```sh
+   git fetch origin main
+   git diff --name-only origin/main... -- docs/screenshots
+   mkdir -p /tmp/review/before /tmp/review/after
+   curl -fsSL -o /tmp/review/after/<file> <after url>
+   cmp /tmp/review/after/<file> docs/screenshots/<file>
+   curl -fsSL -o /tmp/review/before/<file> <before url>
+   git show "$(git merge-base origin/main HEAD)":docs/screenshots/<file> | cmp - /tmp/review/before/<file>
+   ```
+
+3. Open every before and after image and go through the checklist in
+   "Review your own UI change as a designer" yourself, before reading the
+   author's `## Design review`. Be critical: judge the page as a member
+   who has never seen it would, independently of the author's notes.
+4. Compare your findings with the author's. Request changes for every
+   blocker or major the author missed, or recorded without fixing:
+
+   ```sh
+   gh pr review <n> --request-changes --body-file <file>
+   ```
+
+5. In the review, say what you saw in the screenshots, page by page, at
+   each viewport and scheme. A review of a UI pull request that does not
+   say what was seen in the screenshots is not a design review.

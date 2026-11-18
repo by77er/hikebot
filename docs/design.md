@@ -116,6 +116,26 @@ so a name or title from Discord or a form cannot inject markup.
   keeps the directory's `AGENTS.md` and `UNDERCURRENT.md` from being served.
   The stylesheet is a neutral baseline (system fonts, a readable line
   length).
+- **Screenshots and design review.** Every page has committed screenshots
+  in `docs/screenshots/`, named `<page>--<viewport>--<scheme>.png`, at a
+  phone (390x844) and a desktop (1280x800) viewport in the light and dark
+  colour schemes. `npm run screenshots` (`test/screenshots/take.ts`) makes
+  them: it starts the Worker with the end-to-end harness (local workerd and
+  the fake Discord API), sets up the state each page needs from fixed seed
+  data, and opens the pages in headless Chromium from the
+  `@sparticuz/chromium` npm package driven by `puppeteer-core`, so nothing
+  is downloaded at run time. The browser's clock, time zone and language are
+  fixed, animations are off, the device scale factor is 1 and fonts come
+  from the package, never from the machine, so a run gives the same bytes
+  on every machine. The page list (`test/screenshots/pages.json`) names
+  each page with its path, expected status, seed and signed-in member; a
+  unit test fails when a `GET` route of the web router is neither on it nor
+  excluded with a reason. On a pull request, CI regenerates the screenshots
+  and fails when a committed one differs. A pull request that changes
+  `src/web/`, `public/` or `docs/screenshots/` carries a written design
+  review and a before/after table of the changed screenshots in its
+  description (`npm run screenshots:table`), and `npm run description:check`
+  checks both from the pull request event.
 
 ## GuildHike and the handler registry
 
@@ -299,7 +319,7 @@ overlap period with two keys.
 
 ## Testing
 
-`npm test` runs two Vitest projects; both must pass.
+`npm test` runs three Vitest projects; all must pass.
 
 - **Unit** (`test/`, except `test/e2e/`): tests run inside the Workers
   runtime through `@cloudflare/vitest-plugin`, with real Durable Object
@@ -318,6 +338,9 @@ overlap period with two keys.
   `public/` as in production. The suite needs no network beyond localhost, no
   credentials and no writable home directory; it stops workerd and the fake
   after each file, also when a test fails or times out.
+- **Node** (`test/screenshots/`): tests of the screenshot tooling that run
+  git in temporary repositories: the before/after table and the pull
+  request description check.
 
 The e2e harness (`test/e2e/harness/`) has five parts:
 
