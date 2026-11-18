@@ -72,10 +72,9 @@ The example adds a step that posts a note in the voting channel; use your
 step's name and work.
 
 1. In the kind's file (`src/features/date-vote.ts` for the date vote),
-   write the step. `run` gets the closed poll, its round and the guild id,
-   and returns lines for the announcement and an optional note for the
-   panel. Throw on a failed Discord call; the close flow names the step in
-   the panel with the error and still posts the announcement:
+   write a `CloseStep` (see `src/features/poll-ui.ts`). Return `announce`
+   lines for the announcement or a `note` for the panel, and throw on a
+   failed Discord call:
 
    ```ts
    import { discordApi } from "../discord/api";
