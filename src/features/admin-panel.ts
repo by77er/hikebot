@@ -51,6 +51,7 @@ import type {
   Router,
 } from "../guild/router";
 import { UNAVAILABLE_MESSAGE } from "../guild/router";
+import { hikeEventStatus, type HikeEventStatus } from "./hike-event-state";
 import { hikeThreadStatus, type HikeThreadStatus } from "./hike-thread-state";
 
 /** Everything the panel shows. Later features add their state here. */
@@ -62,6 +63,8 @@ export interface AdminPanelState {
   finished?: RoundView | null;
   /** Where the finished round's forum thread stands. */
   thread?: HikeThreadStatus | null;
+  /** Where the finished round's scheduled event stands. */
+  event?: HikeEventStatus | null;
   /** The time the panel is drawn at, for the clock in the guild's zone. */
   now?: number;
 }
@@ -91,6 +94,8 @@ export const POLL_CONTROL_IDS = {
     customId("round", "cancel", String(roundId)),
   createHikeThread: (roundId: number) =>
     customId("thread", "create", String(roundId)),
+  createHikeEvent: (roundId: number) =>
+    customId("event", "create", String(roundId)),
 } as const;
 
 /** How the panel names each kind of poll. */
@@ -139,15 +144,18 @@ export function loadAdminPanelState(
   const round = store.getActiveRound();
   const last = round === null ? store.getLastRound() : null;
   const finished = last?.status === "complete" ? last : null;
+  const settings = new GuildConfig(storage).get();
+  const now = store.now();
   return {
-    settings: new GuildConfig(storage).get(),
+    settings,
     round,
     finished,
-    thread:
+    thread: finished === null ? null : hikeThreadStatus(storage, finished, now),
+    event:
       finished === null
         ? null
-        : hikeThreadStatus(storage, finished, store.now()),
-    now: store.now(),
+        : hikeEventStatus(storage, finished, now, settings.timezone),
+    now,
   };
 }
 
@@ -165,7 +173,7 @@ export function actionButtons(
 function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
   const { round } = state;
   if (round === null) {
-    const { finished, thread } = state;
+    const { finished, thread, event } = state;
     return [
       ...(setupComplete(state.settings)
         ? [
@@ -182,6 +190,17 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
             button({
               custom_id: POLL_CONTROL_IDS.createHikeThread(finished.id),
               label: "Create hike thread",
+              style: ButtonStyle.Secondary,
+            }),
+          ]
+        : []),
+      // Only while the last round is complete without an event, and its
+      // start is ahead.
+      ...(finished && (event?.state === "missing" || event?.state === "failed")
+        ? [
+            button({
+              custom_id: POLL_CONTROL_IDS.createHikeEvent(finished.id),
+              label: "Create hike event",
               style: ButtonStyle.Secondary,
             }),
           ]
@@ -287,6 +306,7 @@ function roundSection(state: AdminPanelState) {
       ? [
           `**Last hike:** ${hikeSummary(finished)}`,
           ...threadLines(state.thread),
+          ...eventLines(state.event),
         ]
       : [];
     if (setupComplete(state.settings)) {
@@ -343,6 +363,28 @@ function threadLines(thread: HikeThreadStatus | null | undefined): string[] {
     case "missing":
       return [
         "**Hike thread:** not created. Click Create hike thread to create it.",
+      ];
+    default:
+      return [];
+  }
+}
+
+/** Where the last hike's scheduled event stands, for its summary. */
+function eventLines(event: HikeEventStatus | null | undefined): string[] {
+  switch (event?.state) {
+    case "created":
+      return ["**Hike event:** created."];
+    case "creating":
+      return ["**Hike event:** being created."];
+    case "past":
+      return [
+        "**Hike event:** The hike's start time has passed, so no event was created.",
+      ];
+    case "failed":
+      return [`**Hike event:** not created. ${event.reason}`];
+    case "missing":
+      return [
+        "**Hike event:** not created. Click Create hike event to create it.",
       ];
     default:
       return [];

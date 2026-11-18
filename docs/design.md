@@ -182,7 +182,8 @@ Handlers and follow-ups call Discord's REST API only through `DiscordApi`
 (`src/discord/api.ts`, built with `discordApi(env)`): a thin typed wrapper
 over `fetch` with no Discord SDK.
 
-- Bot routes (messages, forum threads, guilds, global commands) send
+- Bot routes (messages, forum threads, guilds, guild scheduled events,
+  global commands) send
   `Authorization: Bot <DISCORD_BOT_TOKEN>`. Interaction webhook routes
   (edit original response, follow-up) are authorised by the interaction
   token in the path and send no `Authorization` header.
@@ -217,7 +218,9 @@ the `_migrations` table, each in its own transaction together with its
 record. Migrations are never renamed, reordered or edited once shipped; new
 ones are appended. `0001_polls` creates the poll tables described under
 "Polls". `0002_guild_settings` creates `guild_settings`, described under
-"Guild settings".
+"Guild settings", and `0003_guild_timezone` adds its time zone.
+`0004_round_event` adds `rounds.event_id`, the hike's Discord scheduled
+event (see "Hike event").
 
 ## Signing
 
@@ -303,16 +306,20 @@ The e2e harness (`test/e2e/harness/`) has five parts:
   submit, an update to a modal not opened from a message), flags a message
   or deferred response cannot set, or data that breaks the rules below.
 - A fake Discord API on `node:http` with the routes the bot uses: create and
-  edit message, start forum thread, get guild, edit original interaction
-  response, create follow-up and bulk overwrite global commands. As on
+  edit message, start forum thread, get guild, create guild scheduled
+  event, edit original interaction response, create follow-up and bulk
+  overwrite global commands. As on
   Discord, after an interaction is answered with an update or a deferred
   update, its original response is the message its component (or the modal's
   button) was on. It keeps
-  guilds (with owner), channels (with type), threads, messages and
-  interaction replies in memory, so tests assert on what the channel shows.
-  Tests can make a channel fail as Discord does (403/50013 missing
-  permissions, 403/50001 missing access, 404/10003 unknown channel) and
-  answer one request with a 429 and `retry_after`.
+  guilds (with owner), channels (with type), threads, messages, scheduled
+  events and interaction replies in memory, so tests assert on what the
+  channel shows. Tests can make a channel fail as Discord does (403/50013
+  missing permissions, 403/50001 missing access, 404/10003 unknown
+  channel), take Create Events from the bot in a guild (403/50013 on
+  creating an event), fill a guild with scheduled events up to Discord's
+  100 (400/30038 for the next), and answer one request with a 429 and
+  `retry_after`.
 - Discord's rules, which the fake enforces on every message, edit, thread
   and command it receives and the client on every interaction response,
   answering a 400 that names the rule and links the docs page stating it:
@@ -325,7 +332,10 @@ The e2e harness (`test/e2e/harness/`) has five parts:
   80; `custom_id` 1-100 characters and unique within a message; modal titles
   and Label text up to 45, 1-5 modal components; text input limits; thread
   names 1-100 characters and forum threads only in forum or media channels;
-  command names and descriptions. A request the fake refuses fails the test
+  scheduled events with their required fields, a name and a location of
+  1-100 characters and a description of 1-1000, and, for an EXTERNAL
+  event, an end time and a location and no channel; command names and
+  descriptions. A request the fake refuses fails the test
   that caused it.
 - Helpers that read a message's text, find a component by `custom_id` in a
   nested Components V2 tree, act as a member who clicks, selects and submits
@@ -449,7 +459,12 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   created" with the reason. While that round has no thread and none is
   being created, the panel offers **Create hike thread**
   (`hb:thread:create:<round id>`) after **Start location vote**; see "Hike
-  thread".
+  thread". Then where its scheduled event stands (`event`): "**Hike
+  event:** created.", "being created", "not created" with the reason, or
+  "The hike's start time has passed, so no event was created."; while the
+  round has no event, none is being created and its start is ahead, the
+  panel offers **Create hike event** (`hb:event:create:<round id>`) after
+  Create hike thread; see "Hike event".
 - **Confirmation view**: Close and Cancel round first replace the status view
   with a question and a confirm button (`hb:poll:close-confirm:<poll id>`,
   `hb:round:cancel-confirm:<round id>`) next to Back; only the confirm button
@@ -494,7 +509,8 @@ All tables live in the guild's `GuildHike` SQLite database.
   date poll's message could not be posted. A guild has at most one active round (status other than
   `complete` / `cancelled`), enforced by the code and by a partial unique
   index. Also `location_option_id` and `date_option_id` (the winners),
-  `thread_id` (the hike's forum thread), `started_by` / `started_at`, and
+  `thread_id` (the hike's forum thread), `event_id` (the hike's Discord
+  scheduled event), `started_by` / `started_at`, and
   `ended_by` / `ended_at` (set on complete or cancel).
 - `polls`: belongs to a round; `kind` is `location` or `date` (one of each per
   round at most); `status` is `open` or `closed`. `channel_id` /
@@ -538,6 +554,7 @@ for example to schedule an alarm. Every operation that writes more than one row 
 | `cancelRound(roundId, userId)`                      | closes any open poll without a winner; round -> `cancelled`                                                                        | `round_not_found`, `invalid_state` (already ended)                                                                                                                   |
 | `setPollMessage(pollId, channelId, messageId)`      | records the poll's Discord message                                                                                                 | `poll_not_found`                                                                                                                                                     |
 | `setRoundThread(roundId, threadId)`                 | records the hike's forum thread                                                                                                    | `round_not_found`                                                                                                                                                    |
+| `setRoundEvent(roundId, eventId)`                   | records the hike's Discord scheduled event                                                                                         | `round_not_found`                                                                                                                                                    |
 
 Reads return null when there is nothing to return:
 `getPoll(pollId, viewerId?)`, `getRound(roundId, viewerId?)`,
@@ -831,7 +848,7 @@ Closing a poll picks the option with the most votes; ties are broken
 uniformly at random and the result says so. The poll message is edited to
 show final results, and a message is posted in the configured announcements
 channel. Closing the date vote also creates a thread with the hike details in
-the configured forum channel.
+the configured forum channel and a Discord scheduled event for the hike.
 
 The confirm button closes the poll through `closePoll` before answering, so
 the result stands whatever Discord does next, and answers with a deferred
@@ -846,9 +863,10 @@ in this order:
    closed poll, its round, the guild id and the guild's time zone as it was
    when the poll closed, and returns lines to add to the
    announcement (such as a link to what it created) and a note for the
-   panel. The date vote's one step creates the hike's forum thread (see
-   "Hike thread"), before the announcement so that the announcement can
-   link it. A step that throws is named in the panel ("Could not <name>:
+   panel. The date vote's steps create the hike's forum thread (see "Hike
+   thread"), then its scheduled event (see "Hike event"), which links the
+   thread, both before the announcement so that the announcement can link
+   them. A step that throws is named in the panel ("Could not <name>:
    <error>") and the flow goes on.
 3. Post the announcement: the kind's heading and opening lines, the winner
    and its votes, its details, the tie note, the link to the poll message,
@@ -859,7 +877,8 @@ in this order:
    time zone (`hikeStart`, in seconds), which each member sees in their own
    words and locale, for example
    `**When:** Sat, 5 Dec 2026 · 11:00 (<t:1796497200:R>)`; and ending with "**Hike thread:** <#thread>" when the thread was
-   created.
+   created and "**Hike event:** https://discord.com/events/<guild>/<event>"
+   when the event was.
 4. Redraw the panel with the result and a line per failed step: after the
    location vote it shows the decided location and **Start date vote**;
    after the date vote the round is `complete` and the panel sums up the
@@ -875,8 +894,8 @@ which offers **Start location vote** again. A failed rewrite is named in the
 panel. No announcement is posted.
 
 Every admin control (the start buttons and modals of both votes, close,
-cancel and their confirmations, Create hike thread, Set time zone and its
-modal) is registered through
+cancel and their confirmations, Create hike thread, Create hike event, Set
+time zone and its modal) is registered through
 `adminOnly`, so a member who replays its `custom_id` is refused.
 
 ## Hike log
@@ -887,9 +906,10 @@ with an ephemeral Components V2 message that pings no one: one container
 with the heading "Hike log" and the count ("2 hikes"; with more than one
 page also "page 2 of 3"), then one Text Display per hike, newest first: the
 date label and the location in bold
-(`Sat, 15 Jun 2030 · 09:00 · **Ridge**`), its details shortened to 200
-characters (`LOG_DETAILS_CAP`) with "…", and "Thread: <#thread>" when the
-round has a thread. With no hikes it says "No hikes yet. The first one
+(`Sat, 15 Jun 2030 · 09:00 · **Ridge**`), its details shortened to 140
+characters (`LOG_DETAILS_CAP`) with "…", and on one line "Thread:
+<#thread>" when the round has a thread and "[Event](https://discord.com/events/<guild>/<event>)"
+when it has a scheduled event, joined by " · ". With no hikes it says "No hikes yet. The first one
 appears here when a date vote closes."
 
 A page holds ten hikes (`HIKES_PER_PAGE`). With more than ten, the message
@@ -898,8 +918,8 @@ ends with **Newer** and **Older** buttons (`hb:log:page:<n>`, `n` the
 with nowhere to go is disabled. A page number past the end shows the last
 page, and one before the first (or not a number) the first. With ten or
 fewer hikes there are no buttons. At ten hikes with the longest label (80)
-and details (300) and a 20-digit thread id, a page takes about 3,500
-characters and 17 components, within Discord's 4000 and 40.
+and details (300) and 20-digit thread, guild and event ids, a page takes
+about 3,700 characters and 17 components, within Discord's 4000 and 40.
 
 ## Hike thread
 
@@ -916,11 +936,16 @@ place to organise that hike.
   one: the location as a heading, its details, "Proposed by" and the
   proposer's mention, the "**When:**" line as in the announcement (the
   date's label and the relative timestamp of its start in the guild's time
-  zone when the date vote closed, or now for **Create hike thread**), then one line per vote: the
+  zone when the date vote closed, or now for **Create hike thread**), the
+  link to the hike's scheduled event once it exists ("**Hike event:**
+  https://discord.com/events/<guild>/<event>"), then one line per vote: the
   winner, its votes and how many members voted, a note when the winner was
   drawn at random from a tie (with the number of tied options), and a link
   to the poll message. Labels and details are bounded (80 and 300
   characters), so it stays far within 40 components and 4000 characters.
+  The thread is created before the event, so the event step edits this
+  message once the event exists (see "Hike event"); a thread created later
+  by **Create hike thread** has the link from the start.
 
 The thread's id is stored on the round with `setRoundThread`, and the
 announcement links it. If the thread cannot be created (no hike threads
@@ -949,6 +974,76 @@ hike thread is being created." and creates nothing, and a click after it
 succeeded is told the thread already exists. A claim older than a minute
 (`THREAD_CLAIM_MS`) counts as lost, for example when the object restarted
 during the follow-up, so the button comes back.
+
+## Hike event
+
+When the date vote closes, the close step in `src/features/hike-event.ts`,
+after the thread's and before the announcement, creates a Discord guild
+scheduled event for the hike with `createGuildScheduledEvent`
+(`POST /guilds/{guild.id}/scheduled-events`), so members can click
+Interested and get Discord's reminder.
+
+- **Type**: EXTERNAL (`entity_type` 3), guild only (`privacy_level` 2), with
+  no channel.
+- **Name** and **location** (`entity_metadata.location`): the location's
+  label.
+- **Start** (`scheduled_start_time`): `hikeStart` of the winning date in the
+  guild's time zone when the date vote closed (or now, for **Create hike
+  event**); **end** (`scheduled_end_time`): `HIKE_DURATION_HOURS` (4) later.
+  Both are sent as ISO 8601 UTC instants.
+- **Description**: the location's details, then "Hike thread:" and the
+  thread's link (`https://discord.com/channels/<guild>/<thread>`) when the
+  thread exists; left out when there is neither.
+
+Discord allows a name and a location of 1-100 characters and a description
+of up to 1000. A label is at most 80 characters and details at most 300, but
+`hikeEventRequest` shortens each with "…" (on a code point boundary) to fit
+anyway, keeping the thread link whole, so a request is never refused for its
+length.
+
+The event's id is stored on the round with `setRoundEvent`. The step then
+edits the thread's first message (whose id is the thread's) to add the
+event's link, `https://discord.com/events/<guild>/<event>`; if that edit
+fails it is logged and nothing else changes. The announcement and the hike
+log link the event too.
+
+**A start that has passed.** The bot never asks Discord for an event whose
+start is not after the store's clock: the step does nothing, the round
+completes as usual, and the panel says "The hike's start time has passed,
+so no event was created." with no button. Whether the start has passed is
+worked out when the panel is drawn, so a hike whose event failed and whose
+start then passed shows the same line and loses its button.
+
+**When Discord refuses** (the bot lacks Create Events, the guild already has
+100 scheduled or active events, anything else), the round is still
+`complete` and the announcement is posted once, without the event's link.
+The panel shows the reason under the last hike in words an admin can act
+on: for 403/50013, "Give the bot the Create Events permission in the
+server's settings, then click Create hike event."; for 400/30038, that the
+server already has 100 scheduled events and one must end or be deleted;
+otherwise Discord's error and "Click Create hike event to try again."
+**Create hike event** is offered until the event exists.
+
+**Create hike event** retries for the round in its `custom_id`, only while
+that round is the last one, `complete` without an event, and its start is
+ahead; otherwise it redraws the panel saying why it did nothing ("The hike
+event already exists: <link>", the start has passed, or that hike is no
+longer the last one). It answers with a deferred update, creates the event
+in the follow-up, stores it, edits the thread's first message, then redraws
+the panel with the link (or the new reason). A retry never posts the
+announcement again.
+
+At most one event is created per round, the same way as the thread: where
+creation stands is kept in `storage.kv` under `hike-event:<round id>`
+(`src/features/hike-event-state.ts`), when a creation started or the reason
+it last failed, and removed once the event id is on the round. The close
+step and the button both claim the creation there, synchronously and before
+the button answers, so a second click while the first is running is told
+"The hike event is being created." and creates nothing. A claim older than a
+minute (`EVENT_CLAIM_MS`) counts as lost, so the button comes back.
+
+The bot needs the Create Events permission in the server; `README.md` lists
+it among the invite's permissions.
 
 ## Map data
 

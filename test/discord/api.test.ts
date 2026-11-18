@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import {
   ApplicationCommandType,
+  GuildScheduledEventEntityType,
+  GuildScheduledEventPrivacyLevel,
   MessageFlags,
   ThreadAutoArchiveDuration,
   type RESTPostAPIChannelMessageJSONBody,
@@ -11,6 +13,7 @@ import {
   DiscordApi,
   DiscordApiError,
   discordApi,
+  eventUrl,
   type DiscordApiOptions,
 } from "../../src/discord/api";
 
@@ -90,6 +93,14 @@ const message: RESTPostAPIChannelMessageJSONBody = {
 
 describe("DiscordApi routes", () => {
   const base = "https://discord.com/api/v10";
+  const scheduledEvent = {
+    name: "Ridge",
+    privacy_level: GuildScheduledEventPrivacyLevel.GuildOnly,
+    scheduled_start_time: "2030-06-15T16:00:00.000Z",
+    scheduled_end_time: "2030-06-15T20:00:00.000Z",
+    entity_type: GuildScheduledEventEntityType.External,
+    entity_metadata: { location: "Ridge" },
+  };
   const cases: {
     name: string;
     call: (api: DiscordApi) => Promise<unknown>;
@@ -116,6 +127,13 @@ describe("DiscordApi routes", () => {
       call: (api) => api.startForumThread("30", { name: "Hike", message }),
       method: "POST",
       url: `${base}/channels/30/threads`,
+      auth: true,
+    },
+    {
+      name: "createGuildScheduledEvent",
+      call: (api) => api.createGuildScheduledEvent("40", scheduledEvent),
+      method: "POST",
+      url: `${base}/guilds/40/scheduled-events`,
       auth: true,
     },
     {
@@ -189,6 +207,13 @@ describe("DiscordApi routes", () => {
       auto_archive_duration: 1440,
       message: { ...message, allowed_mentions: { parse: [] } },
     });
+  });
+
+  it("sends a scheduled event as given, without allowed_mentions", async () => {
+    const { api, sent } = client([ok({ id: "60" })]);
+    await api.createGuildScheduledEvent("40", scheduledEvent);
+    expect(sent[0]?.headers.get("Content-Type")).toBe("application/json");
+    expect(sent[0]?.body).toEqual(scheduledEvent);
   });
 
   it("accepts 204 No Content", async () => {
@@ -428,5 +453,11 @@ describe("allowed_mentions", () => {
     const body = { ...message };
     await api.createMessage("10", body);
     expect(body).not.toHaveProperty("allowed_mentions");
+  });
+});
+
+describe("eventUrl", () => {
+  it("links a guild's scheduled event", () => {
+    expect(eventUrl("40", "60")).toBe("https://discord.com/events/40/60");
   });
 });

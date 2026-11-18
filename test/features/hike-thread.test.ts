@@ -186,6 +186,7 @@ function round(location: PollView, date: PollView): RoundView {
     locationOptionId: location.winnerOptionId,
     dateOptionId: date.winnerOptionId,
     threadId: null,
+    eventId: null,
     startedBy: OWNER,
     startedAt: 0,
     endedBy: OWNER,
@@ -469,10 +470,12 @@ describe("closing the date vote", () => {
     expect(requests.map((r) => r.route)).toEqual([
       `PATCH /channels/${TEXT}/messages/${DATE_MESSAGE}`,
       `POST /channels/${FORUM}/threads`,
+      `POST /guilds/${GUILD}/scheduled-events`,
+      `PATCH /channels/${THREAD}/messages/${THREAD}`,
       `POST /channels/${NEWS}/messages`,
       "PATCH /webhooks/100/interaction-token/messages/@original",
     ]);
-    const [, thread, announcement, panel] = requests;
+    const [, thread, , , announcement, panel] = requests;
     expect(thread?.body.name).toBe("Lake Loop — Sat, 15 Jun 2030 · 09:00");
     expect(thread?.body.message?.flags).toBe(MessageFlags.IsComponentsV2);
     expect(thread?.body.message?.content).toBeUndefined();
@@ -485,11 +488,9 @@ describe("closing the date vote", () => {
     expect(body).toContain(
       "**Date vote:** **Sat, 15 Jun 2030 · 09:00** won with 2 votes; 2 members voted.",
     );
-    expect(
-      text(announcement?.body.components ?? [])
-        .split("\n")
-        .at(-1),
-    ).toBe(`**Hike thread:** <#${THREAD}>`);
+    expect(text(announcement?.body.components ?? []).split("\n")).toContain(
+      `**Hike thread:** <#${THREAD}>`,
+    );
     const shown = text(panel?.body.components ?? []);
     expect(shown).toContain(`**Hike thread:** <#${THREAD}>`);
     expect(ids(panel?.body.components ?? [])).not.toContain(
@@ -507,10 +508,11 @@ describe("closing the date vote", () => {
     expect(requests.map((r) => r.route)).toEqual([
       `PATCH /channels/${TEXT}/messages/${DATE_MESSAGE}`,
       `POST /channels/${FORUM}/threads`,
+      `POST /guilds/${GUILD}/scheduled-events`,
       `POST /channels/${NEWS}/messages`,
       "PATCH /webhooks/100/interaction-token/messages/@original",
     ]);
-    const [, , announcement, panel] = requests;
+    const [, , , announcement, panel] = requests;
     expect(text(announcement?.body.components ?? [])).not.toContain(
       "Hike thread",
     );

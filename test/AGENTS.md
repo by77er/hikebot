@@ -573,11 +573,18 @@ Run `npm test` for the whole suite before opening a pull request.
    and take the refused thread with `e2e.discord.takeRejections()`,
    asserting on it.
 
+   To make creating the hike's scheduled event fail as Discord does when
+   the bot lacks Create Events, call
+   `e2e.discord.revokeCreateEvents(g.guildId)` before `closeVote` and lift
+   it with `grantCreateEvents`; to fill the guild to Discord's 100 events,
+   call `e2e.discord.seedScheduledEvents(g.guildId, 100)`.
+
 3. Assert on what members see with `play.shown(message)`,
    `buttonLabels(message)` and `e2e.discord.channelMessages(id)` (for a
    hike thread, `e2e.discord.threads(g.channels.forum)` gives the threads
    with their `name`, and `channelMessages(thread.id)[0]` its first
-   message), and wait for background edits with `eventually` or
+   message; `e2e.discord.scheduledEvents(g.guildId)` gives the guild's
+   events), and wait for background edits with `eventually` or
    `waitForMessage`:
 
    ```ts

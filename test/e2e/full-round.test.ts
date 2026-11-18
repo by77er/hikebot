@@ -143,6 +143,23 @@ describe("a whole hike round", () => {
     expect(threadText).toContain(
       `**Date vote:** **Sat, 15 Jun 2030 · 11:00** won with 3 votes; 3 members voted. [See the date vote](https://discord.com/channels/${g.guildId}/${g.channels.text}/${datePoll.id})`,
     );
+    // The hike's scheduled event, from 11:00 Berlin time for four hours,
+    // linked from the thread's first message and the announcement.
+    const events = e2e.discord.scheduledEvents(g.guildId);
+    expect(events).toHaveLength(1);
+    const [event] = events;
+    expect(event).toMatchObject({
+      name: "Lake Loop",
+      entity_type: 3,
+      privacy_level: 2,
+      channel_id: null,
+      scheduled_start_time: "2030-06-15T09:00:00.000Z",
+      scheduled_end_time: "2030-06-15T13:00:00.000Z",
+      entity_metadata: { location: "Lake Loop" },
+      description: `Hike thread: https://discord.com/channels/${g.guildId}/${thread?.id ?? ""}`,
+    });
+    const eventLink = `https://discord.com/events/${g.guildId}/${event?.id ?? ""}`;
+    expect(threadText).toContain(`**Hike event:** ${eventLink}`);
     const [, hikeAnnouncement] = channel(g.channels.news);
     expect(hikeAnnouncement?.split("\n")).toEqual([
       "## Hike planned",
@@ -151,6 +168,7 @@ describe("a whole hike round", () => {
       "**Sat, 15 Jun 2030 · 11:00** won the date vote with 3 votes.",
       `[See the vote](https://discord.com/channels/${g.guildId}/${g.channels.text}/${datePoll.id})`,
       `**Hike thread:** <#${thread?.id ?? ""}>`,
+      `**Hike event:** ${eventLink}`,
     ]);
     expect(channel(g.channels.text)).toHaveLength(2);
     const summary = messageText(play.shown(panel));
@@ -158,6 +176,7 @@ describe("a whole hike round", () => {
       "**Last hike:** **Lake Loop** on **Sat, 15 Jun 2030 · 11:00**.",
     );
     expect(summary).toContain(`**Hike thread:** <#${thread?.id ?? ""}>`);
+    expect(summary).toContain("**Hike event:** created.");
     expect(summary).toContain("No hike is being planned.");
     expect(buttonLabels(play.shown(panel))).toEqual([
       "Start location vote",
@@ -172,6 +191,9 @@ describe("a whole hike round", () => {
         expect(request.body).toMatchObject({
           message: { allowed_mentions: { parse: [] } },
         });
+      } else if (request.path.endsWith("/scheduled-events")) {
+        // An event is not a message.
+        expect(request.body).not.toHaveProperty("content");
       } else if (request.method === "POST" || request.method === "PATCH") {
         expect(request.body).toMatchObject({
           allowed_mentions: { parse: [] },
@@ -212,6 +234,10 @@ describe("a whole hike round", () => {
     expect(e2e.discord.threads(g.channels.forum).map((t) => t.name)).toEqual([
       "Lake Loop — Sat, 15 Jun 2030 · 11:00",
       "Summit Path — Sun, 7 Jul 2030 · 11:00",
+    ]);
+    expect(e2e.discord.scheduledEvents(g.guildId).map((e) => e.name)).toEqual([
+      "Lake Loop",
+      "Summit Path",
     ]);
   });
 });

@@ -54,6 +54,7 @@ import {
   listing,
   missingSettings,
 } from "./admin-panel";
+import { createHikeEventStep } from "./hike-event";
 import { createHikeThreadStep, whenLine } from "./hike-thread";
 import {
   VOTE_CLOSED_MESSAGE,
@@ -123,7 +124,7 @@ export const DATE_POLL: PollWording = {
       whenLine(date ?? null, timeZone),
     ];
   },
-  closeSteps: [createHikeThreadStep],
+  closeSteps: [createHikeThreadStep, createHikeEventStep],
 };
 
 /** The candidate dates an admin typed, or why they are refused. */

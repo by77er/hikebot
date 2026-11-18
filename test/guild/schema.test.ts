@@ -185,8 +185,9 @@ describe("migrations", () => {
     await runInDurableObject(stub, (_instance, state) => {
       // Take the database back to 0002_guild_settings, with settings in it.
       state.storage.sql.exec("ALTER TABLE guild_settings DROP COLUMN timezone");
+      state.storage.sql.exec("ALTER TABLE rounds DROP COLUMN event_id");
       state.storage.sql.exec(
-        "DELETE FROM _migrations WHERE name = '0003_guild_timezone'",
+        "DELETE FROM _migrations WHERE name IN ('0003_guild_timezone', '0004_round_event')",
       );
       state.storage.sql.exec(
         "UPDATE guild_settings SET vote_channel_id = '12', owner_id = '21' WHERE id = 1",
@@ -218,6 +219,46 @@ describe("migrations", () => {
           .exec<{ timezone: string }>("SELECT timezone FROM guild_settings")
           .one().timezone,
       ).toBe("Europe/Berlin");
+    });
+  });
+
+  it("add the event column to a database at 0003, keeping its completed round", async () => {
+    const stub = stubFor("schema-round-event");
+    await runInDurableObject(stub, (_instance, state) => {
+      // Take the database back to 0003_guild_timezone, with a hike in it.
+      state.storage.sql.exec("ALTER TABLE rounds DROP COLUMN event_id");
+      state.storage.sql.exec(
+        "DELETE FROM _migrations WHERE name = '0004_round_event'",
+      );
+      state.storage.sql.exec(
+        `INSERT INTO rounds (status, thread_id, started_by, started_at, ended_by, ended_at)
+         VALUES ('complete', '61', '21', 1, '21', 2)`,
+      );
+      expect(appliedNames(state.storage)).toEqual(
+        shipped.slice(0, shipped.indexOf("0004_round_event")),
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(appliedNames(state.storage)).toEqual(shipped);
+      expect(
+        state.storage.sql.exec("SELECT * FROM rounds").toArray(),
+      ).toMatchObject([
+        { status: "complete", thread_id: "61", ended_at: 2, event_id: null },
+      ]);
+      state.storage.sql.exec("UPDATE rounds SET event_id = '71'");
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(
+        state.storage.sql
+          .exec<{ event_id: string }>("SELECT event_id FROM rounds")
+          .one().event_id,
+      ).toBe("71");
     });
   });
 

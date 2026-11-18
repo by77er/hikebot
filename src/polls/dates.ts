@@ -4,6 +4,9 @@ export const DEFAULT_TIMEZONE = "America/Los_Angeles";
 /** The start time of a date typed without one, `HH:MM`. */
 export const DEFAULT_HIKE_TIME = "11:00";
 
+/** How long a hike is planned to last, from its start. */
+export const HIKE_DURATION_HOURS = 4;
+
 export interface ParsedDate {
   /** `YYYY-MM-DD HH:MM`; sorts chronologically as text. */
   value: string;

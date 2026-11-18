@@ -23,6 +23,12 @@ const CREATE_MESSAGE = `${DOCS}/resources/message#create-message`;
 const RESPONDING = `${DOCS}/interactions/receiving-and-responding`;
 const START_FORUM_THREAD = `${DOCS}/resources/channel#start-thread-in-forum-or-media-channel`;
 const COMMANDS = `${DOCS}/interactions/application-commands`;
+const SCHEDULED_EVENTS = `${DOCS}/resources/guild-scheduled-event`;
+const CREATE_SCHEDULED_EVENT = `${SCHEDULED_EVENTS}#create-guild-scheduled-event`;
+const SCHEDULED_EVENT_OBJECT = `${SCHEDULED_EVENTS}#guild-scheduled-event-object-guild-scheduled-event-structure`;
+const EVENT_FIELD_REQUIREMENTS = `${SCHEDULED_EVENTS}#guild-scheduled-event-object-field-requirements-by-entity-type`;
+const EVENT_METADATA = `${SCHEDULED_EVENTS}#guild-scheduled-event-object-guild-scheduled-event-entity-metadata`;
+const EVENT_PERMISSIONS = `${SCHEDULED_EVENTS}#guild-scheduled-event-permissions-requirements`;
 
 /** A rule the fake enforces. `docs` is where the limit is stated. */
 export interface Rule {
@@ -144,6 +150,66 @@ export const RULES = {
   commandDescription: rule(
     "command-description-1-to-100",
     `${COMMANDS}#application-command-object-application-command-structure`,
+  ),
+  /**
+   * Create Guild Scheduled Event's JSON Params list `name`,
+   * `privacy_level`, `scheduled_start_time` ("ISO8601 timestamp") and
+   * `entity_type` without "?", so each is required; privacy level
+   * "GUILD_ONLY | 2" is the only one, and entity types are 1, 2 and 3.
+   */
+  eventRequired: rule(
+    "scheduled-event-required-fields",
+    CREATE_SCHEDULED_EVENT,
+  ),
+  /** name: "the name of the scheduled event (1-100 characters)". */
+  eventName: rule("scheduled-event-name-1-to-100", SCHEDULED_EVENT_OBJECT),
+  /** description: "the description of the scheduled event (1-1000 characters)". */
+  eventDescription: rule(
+    "scheduled-event-description-1-to-1000",
+    SCHEDULED_EVENT_OBJECT,
+  ),
+  /** location: "location of the event (1-100 characters)". */
+  eventLocation: rule("scheduled-event-location-1-to-100", EVENT_METADATA),
+  /**
+   * scheduled_end_time: "the time the scheduled event will end, required if
+   * entity_type is EXTERNAL".
+   */
+  externalEventEnd: rule(
+    "external-event-needs-end-time",
+    EVENT_FIELD_REQUIREMENTS,
+  ),
+  /**
+   * For EXTERNAL: "`entity_metadata` with a non-null `location` must be
+   * provided".
+   */
+  externalEventLocation: rule(
+    "external-event-needs-location",
+    EVENT_FIELD_REQUIREMENTS,
+  ),
+  /**
+   * channel_id: "the channel id in which the scheduled event will be
+   * hosted, or null if scheduled entity type is EXTERNAL".
+   */
+  externalEventChannel: rule(
+    "external-event-has-no-channel",
+    EVENT_FIELD_REQUIREMENTS,
+  ),
+  /**
+   * "A guild can have a maximum of 100 events with `SCHEDULED` or `ACTIVE`
+   * status at any time." Discord answers code 30038, "Maximum number of
+   * uncompleted guild scheduled events reached (100)".
+   */
+  maxScheduledEvents: rule(
+    "guild-max-100-scheduled-events",
+    CREATE_SCHEDULED_EVENT,
+  ),
+  /**
+   * To create an EXTERNAL event, "The user's guild-level permissions must
+   * include: CREATE_EVENTS". Discord answers 403, code 50013.
+   */
+  createEventsPermission: rule(
+    "scheduled-event-needs-create-events",
+    EVENT_PERMISSIONS,
   ),
 } as const;
 
@@ -691,6 +757,65 @@ export function validateForumThread(
     }
   }
   return violations;
+}
+
+/** Checks the body of Create Guild Scheduled Event. */
+export function validateScheduledEvent(body: unknown): Violation[] {
+  const c = new Checker();
+  const o = isObject(body) ? body : {};
+  c.maxLength(RULES.eventName, "name", o.name, 100, 1);
+  if (o.privacy_level !== 2) {
+    c.fail(RULES.eventRequired, "privacy_level", "must be 2 (GUILD_ONLY)");
+  }
+  const start = text(o.scheduled_start_time);
+  if (start === undefined || Number.isNaN(Date.parse(start))) {
+    c.fail(
+      RULES.eventRequired,
+      "scheduled_start_time",
+      "must be an ISO8601 timestamp",
+    );
+  }
+  if (o.entity_type !== 1 && o.entity_type !== 2 && o.entity_type !== 3) {
+    c.fail(RULES.eventRequired, "entity_type", "must be 1, 2 or 3");
+  }
+  if (o.description !== undefined && o.description !== null) {
+    c.maxLength(RULES.eventDescription, "description", o.description, 1000, 1);
+  }
+  const metadata = isObject(o.entity_metadata) ? o.entity_metadata : {};
+  if (metadata.location !== undefined && metadata.location !== null) {
+    c.maxLength(
+      RULES.eventLocation,
+      "entity_metadata.location",
+      metadata.location,
+      100,
+      1,
+    );
+  }
+  if (o.entity_type === 3) {
+    const end = text(o.scheduled_end_time);
+    if (end === undefined || Number.isNaN(Date.parse(end))) {
+      c.fail(
+        RULES.externalEventEnd,
+        "scheduled_end_time",
+        "is required for an EXTERNAL event",
+      );
+    }
+    if (typeof metadata.location !== "string") {
+      c.fail(
+        RULES.externalEventLocation,
+        "entity_metadata.location",
+        "is required for an EXTERNAL event",
+      );
+    }
+    if (o.channel_id !== undefined && o.channel_id !== null) {
+      c.fail(
+        RULES.externalEventChannel,
+        "channel_id",
+        "must be null or left out for an EXTERNAL event",
+      );
+    }
+  }
+  return c.violations;
 }
 
 /** Checks the body of Bulk Overwrite Global Application Commands. */

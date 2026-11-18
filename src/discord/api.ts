@@ -10,6 +10,8 @@ import type {
   RESTPostAPIChannelMessageResult,
   RESTPostAPIChannelThreadsResult,
   RESTPostAPIGuildForumThreadsJSONBody,
+  RESTPostAPIGuildScheduledEventJSONBody,
+  RESTPostAPIGuildScheduledEventResult,
   RESTPostAPIWebhookWithTokenJSONBody,
   RESTPostAPIWebhookWithTokenWaitResult,
   RESTPutAPIApplicationCommandsJSONBody,
@@ -17,6 +19,14 @@ import type {
 } from "discord-api-types/v10";
 
 export const DEFAULT_DISCORD_API_BASE = "https://discord.com/api/v10";
+
+/**
+ * The link to a guild's scheduled event, which members open to see it and
+ * click Interested. A link, not an API route.
+ */
+export function eventUrl(guildId: string, eventId: string): string {
+  return `https://discord.com/events/${guildId}/${eventId}`;
+}
 
 const USER_AGENT = "DiscordBot (https://github.com/by77er/hikebot, 0.0.0)";
 
@@ -138,6 +148,19 @@ export class DiscordApi {
       method: "POST",
       path: `/channels/${forumChannelId}/threads`,
       body: { ...body, message: withoutPings(body.message) },
+      auth: true,
+    });
+  }
+
+  /** Creates a scheduled event; the bot needs Create Events in the guild. */
+  createGuildScheduledEvent(
+    guildId: string,
+    body: RESTPostAPIGuildScheduledEventJSONBody,
+  ): Promise<RESTPostAPIGuildScheduledEventResult> {
+    return this.call({
+      method: "POST",
+      path: `/guilds/${guildId}/scheduled-events`,
+      body,
       auth: true,
     });
   }

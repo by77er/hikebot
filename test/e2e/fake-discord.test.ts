@@ -651,6 +651,173 @@ describe("authorization, failures and rate limits", () => {
   });
 });
 
+describe("scheduled events", () => {
+  const EVENT_GUILD = "220000000000000002";
+  const path = (guildId = EVENT_GUILD) => `/guilds/${guildId}/scheduled-events`;
+  const hike = {
+    name: x(100),
+    privacy_level: 2,
+    scheduled_start_time: "2030-06-15T16:00:00.000Z",
+    scheduled_end_time: "2030-06-15T20:00:00.000Z",
+    entity_type: 3,
+    entity_metadata: { location: x(100) },
+    description: x(1000),
+  };
+
+  /** `body` without the field `key`. */
+  function without(body: object, key: string): object {
+    return Object.fromEntries(
+      Object.entries(body).filter(([name]) => name !== key),
+    );
+  }
+
+  /** Checks a refusal Discord makes in a state, not for the payload. */
+  function expectStateRefusal(
+    reply: Reply,
+    status: number,
+    code: number,
+    rule: Rule,
+  ): void {
+    expect(reply).toMatchObject({
+      status,
+      body: { code, rule: rule.id, docs: rule.docs },
+    });
+    refused.add(rule.id);
+    expect(discord.takeRejections()).toEqual([]);
+  }
+
+  beforeAll(() => {
+    discord.addGuild({ id: EVENT_GUILD, ownerId: "420000000000000001" });
+  });
+
+  it("creates an EXTERNAL event at the limits and keeps it for the guild", async () => {
+    const reply = await call("POST", path(), hike);
+    expect(reply.status).toBe(200);
+    const { id } = reply.body as { id: string };
+    expect(discord.scheduledEvents(EVENT_GUILD)).toEqual([
+      {
+        id,
+        guild_id: EVENT_GUILD,
+        channel_id: null,
+        creator_id: APPLICATION_ID,
+        name: hike.name,
+        description: hike.description,
+        scheduled_start_time: hike.scheduled_start_time,
+        scheduled_end_time: hike.scheduled_end_time,
+        privacy_level: 2,
+        status: 1,
+        entity_type: 3,
+        entity_id: null,
+        entity_metadata: { location: hike.entity_metadata.location },
+      },
+    ]);
+    expect(reply.body).toMatchObject({ id, name: hike.name });
+    expect(discord.takeRejections()).toEqual([]);
+  });
+
+  it("refuses an event without its required fields", async () => {
+    expectRefused(
+      await call("POST", path(), without(hike, "name")),
+      RULES.eventName,
+    );
+    expectRefused(
+      await call("POST", path(), { ...hike, privacy_level: 1 }),
+      RULES.eventRequired,
+    );
+    expectRefused(
+      await call("POST", path(), { ...hike, scheduled_start_time: "soon" }),
+      RULES.eventRequired,
+    );
+    expectRefused(
+      await call("POST", path(), { ...hike, entity_type: 4 }),
+      RULES.eventRequired,
+    );
+  });
+
+  it("refuses a name, description or location past Discord's limits", async () => {
+    expectRefused(
+      await call("POST", path(), { ...hike, name: x(101) }),
+      RULES.eventName,
+    );
+    expectRefused(
+      await call("POST", path(), { ...hike, name: "" }),
+      RULES.eventName,
+    );
+    expectRefused(
+      await call("POST", path(), { ...hike, description: x(1001) }),
+      RULES.eventDescription,
+    );
+    expectRefused(
+      await call("POST", path(), {
+        ...hike,
+        entity_metadata: { location: x(101) },
+      }),
+      RULES.eventLocation,
+    );
+  });
+
+  it("refuses an EXTERNAL event without an end, without a location, or with a channel", async () => {
+    expectRefused(
+      await call("POST", path(), without(hike, "scheduled_end_time")),
+      RULES.externalEventEnd,
+    );
+    expectRefused(
+      await call("POST", path(), without(hike, "entity_metadata")),
+      RULES.externalEventLocation,
+    );
+    expectRefused(
+      await call("POST", path(), { ...hike, entity_metadata: {} }),
+      RULES.externalEventLocation,
+    );
+    expectRefused(
+      await call("POST", path(), { ...hike, channel_id: TEXT_CHANNEL }),
+      RULES.externalEventChannel,
+    );
+  });
+
+  it("refuses the 101st scheduled event of a guild with code 30038", async () => {
+    const full = "220000000000000003";
+    discord.addGuild({ id: full, ownerId: "420000000000000001" });
+    discord.seedScheduledEvents(full, 99);
+    expect(await call("POST", path(full), hike)).toMatchObject({
+      status: 200,
+    });
+    expect(discord.scheduledEvents(full)).toHaveLength(100);
+    expectStateRefusal(
+      await call("POST", path(full), hike),
+      400,
+      30038,
+      RULES.maxScheduledEvents,
+    );
+    expect(discord.scheduledEvents(full)).toHaveLength(100);
+  });
+
+  it("refuses with 403 Missing Permissions while the bot lacks Create Events", async () => {
+    const guild = "220000000000000004";
+    discord.addGuild({ id: guild, ownerId: "420000000000000001" });
+    discord.revokeCreateEvents(guild);
+    expectStateRefusal(
+      await call("POST", path(guild), hike),
+      403,
+      50013,
+      RULES.createEventsPermission,
+    );
+    expect(discord.scheduledEvents(guild)).toEqual([]);
+    discord.grantCreateEvents(guild);
+    expect(await call("POST", path(guild), hike)).toMatchObject({
+      status: 200,
+    });
+    expect(discord.scheduledEvents(guild)).toHaveLength(1);
+  });
+
+  it("answers Unknown Guild for a guild it does not hold", async () => {
+    expect(await call("POST", path("229999999999999999"), hike)).toMatchObject({
+      status: 404,
+      body: { code: 10004 },
+    });
+  });
+});
+
 describe("rule coverage", () => {
   it("has a test above for every rule the fake enforces", () => {
     const untested = Object.values(RULES)
