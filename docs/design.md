@@ -237,8 +237,10 @@ signature check, guild routing and follow-up path work in workerd.
 
 ## Commands
 
-One global slash command, `/hike`, with one subcommand, `admin` ("Open the
-hikebot admin panel"). `src/discord/commands.ts` defines it: guild-only
+One global slash command, `/hike`, with two subcommands: `admin` ("Open the
+hikebot admin panel", admins only; see "Admin panel") and `log` ("Show the
+group's hikes", every member; see "Hike log"). `src/discord/commands.ts`
+defines it: guild-only
 (`contexts: [0]`, `integration_types: [0]`) and without
 `default_member_permissions`, so every member sees it and the bot enforces
 who may use it. `npm run register` (`scripts/register-commands.ts`, logic in
@@ -400,6 +402,17 @@ started round). A poll read model has its options in creation order, each
 with its vote count, the number of distinct voters, and `viewerVotes`, the
 viewer's current votes. A round read model includes its location and date
 polls.
+
+The hike log reads hikes, which are rounds with status `complete` (cancelled
+and active rounds are not hikes), from the existing tables; nothing extra is
+stored. `listHikes({ limit, offset })` returns them newest date first: by
+the decided date option's `date_value` (which sorts chronologically as
+text), then by round id, both descending. Each `HikeView` has the round id,
+the location (label, details, proposer), the date (`value` and `label`),
+the thread id (null when there is none), `completedAt` (when the date vote
+closed) and the channel and message ids of the location and date polls
+(null until posted), so callers can link them. `countHikes()` counts the
+same set.
 
 ### Winner and tie-break
 
@@ -596,6 +609,28 @@ panel. No announcement is posted.
 Every admin control (the start buttons and modals of both votes, close,
 cancel and their confirmations, Create hike thread) is registered through
 `adminOnly`, so a member who replays its `custom_id` is refused.
+
+## Hike log
+
+`/hike log` (`src/features/hike-log.ts`) shows the group's hikes, read with
+`listHikes`, to any member: it is not wrapped in `adminOnly`. It answers
+with an ephemeral Components V2 message that pings no one: one container
+with the heading "Hike log" and the count ("2 hikes"; with more than one
+page also "page 2 of 3"), then one Text Display per hike, newest first: the
+date label and the location in bold
+(`Sat, 15 Jun 2030 · 09:00 · **Ridge**`), its details shortened to 200
+characters (`LOG_DETAILS_CAP`) with "…", and "Thread: <#thread>" when the
+round has a thread. With no hikes it says "No hikes yet. The first one
+appears here when a date vote closes."
+
+A page holds ten hikes (`HIKES_PER_PAGE`). With more than ten, the message
+ends with **Newer** and **Older** buttons (`hb:log:page:<n>`, `n` the
+1-based page they go to) that redraw it in place with an update; the one
+with nowhere to go is disabled. A page number past the end shows the last
+page, and one before the first (or not a number) the first. With ten or
+fewer hikes there are no buttons. At ten hikes with the longest label (80)
+and details (300) and a 20-digit thread id, a page takes about 3,500
+characters and 17 components, within Discord's 4000 and 40.
 
 ## Hike thread
 

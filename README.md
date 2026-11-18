@@ -94,8 +94,8 @@ certificate itself.
 
 ### Slash commands
 
-The bot has one global slash command, `/hike`, with the subcommand `admin`,
-defined in `src/discord/commands.ts`. `npm run register` replaces the
+The bot has one global slash command, `/hike`, with the subcommands `admin`
+(the admin panel) and `log` (the group's hikes, for every member), defined in `src/discord/commands.ts`. `npm run register` replaces the
 application's global commands with those definitions through Discord's bulk
 overwrite, so running it again changes nothing. It reads
 `DISCORD_APPLICATION_ID` and `DISCORD_BOT_TOKEN` from the environment, prints
