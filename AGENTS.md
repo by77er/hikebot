@@ -323,15 +323,9 @@ on every change you push to a draft, and again before marking it ready.
 
 ## Get a pull request checked
 
-The `Undercurrent` checks `commands`, `semantic` and `review` run only for a
-pull request that is ready for review. On a draft their jobs are skipped
-without starting a runner, and `gh pr checks` lists them under the text of
-their name expression, for example
-`github.event.pull_request.draft && 'commands (draft, not run)' || 'commands'`,
-never under `commands`, `semantic` or `review`.
-
-1. Open the pull request as a draft and push to it while you work. Nothing
-   runs; check each change as "Check your change before opening a pull
+1. Open the pull request as a draft and push to it while you work. The
+   `Undercurrent` jobs `commands`, `semantic` and `review` are skipped on a
+   draft without starting a runner; check each change as "Check your change before opening a pull
    request" says:
 
    ```sh
@@ -367,9 +361,12 @@ never under `commands`, `semantic` or `review`.
    ```
 
    `commands`, `semantic`, `review` and `nest-projects/review` must each say
-   `pass`. `skipping` means the job did not run and is never a pass; `fail`
-   on a check whose run you cancelled with `gh pr ready <n> --undo` means the
-   same. If one of the four is missing, pending or not `pass`, do not merge:
+   `pass`. Lines named with an expression, such as
+   `github.event.pull_request.draft && 'commands (draft, not run)' || 'commands'`
+   with `skipping`, are the jobs skipped while it was a draft; they are not
+   these checks. `skipping` means a job did not run and is never a pass;
+   `fail` on a check whose run you cancelled with `gh pr ready <n> --undo`
+   means the same. If one of the four is missing, pending or not `pass`, do not merge:
    read a failed run with `gh run view <run-id> --log-failed`.
 
 6. If more work is needed, turn the pull request back into a draft. This
