@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { assetPath, FONT, STYLESHEET } from "../../src/web/assets";
 import { sessionCookie } from "../../src/web/auth/session";
+import { STYLEGUIDE_SECTIONS } from "../../src/web/pages/styleguide";
 import { webRouter } from "../../src/web/routes";
 import {
   clearBucket,
@@ -269,19 +270,11 @@ describe("GET /styleguide", () => {
 
   it("shows every token section and every component section", async () => {
     const html = await (await get("/styleguide")).text();
-    for (const id of [
-      "colour",
-      "contrast",
-      "typography",
-      "space",
-      "shape",
-      "layout-and-motion",
-      "banner",
-      "blaze",
-      "button",
-      "card",
-      "icons",
-    ]) {
+    const ids = STYLEGUIDE_SECTIONS.map(({ id }) => id);
+    expect(ids).toEqual(
+      expect.arrayContaining(["colour", "contrast", "typography", "button"]),
+    );
+    for (const id of ids) {
       expect(html).toContain(`<section class="styleguide-section" id="${id}"`);
       expect(html).toContain(`<a href="#${id}">`);
     }

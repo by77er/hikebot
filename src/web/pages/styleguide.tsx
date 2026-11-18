@@ -39,6 +39,9 @@ const COMPONENTS: StyleguideSection[] = [
   iconsSection,
 ];
 
+/** Every section, in the order the page shows them. */
+export const STYLEGUIDE_SECTIONS = [...FOUNDATIONS, ...COMPONENTS];
+
 function Index({
   title,
   sections,
@@ -77,7 +80,7 @@ export function StyleguidePage({ tokens }: { tokens: SchemeTokens }) {
           <Index title="Foundations" sections={FOUNDATIONS} />
           <Index title="Components" sections={COMPONENTS} />
         </nav>
-        {[...FOUNDATIONS, ...COMPONENTS].map(({ id, render: Render }) => (
+        {STYLEGUIDE_SECTIONS.map(({ id, render: Render }) => (
           <Render key={id} tokens={tokens} />
         ))}
       </div>

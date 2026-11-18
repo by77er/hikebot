@@ -220,22 +220,270 @@ in `docs/design.md` says which POSTs are refused.
    <img src="/assets/trail-map.svg" alt="Map of the trails" />
    ```
 
-2. For a stylesheet, add a `<link rel="stylesheet">` next to the one in
-   `src/web/layout.tsx`, or add your rules to `public/assets/app.css`.
-3. Start the dev server as "Run the bot locally" in the root `AGENTS.md`
+   A file the design system's stylesheet uses goes under
+   `public/assets/cairn/` and is referred to by a relative `url()`, so it
+   is served under the stylesheet's versioned path. Styles are never a new
+   stylesheet: they go in the design system, as "Add a component to the
+   design system" says.
+
+2. Start the dev server as "Run the bot locally" in the root `AGENTS.md`
    says and request the file in its place in that procedure. It answers
    `200` with the file's type and `Cache-Control: public, max-age=300`, set
-   for everything under `/assets/` by `public/_headers`:
+   for everything under `/assets/` by `public/_headers`; under
+   `/assets/v/<any version>/` it answers with
+   `Cache-Control: public, max-age=31536000, immutable`:
 
    ```sh
-   curl -fsS -D - -o /dev/null http://localhost:8787/assets/app.css
+   curl -fsS -D - -o /dev/null http://localhost:8787/assets/trail-map.svg
+   curl -fsS -D - -o /dev/null http://localhost:8787/assets/v/dev/trail-map.svg
    ```
 
-4. Add the file's path to the stylesheet test in `test/web/routes.test.ts`
+3. Add the file's path to the stylesheet test in `test/web/routes.test.ts`
    ("static assets"), or to a test of your own there, and run it:
 
    ```sh
    npx vitest run test/web/routes.test.ts -t "static assets"
+   ```
+
+## Build a page from the design system
+
+1. Read "Designing a new page" in `docs/design-system.md` and decide what
+   the page answers: where am I, what state is the hike in, what can I do
+   next. Decide its one primary action.
+2. Write the page from the shell, the layout classes and the components,
+   with no styles of its own. `width="overview"` is for lists and
+   dashboards; a page that does one job keeps the default task width:
+
+   ```tsx
+   /** The list of trails at `/trails`. */
+   import { Banner } from "../components/banner";
+   import { Button } from "../components/button";
+   import { Card } from "../components/card";
+   import { MapPinIcon } from "../components/icons";
+   import { Layout } from "../layout";
+
+   export function TrailsPage({ names }: { names: string[] }) {
+     return (
+       <Layout title="Trails · hikebot" width="overview">
+         <div class="stack stack--section">
+           <div class="page-heading">
+             <p class="page-heading__eyebrow">Location vote</p>
+             <h1>Trails</h1>
+             <p class="page-heading__lead">Every place proposed so far.</p>
+           </div>
+           {names.length === 0 && (
+             <Banner tone="info" title="No location has been proposed yet." />
+           )}
+           <ul class="grid list-reset">
+             {names.map((name) => (
+               <li key={name}>
+                 <Card title={name} />
+               </li>
+             ))}
+           </ul>
+           <div class="cluster">
+             <Button variant="primary" icon={MapPinIcon} href="/trails/new">
+               Propose a location
+             </Button>
+           </div>
+         </div>
+       </Layout>
+     );
+   }
+   ```
+
+3. If the page needs something no component offers, add a component
+   ("Add a component to the design system") rather than page CSS. Only a
+   layout used by this page alone goes in `public/assets/cairn/pages/<page>.css`,
+   with classes named `.<page>-<thing>`, imported by a line in
+   `public/assets/cairn/cairn.css` under the page styles, in alphabetical
+   order:
+
+   ```css
+   @import url("pages/trails.css") layer(components);
+   ```
+
+4. Register and test the page as "Add a page" says, then run the design
+   system's checks:
+
+   ```sh
+   npx vitest run test/web/token-use.test.ts test/web/size-budget.test.ts test/web/routes.test.ts
+   ```
+
+## Add a token
+
+1. Check the token tables in `docs/design-system.md` first: use an
+   existing role if one fits. A token names a role, never a hue or a value
+   (`--color-warning`, not `--color-amber`).
+2. Add it to `public/assets/cairn/tokens.css`, in its group in `:root`. A
+   colour also gets its dark value in the `prefers-color-scheme: dark`
+   block, in the same order:
+
+   ```css
+   --color-planned: #2f5d7c;
+   ```
+
+3. For a colour, add every pairing it may be drawn in to `PAIRINGS` in
+   `src/web/tokens.ts`, with its kind (`text`, `large-text` or
+   `non-text`), and add its two lines to the lists at the end of
+   `public/assets/cairn/pages/styleguide.css`:
+
+   ```css
+   .styleguide-sample[data-bg="color-planned"] {
+     background: var(--color-planned);
+   }
+   .styleguide-sample[data-fg="color-planned"] {
+     color: var(--color-planned);
+   }
+   ```
+
+4. Add a row for it to its table in `docs/design-system.md`, saying its
+   value in each scheme, its role and when to use it; a colour's pairings
+   go in "Allowed pairings".
+5. Run the checks. The contrast test names any pairing below its minimum,
+   in either scheme; change the value until it passes:
+
+   ```sh
+   npx vitest run test/web/contrast.test.ts test/web/token-use.test.ts test/web/routes.test.ts
+   ```
+
+6. Open `/styleguide` on the dev server ("Run the bot locally" in the root
+   `AGENTS.md`) and find the token under "Colour" and its pairings under
+   "Contrast".
+
+## Add a component to the design system
+
+A component is four files of its own, one per job, and one line in each
+of three lists, so that tasks adding different components at the same time
+do not edit the same lines. Keep every list in alphabetical order, one item
+per line. Here the component is `pill`; use your component's name.
+
+1. Write the markup as a typed Preact component in
+   `src/web/components/pill.tsx`, with a comment at the top saying what it
+   is for and when to use it. Give it the classes `.pill`, `.pill__<part>`
+   and `.pill--<variant>`, take states from the platform (`disabled`,
+   `aria-current`, `aria-disabled`), and accept `preview?: Preview` (from
+   `button.tsx`) as `data-preview` if it is interactive, so the style guide
+   can show hover, active and focus:
+
+   ```tsx
+   /** Pill: a hike's state in a word, such as "Open" or "Decided". */
+   export type PillTone = "open" | "decided" | "cancelled";
+
+   export function Pill({
+     tone,
+     children,
+   }: {
+     tone: PillTone;
+     children: string;
+   }) {
+     return <span class={`pill pill--${tone}`}>{children}</span>;
+   }
+   ```
+
+2. Style it in `public/assets/cairn/components/pill.css`, with a comment at
+   the top, using tokens only (`var(--space-2)`, `var(--color-success)`),
+   and every state it has: `:hover` and `[data-preview="hover"]`,
+   `:active` and `[data-preview="active"]`, `:disabled` or
+   `[aria-disabled="true"]`. The focus ring comes from the base layer. Use
+   only pairings listed in "Allowed pairings" of `docs/design-system.md`,
+   or add the pairing as "Add a token" says. Then add its import to
+   `public/assets/cairn/cairn.css`, in alphabetical order among the
+   components:
+
+   ```css
+   @import url("components/pill.css") layer(components);
+   ```
+
+3. Test its rendered markup and its accessible name in
+   `test/web/components/pill.test.tsx`, with `render` and `spokenText`
+   from `test/web/components/render.ts`:
+
+   ```tsx
+   import { describe, expect, it } from "vitest";
+   import { Pill } from "../../../src/web/components/pill";
+   import { render, spokenText } from "./render";
+
+   describe("Pill", () => {
+     it("says the state in words", async () => {
+       const html = render(<Pill tone="decided">Decided</Pill>);
+       expect(html).toBe('<span class="pill pill--decided">Decided</span>');
+       expect(await spokenText(html)).toBe("Decided");
+     });
+   });
+   ```
+
+4. Show it in every variant and state in
+   `src/web/pages/styleguide/pill.tsx`, exporting a `StyleguideSection`
+   whose `id` is the component's name; `StateList` from `section.tsx` lays
+   out one example per state. Use the bot's words in the examples. Add the
+   section to `COMPONENTS` in `src/web/pages/styleguide.tsx`, in
+   alphabetical order:
+
+   ```tsx
+   import { pillSection } from "./styleguide/pill";
+
+     pillSection,
+   ```
+
+5. Add an entry for it to "Components" in `docs/design-system.md`, in
+   alphabetical order: its file, what it is for, its variants and states,
+   and its accessible name.
+6. Run the design system's checks and the component's test:
+
+   ```sh
+   npx vitest run test/web
+   ```
+
+7. Take the screenshots and review the style guide and every page that
+   uses the component, as "Take the screenshots" and "Review your own UI
+   change as a designer" say. A screenshot is cut off past 16,384 pixels,
+   so check that the style guide's phone screenshot is shorter than that;
+   `file` prints its width and height:
+
+   ```sh
+   file docs/screenshots/styleguide--phone--light.png
+   ```
+
+   If it is taller, give your component a page of its own at
+   `/styleguide/<component>`, built like `StyleguidePage`, linked from the
+   style guide's index, with its own entry in the screenshot page list.
+
+## Add an icon
+
+1. Find the icon on lucide.dev and copy its shapes from the Lucide package
+   at the version named at the top of `src/web/components/icons.tsx`
+   (here `tent`):
+
+   ```sh
+   mkdir -p /tmp/lucide
+   npm pack lucide-static@1.75.0 --pack-destination /tmp/lucide
+   tar -xzf /tmp/lucide/lucide-static-1.75.0.tgz -C /tmp/lucide
+   grep -E "<(path|circle|line|rect|polyline|polygon|ellipse)" /tmp/lucide/package/icons/tent.svg
+   ```
+
+2. Add it to `src/web/components/icons.tsx` as a component named after
+   it, in alphabetical order, and to `ICONS` at the end of the file in the
+   same place:
+
+   ```tsx
+   export function TentIcon(props: IconProps) {
+     return (
+       <Icon {...props}>
+         <path d="M3.5 21 14 3" />
+         <path d="M20.5 21 10 3" />
+         <path d="M15.5 21 12 15l-3.5 6" />
+         <path d="M2 21h20" />
+       </Icon>
+     );
+   }
+   ```
+
+3. Run the icon tests; every icon in `ICONS` is checked for the shared
+   frame:
+
+   ```sh
+   npx vitest run test/web/components/icons.test.tsx
    ```
 
 ## Test a page

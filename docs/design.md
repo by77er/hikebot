@@ -55,7 +55,7 @@ minutes, fails the run.
 
 ## Request flow
 
-A request for a file under `public/` (such as `/assets/app.css`) is
+A request for a file under `public/` (such as `/assets/cairn/cairn.css`) is
 answered by Workers Static Assets before the Worker runs; see "Web pages".
 The Worker (`src/index.ts`) handles the rest:
 
@@ -123,19 +123,28 @@ so a name or title from Discord or a form cannot inject markup.
   `default-src 'none'; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self' data: https://cdn.discordapp.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`.
   Pages therefore carry no inline script or style, and load nothing from
   another host except images from Discord's CDN (avatars, server icons).
-- **Page shell.** `Layout` (`src/web/layout.tsx`) is the document every page
-  renders into: `lang`, the viewport meta, the `<title>`, the stylesheet, a
-  skip link to `<main id="main">`, and the `<header>`, `<main>` and
-  `<footer>` landmarks.
+- **Page shell and design system.** Every page is built from Cairn, the
+  design system described in `docs/design-system.md`: `Layout`
+  (`src/web/layout.tsx`) is the document every page renders into (`lang`,
+  the viewport meta, the `<title>`, the preloaded font and the stylesheet, a
+  skip link to `<main id="main">`, and the header, main and footer
+  landmarks), and the components are in `src/web/components/`. `GET
+/styleguide` shows every token and component.
 - **Static files.** `public/` is the Workers Static Assets directory
-  declared under `assets` in `wrangler.jsonc`, so `public/assets/app.css` is
-  served at `/assets/app.css`, with an ETag. `public/_headers` gives
-  everything under `/assets/` `Cache-Control: public, max-age=300`: browsers
-  reuse a file for five minutes and then revalidate, so a deploy that changes
-  one reaches every browser within five minutes. `public/.assetsignore`
-  keeps the directory's `AGENTS.md` and `UNDERCURRENT.md` from being served.
-  The stylesheet is a neutral baseline (system fonts, a readable line
-  length).
+  declared under `assets` in `wrangler.jsonc`, so
+  `public/assets/cairn/cairn.css` is served at `/assets/cairn/cairn.css`,
+  with an ETag. `public/_headers` gives everything under `/assets/`
+  `Cache-Control: public, max-age=300`: browsers reuse a file for five
+  minutes and then revalidate. `public/.assetsignore` keeps the directory's
+  `AGENTS.md` and `UNDERCURRENT.md` from being served.
+- **Versioned assets.** Pages link the stylesheet and the font under
+  `/assets/v/<version>/`, where the version is the deployed Worker
+  version's id from the `CF_VERSION_METADATA` binding. No static file has
+  that path, so the Worker answers it (`src/web/assets.ts`) with the file
+  from `public/assets/` and `Cache-Control: public, max-age=31536000,
+immutable`. Each deploy changes the URLs, so browsers cache the files for
+  a year and still never keep an old one; the stylesheet's relative imports
+  and `url()`s stay under the same version.
 - **Screenshots and design review.** Every page has committed screenshots
   in `docs/screenshots/`, named `<page>--<viewport>--<scheme>.png`, at a
   phone (390x844) and a desktop (1280x800) viewport in the light and dark

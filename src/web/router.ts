@@ -1,7 +1,7 @@
 /**
  * A small router for the Worker's web routes: one handler per method and
  * path. A path is matched exactly, except one ending in `/*`, which matches
- * every path under it (`/assets/*` matches `/assets/app.css`); an exact path
+ * every path under it (`/assets/*` matches `/assets/cairn/cairn.css`); an exact path
  * wins over a prefix, and a longer prefix over a shorter one. A `GET` route
  * also answers `HEAD`, with the same status and headers and no body. A path
  * with no route gets the `notFound` response; a path whose route lacks the
