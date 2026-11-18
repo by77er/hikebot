@@ -218,7 +218,7 @@ function settingsOf(guildId: string): Promise<GuildSettings> {
 
 describe("renderAdminPanel", () => {
   it("shows every setting as not set, and setup as incomplete, for a new guild", () => {
-    const view = renderAdminPanel({ settings: EMPTY });
+    const view = renderAdminPanel({ settings: EMPTY, round: null });
     const shown = text(asNodes(view));
     expect(shown).toContain("hikebot admin");
     expect(shown).toContain(
@@ -238,6 +238,7 @@ describe("renderAdminPanel", () => {
   it("shows the settings that are set as mentions, and setup as incomplete while a channel is missing", () => {
     const view = renderAdminPanel({
       settings: { ...EMPTY, adminRoleId: ROLE, voteChannelId: TEXT },
+      round: null,
     });
     const shown = text(asNodes(view));
     expect(shown).toContain(`**Admin role:** <@&${ROLE}>`);
@@ -248,7 +249,7 @@ describe("renderAdminPanel", () => {
   });
 
   it("shows setup as complete once the three channels are set", () => {
-    const view = renderAdminPanel({ settings: COMPLETE });
+    const view = renderAdminPanel({ settings: COMPLETE, round: null });
     const shown = text(asNodes(view));
     expect(shown).toContain(`**Announcements channel:** <#${NEWS}>`);
     expect(shown).toContain(`**Hike threads channel:** <#${FORUM}>`);
@@ -260,21 +261,20 @@ describe("renderAdminPanel", () => {
   });
 
   it("offers Settings and Refresh as the actions", () => {
-    expect(actionButtons({ settings: EMPTY }).map((b) => b.custom_id)).toEqual([
-      ADMIN_PANEL_IDS.settings,
-      ADMIN_PANEL_IDS.refresh,
-    ]);
+    expect(
+      actionButtons({ settings: EMPTY, round: null }).map((b) => b.custom_id),
+    ).toEqual([ADMIN_PANEL_IDS.settings, ADMIN_PANEL_IDS.refresh]);
   });
 
   it("shows a notice above the settings", () => {
-    const view = renderAdminPanel({ settings: EMPTY }, "Saved.");
+    const view = renderAdminPanel({ settings: EMPTY, round: null }, "Saved.");
     expect(text(asNodes(view))).toContain("Saved.");
   });
 });
 
 describe("renderAdminSettings", () => {
   it("has a role select and three channel selects without defaults for a new guild", () => {
-    const view = renderAdminSettings({ settings: EMPTY });
+    const view = renderAdminSettings({ settings: EMPTY, round: null });
     const nodes = asNodes(view);
     expect(find(nodes, ADMIN_PANEL_IDS.role)).toMatchObject({
       type: ComponentType.RoleSelect,
@@ -301,7 +301,10 @@ describe("renderAdminSettings", () => {
   });
 
   it("shows each current value as the select's default", () => {
-    const view = renderAdminSettings({ settings: COMPLETE }, "Saved.");
+    const view = renderAdminSettings(
+      { settings: COMPLETE, round: null },
+      "Saved.",
+    );
     const nodes = asNodes(view);
     expect(find(nodes, ADMIN_PANEL_IDS.role)).toMatchObject({
       default_values: [{ id: ROLE, type: "role" }],
