@@ -22,6 +22,22 @@ export interface GuildSettings {
    * `DEFAULT_TIMEZONE` until then.
    */
   timezone: string;
+  /**
+   * The area hikes are usually in, as an admin typed it ("Seattle,
+   * Washington"), with the place and point the geocoder found for it;
+   * lookups of locations prefer matches near the point. Null until set.
+   */
+  homeArea: HomeArea | null;
+}
+
+/** The guild's home area and where the geocoder found it. */
+export interface HomeArea {
+  /** What the admin typed. */
+  text: string;
+  /** The place name the geocoder returned. */
+  name: string;
+  lat: number;
+  lon: number;
 }
 
 /** The settings an admin picks in the panel. */
@@ -43,6 +59,10 @@ interface Row extends Record<string, SqlStorageValue> {
   owner_id: string | null;
   owner_fetched_at: number | null;
   timezone: string | null;
+  home_area: string | null;
+  home_name: string | null;
+  home_lat: number | null;
+  home_lon: number | null;
 }
 
 /**
@@ -65,7 +85,8 @@ export class GuildConfig {
     const row = this.storage.sql
       .exec<Row>(
         `SELECT admin_role_id, vote_channel_id, announce_channel_id,
-           forum_channel_id, owner_id, owner_fetched_at, timezone
+           forum_channel_id, owner_id, owner_fetched_at, timezone,
+           home_area, home_name, home_lat, home_lon
          FROM guild_settings WHERE id = 1`,
       )
       .one();
@@ -77,7 +98,33 @@ export class GuildConfig {
       ownerId: row.owner_id,
       ownerFetchedAt: row.owner_fetched_at,
       timezone: row.timezone ?? DEFAULT_TIMEZONE,
+      homeArea:
+        row.home_area === null || row.home_lat === null || row.home_lon === null
+          ? null
+          : {
+              text: row.home_area,
+              name: row.home_name ?? row.home_area,
+              lat: row.home_lat,
+              lon: row.home_lon,
+            },
     };
+  }
+
+  /**
+   * Sets the home area to what the geocoder found for it, or clears it with
+   * null. Returns the settings after the change.
+   */
+  setHomeArea(area: HomeArea | null): GuildSettings {
+    this.storage.sql.exec(
+      `UPDATE guild_settings
+       SET home_area = ?, home_name = ?, home_lat = ?, home_lon = ?
+       WHERE id = 1`,
+      area?.text ?? null,
+      area?.name ?? null,
+      area?.lat ?? null,
+      area?.lon ?? null,
+    );
+    return this.get();
   }
 
   /** Sets one setting; null clears it. Returns the settings after the change. */

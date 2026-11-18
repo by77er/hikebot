@@ -19,6 +19,8 @@ import { DiscordApiError, discordApi, eventUrl } from "../discord/api";
 import { messageBody, parseCustomId } from "../discord/components";
 import { adminOnly } from "../guild/permissions";
 import type { ComponentHandler, HandlerContext, Router } from "../guild/router";
+import type { Point } from "../geo/coordinates";
+import { googleLink, osmLink } from "../geo/links";
 import { HIKE_DURATION_HOURS } from "../polls/dates";
 import { PollStore, type RoundView } from "../polls/store";
 import { POLL_CONTROL_IDS } from "./admin-panel";
@@ -29,6 +31,7 @@ import {
   roundStart,
 } from "./hike-event-state";
 import { renderThreadMessage } from "./hike-thread";
+import type { MapPinHook } from "./map-pin";
 import {
   actorOf,
   answerPanel,
@@ -62,27 +65,70 @@ export type HikeEventRequest =
   | { ok: true; body: RESTPostAPIGuildScheduledEventJSONBody }
   | { ok: false; why: "past" | "undecided" };
 
+/** Where the event's location is, for its description. */
+export interface EventPlace {
+  point: Point;
+  name: string | null;
+}
+
 /**
- * The event's description: the location's details, then the link to the
- * hike thread when there is one, within Discord's 1000 characters; the
- * details are shortened, the link kept whole. Empty when there is neither.
+ * The place part of the description: the place name, both map links as
+ * plain URLs and OpenStreetMap's attribution.
+ */
+function placeText({ point, name }: EventPlace): string {
+  return [
+    ...(name ? [`📍 ${name}`] : []),
+    `OpenStreetMap: ${osmLink(point)}`,
+    `Google Maps: ${googleLink(point)}`,
+    "© OpenStreetMap contributors",
+  ].join("\n");
+}
+
+/**
+ * The event's description: the location's details, where it is on the map
+ * when it has a pin, then the link to the hike thread when there is one,
+ * within Discord's 1000 characters; the details are shortened, the map
+ * links and the thread link kept whole. Empty when there is none of them.
  */
 export function eventDescription(
   details: string | null,
   threadLink: string | null,
+  place: EventPlace | null = null,
 ): string {
   const link = threadLink === null ? "" : `Hike thread: ${threadLink}`;
-  const room = MAX_EVENT_DESCRIPTION - (link === "" ? 0 : link.length + 2);
-  return [shorten(details ?? "", room), link]
+  const where = place === null ? "" : placeText(place);
+  const kept = [where, link].filter((part) => part !== "");
+  const room =
+    MAX_EVENT_DESCRIPTION -
+    kept.reduce((sum, part) => sum + part.length + 2, 0);
+  return [shorten(details ?? "", room), ...kept]
     .filter((part) => part !== "")
     .join("\n\n");
+}
+
+/** The description of `round`'s event, from its decided location. */
+export function hikeEventDescription(
+  round: RoundView,
+  guildId: string,
+): string {
+  const location = round.locationPoll?.options.find(
+    (option) => option.id === round.locationOptionId,
+  );
+  const place = location?.place;
+  return eventDescription(
+    location?.details ?? null,
+    round.threadId === null
+      ? null
+      : `https://discord.com/channels/${guildId}/${round.threadId}`,
+    place?.point ? { point: place.point, name: place.name } : null,
+  );
 }
 
 /**
  * The EXTERNAL scheduled event for `round`: named and located at the
  * decided location, starting at the winning date in `timeZone` and ending
- * `HIKE_DURATION_HOURS` later, described by the location's details and the
- * thread's link. None when the start is not after `now`, or when the round
+ * `HIKE_DURATION_HOURS` later, described by the location's details, its
+ * map links and the thread's link. None when the start is not after `now`, or when the round
  * has no decided location and date.
  */
 export function hikeEventRequest(
@@ -99,12 +145,7 @@ export function hikeEventRequest(
     return { ok: false, why: "undecided" };
   }
   if (start <= now) return { ok: false, why: "past" };
-  const description = eventDescription(
-    location.details,
-    round.threadId === null
-      ? null
-      : `https://discord.com/channels/${guildId}/${round.threadId}`,
-  );
+  const description = hikeEventDescription(round, guildId);
   return {
     ok: true,
     body: {
@@ -260,6 +301,23 @@ const createAgain: ComponentHandler = adminOnly(
       }),
     ),
 );
+
+/**
+ * After the map pin changed: edits the event's description, when the event
+ * exists, so it shows the new pin.
+ */
+export const updateEventPin: MapPinHook = {
+  name: "update the hike event",
+  run: async ({ round, guildId }, context) => {
+    if (round.eventId === null) return;
+    const description = hikeEventDescription(round, guildId);
+    await discordApi(context.env).editGuildScheduledEvent(
+      guildId,
+      round.eventId,
+      { description: description === "" ? null : description },
+    );
+  },
+};
 
 /** Registers the Create hike event button. */
 export function registerHikeEvent(router: Router): Router {

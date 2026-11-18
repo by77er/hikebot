@@ -119,6 +119,7 @@ describe("the hike event", () => {
     expect(buttonLabels(play.shown(panel))).toEqual([
       "Start location vote",
       "Create hike event",
+      "Set map pin",
       "Settings",
       "Refresh",
     ]);
@@ -151,6 +152,7 @@ describe("the hike event", () => {
     );
     expect(buttonLabels(play.shown(panel))).toEqual([
       "Start location vote",
+      "Set map pin",
       "Settings",
       "Refresh",
     ]);
@@ -208,6 +210,7 @@ describe("the hike event", () => {
     );
     expect(buttonLabels(play.shown(panel))).toEqual([
       "Start location vote",
+      "Set map pin",
       "Settings",
       "Refresh",
     ]);

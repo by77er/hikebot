@@ -32,6 +32,7 @@ const EVENT_PERMISSIONS = `${SCHEDULED_EVENTS}#guild-scheduled-event-permissions
 const OAUTH2 = `${DOCS}/topics/oauth2`;
 const AUTHORIZATION_CODE_GRANT = `${OAUTH2}#authorization-code-grant`;
 const CURRENT_USER_GUILDS = `${DOCS}/resources/user#get-current-user-guilds`;
+const MODIFY_SCHEDULED_EVENT = `${SCHEDULED_EVENTS}#modify-guild-scheduled-event`;
 
 /** A rule the fake enforces. `docs` is where the limit is stated. */
 export interface Rule {
@@ -269,6 +270,24 @@ export const RULES = {
   currentUserGuildsLimit: rule(
     "current-user-guilds-limit-1-200",
     CURRENT_USER_GUILDS,
+  ),
+  /**
+   * To modify an event: "If the event was created by the current user,
+   * either `CREATE_EVENTS` or `MANAGE_EVENTS`. Otherwise, `MANAGE_EVENTS`".
+   * Discord answers 403, code 50013.
+   */
+  editEventsPermission: rule(
+    "scheduled-event-edit-needs-create-events",
+    EVENT_PERMISSIONS,
+  ),
+  /**
+   * Modify Guild Scheduled Event: "Returns the modified guild scheduled
+   * event object on success." An event the guild does not hold answers
+   * 404, code 10070, "Unknown Guild Scheduled Event".
+   */
+  unknownScheduledEvent: rule(
+    "scheduled-event-must-exist",
+    MODIFY_SCHEDULED_EVENT,
   ),
 } as const;
 
@@ -873,6 +892,33 @@ export function validateScheduledEvent(body: unknown): Violation[] {
         "must be null or left out for an EXTERNAL event",
       );
     }
+  }
+  return c.violations;
+}
+
+/**
+ * Checks the body of Modify Guild Scheduled Event, where "All parameters to
+ * this endpoint are optional": each field it does hold keeps the limits of
+ * the event object.
+ */
+export function validateScheduledEventEdit(body: unknown): Violation[] {
+  const c = new Checker();
+  const o = isObject(body) ? body : {};
+  if (o.name !== undefined) {
+    c.maxLength(RULES.eventName, "name", o.name, 100, 1);
+  }
+  if (o.description !== undefined && o.description !== null) {
+    c.maxLength(RULES.eventDescription, "description", o.description, 1000, 1);
+  }
+  const metadata = isObject(o.entity_metadata) ? o.entity_metadata : {};
+  if (metadata.location !== undefined && metadata.location !== null) {
+    c.maxLength(
+      RULES.eventLocation,
+      "entity_metadata.location",
+      metadata.location,
+      100,
+      1,
+    );
   }
   return c.violations;
 }

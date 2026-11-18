@@ -147,6 +147,7 @@ function option(
     dateValue: null,
     proposedBy: OWNER,
     createdAt: 0,
+    place: null,
     votes: 0,
     ...extra,
   };
@@ -237,6 +238,84 @@ describe("renderThreadMessage", () => {
       `**Date vote:** **Sat, 15 Jun 2030 · 09:00** won with 1 vote; 1 member voted. The winner was drawn at random from 2 tied options. [See the date vote](https://discord.com/channels/${GUILD}/${TEXT}/${DATE_MESSAGE})`,
     ]);
   });
+
+  function located(place: OptionView["place"]) {
+    return renderThreadMessage(
+      round(
+        poll(1, "location", [
+          option(1, 1, "Mount Si", {
+            details: "Steep, 13 km",
+            proposedBy: PROPOSER,
+            place,
+          }),
+        ]),
+        poll(2, "date", [
+          option(11, 2, "Sat, 15 Jun 2030 · 09:00", {
+            dateValue: "2030-06-15 09:00",
+          }),
+        ]),
+      ),
+      GUILD,
+      "America/Los_Angeles",
+    );
+  }
+
+  it("shows the decided location's place with both map links after its details, and the attribution last", () => {
+    const view = located({
+      status: "found",
+      point: { lat: 47.4875, lon: -121.7234 },
+      name: "Mount Si, King County, Washington",
+      attempts: 1,
+    });
+    const lines = text(view).split("\n");
+    expect(lines.slice(0, 4)).toEqual([
+      "## Mount Si",
+      "Steep, 13 km",
+      "📍 Mount Si, King County, Washington · [OpenStreetMap](https://www.openstreetmap.org/?mlat=47.4875&mlon=-121.7234#map=13/47.4875/-121.7234) · [Google Maps](https://www.google.com/maps/search/?api=1&query=47.4875,-121.7234)",
+      `Proposed by <@${PROPOSER}>`,
+    ]);
+    expect(lines.at(-1)).toBe("-# © OpenStreetMap contributors");
+    const last = flatten(view).at(-1);
+    expect(last?.content).toBe("-# © OpenStreetMap contributors");
+  });
+
+  it("shows given coordinates without a place name", () => {
+    const view = located({
+      status: "given",
+      point: { lat: 47.5, lon: -121.8 },
+      name: null,
+      attempts: 0,
+    });
+    expect(text(view)).toContain(
+      "📍 [OpenStreetMap](https://www.openstreetmap.org/?mlat=47.5&mlon=-121.8#map=13/47.5/-121.8) · [Google Maps](https://www.google.com/maps/search/?api=1&query=47.5,-121.8)",
+    );
+    expect(text(view)).toContain("© OpenStreetMap contributors");
+  });
+
+  it.each([
+    ["no place", null],
+    [
+      "a place still being looked up",
+      { status: "pending", point: null, name: null, attempts: 0 },
+    ],
+    [
+      "a place that was not found",
+      { status: "not_found", point: null, name: null, attempts: 1 },
+    ],
+    [
+      "a cleared pin",
+      { status: "cleared", point: null, name: null, attempts: 1 },
+    ],
+  ] as const)(
+    "shows no map links and no attribution for %s",
+    (_name, place) => {
+      const shown = text(located(place));
+      expect(shown).not.toContain("📍");
+      expect(shown).not.toContain("openstreetmap.org");
+      expect(shown).not.toContain("google.com/maps");
+      expect(shown).not.toContain("OpenStreetMap contributors");
+    },
+  );
 
   it.each([
     ["minimum", "L", null, 1],

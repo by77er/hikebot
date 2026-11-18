@@ -101,6 +101,29 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE rounds ADD COLUMN day_of_message_id TEXT;
     `,
   },
+  {
+    // Where each location option is: the point, the place name the
+    // geocoder returned, where its lookup stands and when to try it again.
+    // Date options, and options from before, keep a null status. The
+    // guild's home area, and the point it was found at, focus lookups.
+    name: "0006_places",
+    sql: `
+      ALTER TABLE poll_options ADD COLUMN place_lat REAL;
+      ALTER TABLE poll_options ADD COLUMN place_lon REAL;
+      ALTER TABLE poll_options ADD COLUMN place_name TEXT;
+      ALTER TABLE poll_options ADD COLUMN place_status TEXT CHECK (place_status IN
+        ('pending', 'found', 'not_found', 'failed', 'given', 'cleared'));
+      ALTER TABLE poll_options ADD COLUMN place_attempts INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE poll_options ADD COLUMN place_next_at INTEGER;
+      CREATE INDEX poll_options_place_pending ON poll_options (place_next_at)
+        WHERE place_status = 'pending';
+
+      ALTER TABLE guild_settings ADD COLUMN home_area TEXT;
+      ALTER TABLE guild_settings ADD COLUMN home_name TEXT;
+      ALTER TABLE guild_settings ADD COLUMN home_lat REAL;
+      ALTER TABLE guild_settings ADD COLUMN home_lon REAL;
+    `,
+  },
 ];
 
 /**

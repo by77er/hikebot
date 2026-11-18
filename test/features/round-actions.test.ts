@@ -23,6 +23,7 @@ import {
 } from "../../src/features/hike-day-state";
 import { hikeEventStatus } from "../../src/features/hike-event-state";
 import { hikeThreadStatus } from "../../src/features/hike-thread-state";
+import { LOCATE_JOB } from "../../src/features/locate";
 import { parseInitialLocations } from "../../src/features/location-vote";
 import {
   CLOSE_FLOW_DELAY_MS,
@@ -276,6 +277,32 @@ describe("startLocationVote", () => {
       const poll = store.getPoll(started.poll.id);
       expect(poll?.channelId).toBe(TEXT);
       expect(poll?.messageId).not.toBeNull();
+    });
+  });
+
+  it("pins an initial location written with coordinates and schedules the lookup of the others", async () => {
+    fakeDiscord();
+    await inGuild("actions-location-places", async (context) => {
+      configure(context.storage);
+      const started = done(
+        startLocationVote(context, OWNER, {
+          labels: ["Mount Si 47.4875, -121.7234", "Lake Loop"],
+        }),
+      );
+      expect(started.poll.options.map((o) => o.place)).toEqual([
+        {
+          status: "given",
+          point: { lat: 47.4875, lon: -121.7234 },
+          name: null,
+          attempts: 0,
+        },
+        { status: "pending", point: null, name: null, attempts: 0 },
+      ]);
+      expect((await scheduledJobs(context.storage)).has(LOCATE_JOB)).toBe(
+        false,
+      );
+      await started.work();
+      expect((await scheduledJobs(context.storage)).has(LOCATE_JOB)).toBe(true);
     });
   });
 

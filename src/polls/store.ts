@@ -23,10 +23,59 @@ export const MIN_DATE_OPTIONS = 2;
 /** How many completed hikes a location rests after it was the hike. */
 export const COOLDOWN_HIKES = 2;
 
+/**
+ * Where a location option's place stands: `given` when the proposer (or an
+ * admin's Set map pin) wrote coordinates, `pending` while the geocoder is
+ * still to look it up, `found` or `not_found` by its answer, `failed` when
+ * every attempt failed, `cleared` when an admin removed the pin.
+ */
+export type PlaceStatus =
+  "pending" | "found" | "not_found" | "failed" | "given" | "cleared";
+
+/** Most attempts at looking up one option's place. */
+export const MAX_PLACE_ATTEMPTS = 3;
+
+/** A point in decimal degrees. */
+export interface PlacePoint {
+  lat: number;
+  lon: number;
+}
+
+/** A location option's place. */
+export interface OptionPlace {
+  status: PlaceStatus;
+  /** Null until found or given, and after it was cleared. */
+  point: PlacePoint | null;
+  /** The geocoder's place name, shortened; null for given coordinates. */
+  name: string | null;
+  /** Lookups made so far. */
+  attempts: number;
+}
+
+/** What a lookup of an option's place came to. */
+export type PlaceLookup =
+  | { kind: "found"; point: PlacePoint; name: string }
+  | { kind: "not_found" }
+  /** No answer; `retryAt` is when to try again, if attempts are left. */
+  | { kind: "error"; retryAt: number };
+
+/** A location option waiting for its place to be looked up. */
+export interface PendingPlace {
+  optionId: number;
+  pollId: number;
+  label: string;
+  attempts: number;
+}
+
 export interface NewOption {
   label: string;
   details?: string | null;
   proposedBy: string;
+  /**
+   * For a location: its place, as written by the proposer or copied from an
+   * earlier option. Defaults to `pending`, to be looked up.
+   */
+  place?: OptionPlace;
 }
 
 export interface OptionView {
@@ -39,6 +88,8 @@ export interface OptionView {
   proposedBy: string;
   createdAt: number;
   votes: number;
+  /** For a location option, where it is; null for dates and older options. */
+  place: OptionPlace | null;
 }
 
 export interface PollView {
@@ -128,6 +179,8 @@ export interface PastLocation {
   cooldownHikesLeft: number;
   /** Whether it is an option of the poll the read was for. */
   onPoll: boolean;
+  /** The newest option's place, to copy when it is suggested again. */
+  place: OptionPlace | null;
 }
 
 export interface PollStoreOptions {
@@ -177,6 +230,14 @@ type OptionRow = {
   proposed_by: string;
   created_at: number;
   votes: number;
+} & PlaceColumns;
+
+type PlaceColumns = {
+  place_lat: number | null;
+  place_lon: number | null;
+  place_name: string | null;
+  place_status: PlaceStatus | null;
+  place_attempts: number;
 };
 
 type HikeRow = {
@@ -205,6 +266,15 @@ const HIKES = `FROM rounds r
   JOIN polls dp ON dp.id = dt.poll_id
   WHERE r.status = 'complete'`;
 
+/**
+ * Pending location options worth looking up: those of an open poll, and
+ * decided locations (a lookup may still be running when the vote closes).
+ */
+const PENDING_PLACES = `JOIN polls p ON p.id = o.poll_id
+  WHERE o.place_status = 'pending'
+    AND (p.status = 'open'
+      OR EXISTS (SELECT 1 FROM rounds r WHERE r.location_option_id = o.id))`;
+
 /** Case-insensitive, whitespace-collapsed key that makes labels unique. */
 export function labelKey(label: string): string {
   return label.normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
@@ -229,6 +299,28 @@ interface ValidOption {
   details: string | null;
   dateValue: string | null;
   proposedBy: string;
+  place: OptionPlace | null;
+}
+
+/** A place still to be looked up. */
+export const PENDING_PLACE: OptionPlace = {
+  status: "pending",
+  point: null,
+  name: null,
+  attempts: 0,
+};
+
+function placeOf(row: PlaceColumns): OptionPlace | null {
+  if (row.place_status === null) return null;
+  return {
+    status: row.place_status,
+    point:
+      row.place_lat === null || row.place_lon === null
+        ? null
+        : { lat: row.place_lat, lon: row.place_lon },
+    name: row.place_name,
+    attempts: row.place_attempts,
+  };
 }
 
 function validateDetails(details: string | null | undefined): string | null {
@@ -256,6 +348,7 @@ function validateLocation(option: NewOption): ValidOption {
     details: validateDetails(option.details),
     dateValue: null,
     proposedBy: option.proposedBy,
+    place: option.place ?? PENDING_PLACE,
   };
 }
 
@@ -277,6 +370,7 @@ function validateDate(
     details,
     dateValue: parsed.value,
     proposedBy,
+    place: null,
   };
 }
 
@@ -532,17 +626,20 @@ export class PollStore {
    */
   listPastLocations(viewerId: string, pollId: number): PastLocation[] {
     const rows = this.sql
-      .exec<{
-        id: number;
-        poll_id: number;
-        label: string;
-        label_key: string;
-        details: string | null;
-        proposed_by: string;
-        created_at: number;
-      }>(
+      .exec<
+        {
+          id: number;
+          poll_id: number;
+          label: string;
+          label_key: string;
+          details: string | null;
+          proposed_by: string;
+          created_at: number;
+        } & PlaceColumns
+      >(
         `SELECT o.id, o.poll_id, o.label, o.label_key, o.details,
-           o.proposed_by, o.created_at
+           o.proposed_by, o.created_at, o.place_lat, o.place_lon,
+           o.place_name, o.place_status, o.place_attempts
          FROM poll_options o JOIN polls p ON p.id = o.poll_id
          WHERE p.kind = 'location' ORDER BY o.created_at, o.id`,
       )
@@ -574,6 +671,7 @@ export class PollStore {
         timesHiked: hiked.get(row.label_key) ?? 0,
         cooldownHikesLeft: resting.get(row.label_key) ?? 0,
         onPoll: (before?.onPoll ?? false) || row.poll_id === pollId,
+        place: placeOf(row),
       });
     }
     return [...byKey.values()].sort(
@@ -865,6 +963,137 @@ export class PollStore {
     );
   }
 
+  /**
+   * The location option whose place lookup is due by `now`, the longest
+   * due first: one of an open poll, or the decided location of a round.
+   * Null when none is due.
+   */
+  nextPendingPlace(now: number): PendingPlace | null {
+    const row = this.sql
+      .exec<{
+        id: number;
+        poll_id: number;
+        label: string;
+        place_attempts: number;
+      }>(
+        `SELECT o.id, o.poll_id, o.label, o.place_attempts
+         FROM poll_options o ${PENDING_PLACES} AND o.place_next_at <= ?
+         ORDER BY o.place_next_at, o.id LIMIT 1`,
+        now,
+      )
+      .toArray()[0];
+    return row
+      ? {
+          optionId: row.id,
+          pollId: row.poll_id,
+          label: row.label,
+          attempts: row.place_attempts,
+        }
+      : null;
+  }
+
+  /** When the next place lookup is due, or null when none is waiting. */
+  nextPlaceLookupAt(): number | null {
+    return this.sql
+      .exec<{ at: number | null }>(
+        `SELECT min(o.place_next_at) AS at FROM poll_options o ${PENDING_PLACES}`,
+      )
+      .one().at;
+  }
+
+  /**
+   * Records a lookup of the option's place made at `this.now()`, if it is
+   * still pending (an admin may have set the pin meanwhile): found or not
+   * found ends it; an error tries again at `retryAt` until
+   * `MAX_PLACE_ATTEMPTS` lookups were made, then marks it `failed`.
+   * Returns the place as stored, or null when the option is gone.
+   */
+  recordPlaceLookup(optionId: number, lookup: PlaceLookup): OptionPlace | null {
+    return this.storage.transactionSync(() => {
+      const before = this.placeRow(optionId);
+      if (before === undefined) return null;
+      if (before.place_status !== "pending") return placeOf(before);
+      const attempts = before.place_attempts + 1;
+      if (lookup.kind === "found") {
+        this.writePlace(optionId, {
+          status: "found",
+          point: lookup.point,
+          name: lookup.name,
+          attempts,
+        });
+      } else if (lookup.kind === "not_found") {
+        this.writePlace(optionId, {
+          status: "not_found",
+          point: null,
+          name: null,
+          attempts,
+        });
+      } else if (attempts >= MAX_PLACE_ATTEMPTS) {
+        this.writePlace(optionId, {
+          status: "failed",
+          point: null,
+          name: null,
+          attempts,
+        });
+      } else {
+        this.writePlace(
+          optionId,
+          { status: "pending", point: null, name: null, attempts },
+          lookup.retryAt,
+        );
+      }
+      return placeOf(this.placeRow(optionId) ?? before);
+    });
+  }
+
+  /**
+   * Sets a location option's pin to `point`, as written by an admin
+   * (`given`), or clears it with null (`cleared`), ending any pending
+   * lookup. Returns the option as stored.
+   */
+  setOptionPin(optionId: number, point: PlacePoint | null): OptionView {
+    const before = this.getOption(optionId);
+    if (before === null || this.pollRow(before.pollId)?.kind !== "location") {
+      throw new PollError("unknown_option", "That location does not exist.");
+    }
+    this.writePlace(optionId, {
+      status: point === null ? "cleared" : "given",
+      point,
+      name: null,
+      attempts: before.place?.attempts ?? 0,
+    });
+    return this.getOption(optionId) ?? before;
+  }
+
+  private placeRow(optionId: number): PlaceColumns | undefined {
+    return this.sql
+      .exec<PlaceColumns>(
+        `SELECT place_lat, place_lon, place_name, place_status, place_attempts
+         FROM poll_options WHERE id = ?`,
+        optionId,
+      )
+      .toArray()[0];
+  }
+
+  private writePlace(
+    optionId: number,
+    place: OptionPlace,
+    nextAt: number | null = null,
+  ): void {
+    this.sql.exec(
+      `UPDATE poll_options SET place_lat = ?, place_lon = ?, place_name = ?,
+         place_status = ?, place_attempts = ?, place_next_at = ?
+       WHERE id = ?`,
+      place.point?.lat ?? null,
+      place.point?.lon ?? null,
+      place.name,
+      place.status,
+      place.attempts,
+      nextAt,
+      optionId,
+    );
+  }
+
   private insertId(query: string, ...bindings: unknown[]): number {
     return this.sql.exec<{ id: number }>(query, ...bindings).one().id;
   }
@@ -899,10 +1128,13 @@ export class PollStore {
         `"${option.label}" is already an option.`,
       );
     }
+    const { place } = option;
     return this.insertId(
       `INSERT INTO poll_options
-         (poll_id, label, label_key, details, date_value, proposed_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+         (poll_id, label, label_key, details, date_value, proposed_by, created_at,
+          place_lat, place_lon, place_name, place_status, place_attempts,
+          place_next_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       pollId,
       option.label,
       option.key,
@@ -910,6 +1142,12 @@ export class PollStore {
       option.dateValue,
       option.proposedBy,
       at,
+      place?.point?.lat ?? null,
+      place?.point?.lon ?? null,
+      place?.name ?? null,
+      place?.status ?? null,
+      place?.attempts ?? 0,
+      place?.status === "pending" ? at : null,
     );
   }
 
@@ -979,6 +1217,7 @@ export class PollStore {
         proposedBy: row.proposed_by,
         createdAt: row.created_at,
         votes: row.votes,
+        place: placeOf(row),
       }));
   }
 

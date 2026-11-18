@@ -145,6 +145,14 @@ describe("DiscordApi routes", () => {
       auth: true,
     },
     {
+      name: "editGuildScheduledEvent",
+      call: (api) =>
+        api.editGuildScheduledEvent("40", "60", { description: "Map" }),
+      method: "PATCH",
+      url: `${base}/guilds/40/scheduled-events/60`,
+      auth: true,
+    },
+    {
       name: "getGuild",
       call: (api) => api.getGuild("40"),
       method: "GET",

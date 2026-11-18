@@ -1,5 +1,6 @@
 /**
- * Starts the Worker under test and the fake Discord API once per test file,
+ * Starts the Worker under test, the fake Discord API and the fake geocoder
+ * once per test file,
  * as `E2ERun` in `./start` describes.
  */
 import { afterAll, afterEach, beforeAll } from "vitest";
@@ -17,9 +18,10 @@ export {
 
 /**
  * Registers hooks that start the Worker and the fake before the file's tests
- * and stop both after them, also when a test fails. After each test it fails
- * the test if the fake refused a request the test did not take with
- * `discord.takeRejections()`, and prints the Worker's logs if the test
+ * and stop them after them, also when a test fails. After each test it fails
+ * the test if the fake Discord API or the fake geocoder refused a request
+ * the test did not take with `discord.takeRejections()` or
+ * `geocoder.takeRejections()`, and prints the Worker's logs if the test
  * failed. Use the returned object inside tests only.
  */
 export function useE2E(options: E2EOptions = {}): E2E {
@@ -40,9 +42,12 @@ export function useE2E(options: E2EOptions = {}): E2E {
   afterEach(({ task }) => {
     if (!started) return;
     if (task.result?.state === "fail") started.harness.debug();
+    // Take both records before failing, so neither leaks into the next test.
     const rejected = started.discord.takeRejections();
+    const refused = started.geocoder.takeRejections();
+    const failures: string[] = [];
     if (rejected.length > 0) {
-      throw new Error(
+      failures.push(
         `the fake Discord API refused requests from the Worker:\n${rejected
           .map(
             (r) =>
@@ -51,6 +56,17 @@ export function useE2E(options: E2EOptions = {}): E2E {
           .join("\n")}`,
       );
     }
+    if (refused.length > 0) {
+      failures.push(
+        `the fake Nominatim refused requests from the Worker:\n${refused
+          .map(
+            (r) =>
+              `${r.method} ${r.path} ${JSON.stringify(r.query)} (User-Agent ${JSON.stringify(r.userAgent)}) -> ${String(r.status)} ${JSON.stringify(r.response)}`,
+          )
+          .join("\n")}`,
+      );
+    }
+    if (failures.length > 0) throw new Error(failures.join("\n"));
   });
 
   afterAll(async () => {
@@ -66,6 +82,9 @@ export function useE2E(options: E2EOptions = {}): E2E {
     },
     get discord() {
       return get().discord;
+    },
+    get geocoder() {
+      return get().geocoder;
     },
     get signer() {
       return get().signer;

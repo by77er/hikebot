@@ -651,6 +651,46 @@ Run `npm test` for the whole suite before opening a pull request.
    pgrep -x workerd || echo "no workerd left"
    ```
 
+## Answer place lookups in an end-to-end scenario
+
+1. Before the location is proposed, give the fake geocoder `e2e.geocoder`
+   (`test/e2e/harness/fake-nominatim.ts`) the place with `addPlace`, or
+   make it fail or hold its answers. A name you did not add gets no result:
+
+   ```ts
+   e2e.geocoder.addPlace("Mount Si", {
+     lat: 47.4875,
+     lon: -121.7234,
+     displayName: "Mount Si, King County, Washington, United States",
+   });
+   // e2e.geocoder.failAlways(503); ... e2e.geocoder.clearFailures();
+   // const release = e2e.geocoder.hold(); ... release();
+   ```
+
+   Lift a failure or release a hold in a `finally`, so the file's other
+   tests get answers.
+
+2. Wait for what the lookup changes on the poll message, with `eventually`
+   and a timeout of 15 seconds, since lookups wait for their turn; to wait
+   for the request itself, use `e2e.geocoder.nextRequest(match, timeoutMs)`:
+
+   ```ts
+   await eventually(
+     () => {
+       expect(messageText(play.shown(poll))).toContain("📍 Mount Si");
+     },
+     { timeout: 15_000 },
+   );
+   ```
+
+3. Read what the bot asked in `e2e.geocoder.requests` (`query`,
+   `userAgent`, `at`), and run the file:
+
+   ```sh
+   npx vitest run --project e2e test/e2e/locate.test.ts
+   pgrep -x workerd || echo "no workerd left"
+   ```
+
 ## Teach the fake Discord API a new route or limit
 
 1. For a new route, add the REST method to `DiscordApi` first, then add the

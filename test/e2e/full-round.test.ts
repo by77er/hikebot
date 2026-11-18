@@ -62,6 +62,7 @@ describe("a whole hike round", () => {
     );
     expect(buttonLabels(play.shown(panel))).toEqual([
       "Start date vote",
+      "Set map pin",
       "Cancel round",
       "Settings",
       "Refresh",
@@ -180,6 +181,7 @@ describe("a whole hike round", () => {
     expect(summary).toContain("No hike is being planned.");
     expect(buttonLabels(play.shown(panel))).toEqual([
       "Start location vote",
+      "Set map pin",
       "Settings",
       "Refresh",
     ]);

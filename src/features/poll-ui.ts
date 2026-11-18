@@ -57,6 +57,13 @@ import {
 } from "../polls/store";
 import { rankOptions } from "../polls/tally";
 import {
+  OSM_ATTRIBUTION,
+  PLACE_MARK,
+  osmLink,
+  placeLine,
+  withAttribution,
+} from "../geo/links";
+import {
   ADMIN_PANEL_IDS,
   adminPanelBody,
   adminPanelUpdate,
@@ -210,10 +217,13 @@ export const POLL_IDS = {
  * The public poll message: heading, instructions, the options by votes with
  * their details and proposer, the voter count and, while open, the buttons.
  * Closed, it marks the winner (and a tie broken at random) and has no
- * buttons; cancelled (closed without a winner) it says so. Details are
- * shortened so the message stays within Discord's 4000 characters with 25
- * options at the longest label and details. A proposer whose id is `botId`
- * (the application's own, for options the bot entered) is named hikebot.
+ * buttons; cancelled (closed without a winner) it says so. A located
+ * option shows its place name and a `map` link, under a line of
+ * OpenStreetMap's attribution. Place names, then details, are shortened (and
+ * at the last, map links dropped from the bottom) so the message stays
+ * within Discord's 4000 characters with 25 options at the longest label,
+ * details and place name. A proposer whose id is `botId` (the
+ * application's own, for options the bot entered) is named hikebot.
  */
 export function renderPollMessage(
   poll: PollView,
@@ -246,21 +256,25 @@ export function renderPollMessage(
       ? `Proposed by ${actorName(option.proposedBy, botId)}`
       : "",
   );
+  const located = ranked.map((option) => option.place?.point ?? null);
+  const anyLocated = located.some((point) => point !== null);
   const fixed =
     head.join("\n").length +
     foot.length +
+    (anyLocated ? OSM_ATTRIBUTION.length + 1 : 0) +
     (ranked.length === 0 ? wording.empty.length : 0) +
     ranked.reduce(
       (sum, _option, i) =>
         sum +
         (titles[i]?.length ?? 0) +
         (proposers[i]?.length ?? 0) +
-        // the newlines between title, details and proposer
-        2,
+        // the newlines between title, place, details and proposer
+        3 +
+        (located[i] ? PLACE_MARK.length : 0),
       0,
     );
-  const details = shortenAll(
-    ranked.map((option) => option.details ?? ""),
+  const { places, details } = fitPlacesAndDetails(
+    ranked,
     MAX_MESSAGE_TEXT - fixed,
   );
 
@@ -268,11 +282,16 @@ export function renderPollMessage(
   body.push(separator());
   if (ranked.length === 0) body.push(textDisplay(wording.empty));
   ranked.forEach((_option, i) => {
-    const lines = [titles[i] ?? "", details[i] ?? "", proposers[i] ?? ""];
+    const lines = [
+      titles[i] ?? "",
+      places[i] ?? "",
+      details[i] ?? "",
+      proposers[i] ?? "",
+    ];
     body.push(textDisplay(lines.filter((line) => line !== "").join("\n")));
   });
   body.push(separator());
-  body.push(textDisplay(foot));
+  body.push(textDisplay(anyLocated ? `${foot}\n${OSM_ATTRIBUTION}` : foot));
   if (open) {
     body.push(
       actionRow(
@@ -282,6 +301,66 @@ export function renderPollMessage(
     );
   }
   return [container(body)];
+}
+
+/** Between the place name and its link. */
+const PLACE_SEPARATOR = " · ";
+
+/** A place name cut shorter than this is left out instead. */
+const MIN_PLACE_NAME = 8;
+
+/**
+ * Each option's place line (`📍 <name> · [map](<link>)`, empty when it has
+ * no point) and details, together within `budget` characters beyond the
+ * mark and the newlines the caller counted. Place names give way first:
+ * shortened to a common cap, or left out when that cap is under
+ * `MIN_PLACE_NAME`; then details are shortened; when even the links do not
+ * fit, links are dropped from the last option up.
+ */
+function fitPlacesAndDetails(
+  options: readonly OptionView[],
+  budget: number,
+): { places: string[]; details: string[] } {
+  const links = options.map((option) =>
+    option.place?.point ? `[map](${osmLink(option.place.point, true)})` : "",
+  );
+  let linkTotal = links.reduce((sum, link) => sum + link.length, 0);
+  for (let i = links.length - 1; i >= 0 && linkTotal > budget; i--) {
+    linkTotal -= links[i]?.length ?? 0;
+    links[i] = "";
+  }
+  const rest = Math.max(0, budget - linkTotal);
+  const fullDetails = options.map((option) => option.details ?? "");
+  const detailTotal = fullDetails.reduce((sum, text) => sum + text.length, 0);
+  const names = options.map((option, i) =>
+    links[i] !== "" && option.place?.name ? option.place.name : "",
+  );
+  const named = names.filter((name) => name !== "").length;
+  let fitted = shortenAll(
+    names,
+    Math.max(0, rest - detailTotal - named * PLACE_SEPARATOR.length),
+  );
+  if (
+    fitted.some(
+      (name, i) =>
+        name.length < Math.min(MIN_PLACE_NAME, names[i]?.length ?? 0),
+    )
+  ) {
+    fitted = names.map(() => "");
+  }
+  const nameTotal = fitted.reduce(
+    (sum, name) =>
+      sum + (name === "" ? 0 : name.length + PLACE_SEPARATOR.length),
+    0,
+  );
+  return {
+    places: links.map((link, i) =>
+      link === ""
+        ? ""
+        : `${PLACE_MARK}${fitted[i] ? `${fitted[i]}${PLACE_SEPARATOR}` : ""}${link}`,
+    ),
+    details: shortenAll(fullDetails, rest - nameTotal),
+  };
 }
 
 /** The options in the order the select lists them: by date for a date poll. */
@@ -933,6 +1012,8 @@ export function renderAnnouncement(
     `**${winner?.label ?? "?"}** won the ${wording.name} with ${votes(winner?.votes ?? 0)}.`,
   ];
   if (winner?.details) lines.push(winner.details);
+  const point = winner?.place?.point;
+  if (point) lines.push(placeLine(point, winner.place?.name ?? null));
   if (poll.tieBroken) lines.push(tieNote(poll));
   if (poll.channelId !== null && poll.messageId !== null) {
     lines.push(
@@ -940,7 +1021,7 @@ export function renderAnnouncement(
     );
   }
   lines.push(...extra);
-  return [container([textDisplay(lines.join("\n"))])];
+  return [container([textDisplay(withAttribution(lines).join("\n"))])];
 }
 
 /** Cancel round, first click: asks to confirm. */

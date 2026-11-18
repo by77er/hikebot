@@ -4,6 +4,7 @@ import { isPollError } from "../../src/polls/errors";
 import {
   COOLDOWN_HIKES,
   MAX_OPTIONS,
+  PENDING_PLACE,
   cooldownMessage,
   type PollStore,
 } from "../../src/polls/store";
@@ -1087,6 +1088,7 @@ describe("listPastLocations", () => {
         timesHiked: 0,
         cooldownHikesLeft: 0,
         onPoll: true,
+        place: PENDING_PLACE,
       },
       {
         optionId: expect.any(Number) as number,
@@ -1098,6 +1100,7 @@ describe("listPastLocations", () => {
         timesHiked: 1,
         cooldownHikesLeft: COOLDOWN_HIKES,
         onPoll: false,
+        place: PENDING_PLACE,
       },
     ]);
     const [lake, ridge] = past.viewer;
@@ -1281,5 +1284,164 @@ describe("getOption", () => {
       proposedBy: "u1",
     });
     expect(result.missing).toBeNull();
+  });
+});
+
+describe("places", () => {
+  const SI = { lat: 47.4875, lon: -121.7234 };
+
+  it("stores a location without coordinates as pending and a date without a place", async () => {
+    const result = await withStore((store) => {
+      const round = store.startRound("u-admin", locations("Ridge"));
+      const pollId = round.locationPoll?.id ?? 0;
+      const given = store.addOption(pollId, {
+        label: "Si",
+        proposedBy: "u1",
+        place: { status: "given", point: SI, name: null, attempts: 0 },
+      });
+      store.closePoll(pollId, "u-admin");
+      const date = store.startDatePoll(round.id, "u-admin", [
+        "2030-06-08",
+        "2030-06-15",
+      ]);
+      return {
+        ridge: store.getOption(round.locationPoll?.options[0]?.id ?? 0),
+        given,
+        date: date.options[0],
+      };
+    });
+    expect(result.ridge?.place).toEqual(PENDING_PLACE);
+    expect(result.given.place).toEqual({
+      status: "given",
+      point: SI,
+      name: null,
+      attempts: 0,
+    });
+    expect(result.date?.place).toBeNull();
+  });
+
+  it("hands out the pending place due first, of open polls and decided locations only", async () => {
+    const result = await withStore(
+      (store) => {
+        const round = store.startRound("u-admin", locations("Ridge", "Lake"));
+        const [ridge, lake] = round.locationPoll?.options ?? [];
+        const first = store.nextPendingPlace(1_800_000_000_000);
+        store.recordPlaceLookup(ridge?.id ?? 0, {
+          kind: "error",
+          retryAt: 1_800_000_060_000,
+        });
+        const afterError = store.nextPendingPlace(1_800_000_001_000);
+        const at = store.nextPlaceLookupAt();
+        // Lake wins; Ridge loses and is still pending, but no longer looked up.
+        store.setVotes(round.locationPoll?.id ?? 0, "u1", [lake?.id ?? 0]);
+        store.closePoll(round.locationPoll?.id ?? 0, "u-admin");
+        return {
+          first,
+          afterError,
+          at,
+          closed: store.nextPendingPlace(1_900_000_000_000),
+          closedAt: store.nextPlaceLookupAt(),
+        };
+      },
+      { now: () => 1_800_000_000_000 },
+    );
+    expect(result.first).toMatchObject({ label: "Ridge", attempts: 0 });
+    expect(result.afterError).toMatchObject({ label: "Lake", attempts: 0 });
+    expect(result.at).toBe(1_800_000_000_000);
+    expect(result.closed).toMatchObject({ label: "Lake" });
+    expect(result.closedAt).toBe(1_800_000_000_000);
+  });
+
+  it("records found, not found, and failed after three errors", async () => {
+    const result = await withStore((store) => {
+      const round = store.startRound(
+        "u-admin",
+        locations("Si", "Nowhere", "Flaky"),
+      );
+      const [si, nowhere, flaky] = (round.locationPoll?.options ?? []).map(
+        (o) => o.id,
+      );
+      const error = { kind: "error", retryAt: 0 } as const;
+      return {
+        found: store.recordPlaceLookup(si ?? 0, {
+          kind: "found",
+          point: SI,
+          name: "Mount Si",
+        }),
+        again: store.recordPlaceLookup(si ?? 0, { kind: "not_found" }),
+        notFound: store.recordPlaceLookup(nowhere ?? 0, { kind: "not_found" }),
+        errors: [1, 2, 3].map(() => store.recordPlaceLookup(flaky ?? 0, error)),
+        gone: store.recordPlaceLookup(999, { kind: "not_found" }),
+        pending: store.nextPlaceLookupAt(),
+      };
+    });
+    expect(result.found).toEqual({
+      status: "found",
+      point: SI,
+      name: "Mount Si",
+      attempts: 1,
+    });
+    // An ended lookup is not overwritten.
+    expect(result.again).toEqual(result.found);
+    expect(result.notFound).toMatchObject({ status: "not_found", attempts: 1 });
+    expect(result.errors.map((p) => [p?.status, p?.attempts])).toEqual([
+      ["pending", 1],
+      ["pending", 2],
+      ["failed", 3],
+    ]);
+    expect(result.gone).toBeNull();
+    expect(result.pending).toBeNull();
+  });
+
+  it("sets and clears a pin, ending a pending lookup, and refuses a date", async () => {
+    const result = await withStore((store) => {
+      const round = store.startRound("u-admin", locations("Ridge"));
+      const id = round.locationPoll?.options[0]?.id ?? 0;
+      const set = store.setOptionPin(id, SI);
+      const cleared = store.setOptionPin(id, null);
+      store.closePoll(round.locationPoll?.id ?? 0, "u-admin");
+      const date = store.startDatePoll(round.id, "u-admin", [
+        "2030-06-08",
+        "2030-06-15",
+      ]);
+      expectCode(
+        () => store.setOptionPin(date.options[0]?.id ?? 0, SI),
+        "unknown_option",
+      );
+      expectCode(() => store.setOptionPin(999, SI), "unknown_option");
+      return { set, cleared, pending: store.nextPlaceLookupAt() };
+    });
+    expect(result.set.place).toEqual({
+      status: "given",
+      point: SI,
+      name: null,
+      attempts: 0,
+    });
+    expect(result.cleared.place).toMatchObject({
+      status: "cleared",
+      point: null,
+    });
+    expect(result.pending).toBeNull();
+  });
+
+  it("lists a past location with its newest option's place", async () => {
+    const past = await withStore((store) => {
+      const round = store.startRound("u-admin", [
+        {
+          label: "Si",
+          proposedBy: "u1",
+          place: { status: "found", point: SI, name: "Mount Si", attempts: 1 },
+        },
+      ]);
+      store.cancelRound(round.id, "u-admin");
+      const next = store.startRound("u-admin");
+      return store.listPastLocations("u1", next.locationPoll?.id ?? 0);
+    });
+    expect(past[0]?.place).toEqual({
+      status: "found",
+      point: SI,
+      name: "Mount Si",
+      attempts: 1,
+    });
   });
 });

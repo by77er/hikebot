@@ -46,6 +46,7 @@ describe("the date vote", () => {
     );
     expect(buttonLabels(play.shown(panel))).toEqual([
       "Start date vote",
+      "Set map pin",
       "Cancel round",
       "Settings",
       "Refresh",
@@ -159,6 +160,7 @@ describe("the date vote", () => {
     );
     expect(buttonLabels(play.shown(panel))).toEqual([
       "Close date vote",
+      "Set map pin",
       "Cancel round",
       "Settings",
       "Refresh",

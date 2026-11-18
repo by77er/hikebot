@@ -34,7 +34,7 @@ import {
 import type { HikeDayStatus } from "../../src/features/hike-day-state";
 import type { HikeEventStatus } from "../../src/features/hike-event-state";
 import type { HikeThreadStatus } from "../../src/features/hike-thread-state";
-import type { PollView, RoundView } from "../../src/polls/store";
+import type { OptionView, PollView, RoundView } from "../../src/polls/store";
 import { GuildConfig, type GuildSettings } from "../../src/guild/config";
 import {
   ADMIN_ONLY_MESSAGE,
@@ -71,6 +71,7 @@ const EMPTY: GuildSettings = {
   ownerId: null,
   ownerFetchedAt: null,
   timezone: "America/Los_Angeles",
+  homeArea: null,
 };
 const COMPLETE: GuildSettings = {
   ...EMPTY,
@@ -365,6 +366,7 @@ describe("renderAdminPanel", () => {
     };
     expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
       POLL_CONTROL_IDS.startDateVote,
+      POLL_CONTROL_IDS.setMapPin(7),
       POLL_CONTROL_IDS.cancelRound(7),
       ADMIN_PANEL_IDS.settings,
       ADMIN_PANEL_IDS.refresh,
@@ -372,6 +374,46 @@ describe("renderAdminPanel", () => {
     expect(text(asNodes(renderAdminPanel(state)))).toContain(
       `**Location decided:** ${"L".repeat(78)}00 (0 votes), drawn at random from a tie.`,
     );
+  });
+
+  it("shows where the decided location is pinned, or that it is being looked up, or has no pin", () => {
+    const decided = (place: OptionView["place"]) => {
+      const poll: PollView = {
+        ...votingPoll(2),
+        status: "closed",
+        winnerOptionId: 1,
+      };
+      poll.options = poll.options.map((o) =>
+        o.id === 1 ? { ...o, place } : o,
+      );
+      return text(
+        asNodes(
+          renderAdminPanel({
+            settings: COMPLETE,
+            round: {
+              ...votingRound(poll),
+              status: "location_decided" as const,
+              locationOptionId: 1,
+            },
+          }),
+        ),
+      );
+    };
+    const point = { lat: 47.4875, lon: -121.7234 };
+    expect(
+      decided({ status: "found", point, name: "Mount Si", attempts: 1 }),
+    ).toContain(
+      "**Map pin:** Mount Si · [map](https://www.openstreetmap.org/?mlat=47.4875&mlon=-121.7234)",
+    );
+    expect(
+      decided({ status: "given", point, name: null, attempts: 0 }),
+    ).toContain("**Map pin:** 47.4875, -121.7234 · [map](");
+    expect(
+      decided({ status: "pending", point: null, name: null, attempts: 1 }),
+    ).toContain("**Map pin:** being looked up on OpenStreetMap.");
+    expect(
+      decided({ status: "not_found", point: null, name: null, attempts: 1 }),
+    ).toContain("**Map pin:** none. Click Set map pin to add one.");
   });
 
   it("shows the decided location, the date vote's tallies, Close date vote and Cancel round while the date vote is open", () => {
@@ -392,6 +434,7 @@ describe("renderAdminPanel", () => {
     };
     expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
       POLL_CONTROL_IDS.closePoll(dates.id),
+      POLL_CONTROL_IDS.setMapPin(7),
       POLL_CONTROL_IDS.cancelRound(7),
       ADMIN_PANEL_IDS.settings,
       ADMIN_PANEL_IDS.refresh,
@@ -426,6 +469,7 @@ describe("renderAdminPanel", () => {
     const state = { settings: COMPLETE, round: null, finished };
     expect(actionButtons(state).map((b) => b.custom_id)).toEqual([
       POLL_CONTROL_IDS.startLocationVote,
+      POLL_CONTROL_IDS.setMapPin(7),
       ADMIN_PANEL_IDS.settings,
       ADMIN_PANEL_IDS.refresh,
     ]);
@@ -474,6 +518,7 @@ describe("renderAdminPanel", () => {
       expect(shown).toContain("**Hike thread:** <#900000000000000001>");
       expect(buttons).toEqual([
         POLL_CONTROL_IDS.startLocationVote,
+        POLL_CONTROL_IDS.setMapPin(7),
         ADMIN_PANEL_IDS.settings,
         ADMIN_PANEL_IDS.refresh,
       ]);
@@ -486,6 +531,7 @@ describe("renderAdminPanel", () => {
       expect(buttons).toEqual([
         POLL_CONTROL_IDS.startLocationVote,
         POLL_CONTROL_IDS.createHikeThread(finished.id),
+        POLL_CONTROL_IDS.setMapPin(7),
         ADMIN_PANEL_IDS.settings,
         ADMIN_PANEL_IDS.refresh,
       ]);
@@ -544,6 +590,7 @@ describe("renderAdminPanel", () => {
         expect(shown).toContain("**Hike event:** created.");
         expect(buttons).toEqual([
           POLL_CONTROL_IDS.startLocationVote,
+          POLL_CONTROL_IDS.setMapPin(7),
           ADMIN_PANEL_IDS.settings,
           ADMIN_PANEL_IDS.refresh,
         ]);
@@ -556,6 +603,7 @@ describe("renderAdminPanel", () => {
         expect(buttons).toEqual([
           POLL_CONTROL_IDS.startLocationVote,
           POLL_CONTROL_IDS.createHikeEvent(finished.id),
+          POLL_CONTROL_IDS.setMapPin(7),
           ADMIN_PANEL_IDS.settings,
           ADMIN_PANEL_IDS.refresh,
         ]);
@@ -612,6 +660,7 @@ describe("renderAdminPanel", () => {
           POLL_CONTROL_IDS.startLocationVote,
           POLL_CONTROL_IDS.createHikeThread(finished.id),
           POLL_CONTROL_IDS.createHikeEvent(finished.id),
+          POLL_CONTROL_IDS.setMapPin(7),
           ADMIN_PANEL_IDS.settings,
           ADMIN_PANEL_IDS.refresh,
         ]);
@@ -673,6 +722,7 @@ describe("renderAdminPanel", () => {
         expect(buttons).toEqual([
           POLL_CONTROL_IDS.startLocationVote,
           POLL_CONTROL_IDS.postHikeDay(finished.id),
+          POLL_CONTROL_IDS.setMapPin(7),
           ADMIN_PANEL_IDS.settings,
           ADMIN_PANEL_IDS.refresh,
         ]);
@@ -723,6 +773,7 @@ describe("renderAdminPanel", () => {
           POLL_CONTROL_IDS.createHikeThread(finished.id),
           POLL_CONTROL_IDS.createHikeEvent(finished.id),
           POLL_CONTROL_IDS.postHikeDay(finished.id),
+          POLL_CONTROL_IDS.setMapPin(7),
           ADMIN_PANEL_IDS.settings,
           ADMIN_PANEL_IDS.refresh,
         ]);
@@ -761,6 +812,7 @@ describe("renderAdminPanel", () => {
         expect(buttons).toEqual([
           POLL_CONTROL_IDS.startLocationVote,
           POLL_CONTROL_IDS.announce(3),
+          POLL_CONTROL_IDS.setMapPin(7),
           ADMIN_PANEL_IDS.settings,
           ADMIN_PANEL_IDS.refresh,
         ]);
@@ -860,6 +912,7 @@ function votingPoll(n: number): PollView {
       dateValue: null,
       proposedBy: OWNER,
       createdAt: 0,
+      place: null,
       votes: i,
     })),
     voterCount: 30,
@@ -881,6 +934,7 @@ function datePoll(n: number): PollView {
       dateValue: `2027-12-${String(i + 1).padStart(2, "0")} 09:00`,
       proposedBy: OWNER,
       createdAt: 0,
+      place: null,
       votes: i,
     })),
   };
@@ -948,6 +1002,35 @@ describe("renderAdminSettings", () => {
     expect(find(nodes, ADMIN_PANEL_IDS.timezone)).toMatchObject({
       type: ComponentType.Button,
       label: "Set time zone",
+    });
+    expectWithinLimits(view);
+  });
+
+  it("shows the home area with Set home area, or that lookups are worldwide", () => {
+    const unset = text(
+      asNodes(renderAdminSettings({ settings: COMPLETE, round: null })),
+    );
+    expect(unset).toContain(
+      "**Home area:** not set (locations are looked up worldwide)",
+    );
+    const view = renderAdminSettings({
+      settings: {
+        ...COMPLETE,
+        homeArea: {
+          text: "Seattle, Washington",
+          name: "Seattle, King County, Washington",
+          lat: 47.6,
+          lon: -122.3,
+        },
+      },
+      round: null,
+    });
+    expect(text(asNodes(view))).toContain(
+      "**Home area:** Seattle, Washington (found as Seattle, King County, Washington)",
+    );
+    expect(find(asNodes(view), ADMIN_PANEL_IDS.homeArea)).toMatchObject({
+      type: ComponentType.Button,
+      label: "Set home area",
     });
     expectWithinLimits(view);
   });
@@ -1281,6 +1364,14 @@ describe("the admin panel", () => {
       [
         POLL_CONTROL_IDS.postHikeDay(1),
         (g) => click(POLL_CONTROL_IDS.postHikeDay(1), g, STRANGER),
+      ],
+      [
+        POLL_CONTROL_IDS.setMapPin(1),
+        (g) => click(POLL_CONTROL_IDS.setMapPin(1), g, STRANGER),
+      ],
+      [
+        ADMIN_PANEL_IDS.homeArea,
+        (g) => click(ADMIN_PANEL_IDS.homeArea, g, STRANGER),
       ],
       [ADMIN_PANEL_IDS.role, (g) => pickRole(g, STRANGER, ROLE)],
       ...[

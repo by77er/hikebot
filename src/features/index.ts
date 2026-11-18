@@ -5,12 +5,24 @@ import { registerAdminPanel } from "./admin-panel";
 import { registerDateVote } from "./date-vote";
 import { hikeCommand } from "./hike";
 import { registerHikeDay } from "./hike-day";
-import { registerHikeEvent } from "./hike-event";
+import { registerHikeEvent, updateEventPin } from "./hike-event";
 import { registerHikeLog } from "./hike-log";
-import { registerHikeThread } from "./hike-thread";
+import { registerHikeThread, updateThreadPin } from "./hike-thread";
+import { registerHomeArea } from "./home-area";
+import { LOCATE_JOB, locatePlaces } from "./locate";
 import { registerLocationVote } from "./location-vote";
+import { registerMapPin, type MapPinHook } from "./map-pin";
 import { registerPollUi } from "./poll-ui";
 import { pollWordings } from "./round-actions";
+
+/**
+ * What runs after the decided location's map pin changes, in order. A
+ * feature that shows the pin adds its hook here.
+ */
+export const MAP_PIN_HOOKS: readonly MapPinHook[] = [
+  updateThreadPin,
+  updateEventPin,
+];
 
 /**
  * Registers every feature's handlers. A feature keeps its handlers in its own
@@ -34,6 +46,9 @@ export function registerFeatures(router: Router): Router {
   registerHikeEvent(router);
   registerHikeDay(router);
   registerHikeLog(router);
+  registerHomeArea(router);
+  registerMapPin(router, MAP_PIN_HOOKS);
+  router.job(LOCATE_JOB, locatePlaces);
   return router;
 }
 

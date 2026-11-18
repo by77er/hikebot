@@ -21,6 +21,7 @@ import {
   START_PASSED_MESSAGE,
   createHikeEventStep,
   eventDescription,
+  hikeEventDescription,
   hikeEventRequest,
 } from "../../src/features/hike-event";
 import {
@@ -119,6 +120,7 @@ function option(
     dateValue: null,
     proposedBy: OWNER,
     createdAt: 0,
+    place: null,
     votes: 1,
     ...extra,
   };
@@ -288,6 +290,102 @@ describe("eventDescription", () => {
       "Steep\n\nHike thread: https://x",
     );
     expect(eventDescription(null, null)).toBe("");
+  });
+
+  const SI = { lat: 47.4875, lon: -121.7234 };
+  const OSM =
+    "https://www.openstreetmap.org/?mlat=47.4875&mlon=-121.7234#map=13/47.4875/-121.7234";
+  const GOOGLE =
+    "https://www.google.com/maps/search/?api=1&query=47.4875,-121.7234";
+
+  it("shows the place's name, both map links and the attribution between the details and the thread link", () => {
+    expect(
+      eventDescription("Steep", "https://x", {
+        point: SI,
+        name: "Mount Si, King County, Washington",
+      }),
+    ).toBe(
+      [
+        "Steep",
+        "",
+        "📍 Mount Si, King County, Washington",
+        `OpenStreetMap: ${OSM}`,
+        `Google Maps: ${GOOGLE}`,
+        "© OpenStreetMap contributors",
+        "",
+        "Hike thread: https://x",
+      ].join("\n"),
+    );
+    expect(eventDescription(null, null, { point: SI, name: null })).toBe(
+      [
+        `OpenStreetMap: ${OSM}`,
+        `Google Maps: ${GOOGLE}`,
+        "© OpenStreetMap contributors",
+      ].join("\n"),
+    );
+  });
+
+  it("stays within 1000 characters with 1000 characters of details, keeping both map links and the thread link whole", () => {
+    const link = `https://discord.com/channels/${GUILD}/${THREAD}`;
+    const description = eventDescription("D".repeat(1000), link, {
+      point: SI,
+      name: "N".repeat(80),
+    });
+    expect(description.length).toBeLessThanOrEqual(MAX_EVENT_DESCRIPTION);
+    expect(description).toContain(`OpenStreetMap: ${OSM}`);
+    expect(description).toContain(`Google Maps: ${GOOGLE}`);
+    expect(description).toContain("© OpenStreetMap contributors");
+    expect(description).toContain(`📍 ${"N".repeat(80)}`);
+    expect(description.endsWith(`\n\nHike thread: ${link}`)).toBe(true);
+    expect(description.startsWith("DDD")).toBe(true);
+    expect(description).toContain("…");
+  });
+});
+
+describe("hikeEventDescription", () => {
+  const SI = { lat: 47.4875, lon: -121.7234 };
+
+  function located(place: OptionView["place"]): RoundView {
+    const round = hike("Mount Si", "2030-06-15 09:00", "Steep", THREAD);
+    const location = round.locationPoll;
+    if (location === null) throw new Error("no location poll");
+    return {
+      ...round,
+      locationPoll: {
+        ...location,
+        options: location.options.map((o) => ({ ...o, place })),
+      },
+    };
+  }
+
+  it("shows the decided location's place when it has a point", () => {
+    const description = hikeEventDescription(
+      located({ status: "found", point: SI, name: "Mount Si", attempts: 1 }),
+      GUILD,
+    );
+    expect(description).toContain("📍 Mount Si");
+    expect(description).toContain(
+      "OpenStreetMap: https://www.openstreetmap.org/?mlat=47.4875&mlon=-121.7234",
+    );
+    expect(description).toContain(
+      "Google Maps: https://www.google.com/maps/search/?api=1&query=47.4875,-121.7234",
+    );
+    expect(description).toContain("© OpenStreetMap contributors");
+    expect(description).toContain(
+      `Hike thread: https://discord.com/channels/${GUILD}/${THREAD}`,
+    );
+  });
+
+  it.each([
+    ["no place", null],
+    [
+      "a place not found",
+      { status: "not_found", point: null, name: null, attempts: 1 },
+    ],
+  ] as const)("shows no map links for %s", (_name, place) => {
+    expect(hikeEventDescription(located(place), GUILD)).toBe(
+      `Steep\n\nHike thread: https://discord.com/channels/${GUILD}/${THREAD}`,
+    );
   });
 });
 

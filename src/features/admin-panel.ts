@@ -42,6 +42,7 @@ import {
   type RoundView,
 } from "../polls/store";
 import { rankOptions } from "../polls/tally";
+import { formatPoint, osmLink } from "../geo/links";
 import type {
   CommandHandler,
   ComponentHandler,
@@ -110,11 +111,13 @@ export const ADMIN_PANEL_IDS = {
   announceChannel: customId("admin", "announce-channel"),
   forumChannel: customId("admin", "forum-channel"),
   timezone: customId("admin", "timezone"),
+  homeArea: customId("admin", "home-area"),
 } as const;
 
 /** The fields of the panel's modals, read back from their submissions. */
 export const ADMIN_PANEL_FIELDS = {
   timezone: customId("admin", "timezone-name"),
+  homeArea: customId("admin", "home-area-name"),
 } as const;
 
 /** The panel's poll controls; their handlers live with the poll features. */
@@ -132,6 +135,7 @@ export const POLL_CONTROL_IDS = {
     customId("hike-day", "post", String(roundId)),
   announce: (pollId: number) => customId("poll", "announce", String(pollId)),
   postVoteMessage: (pollId: number) => customId("poll", "post", String(pollId)),
+  setMapPin: (roundId: number) => customId("pin", "set", String(roundId)),
 } as const;
 
 /** How the panel names each kind of poll. */
@@ -314,6 +318,7 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
           ]
         : []),
       ...announceButtons(state),
+      ...(finished ? [pinButton(finished)] : []),
     ];
   }
   const open = openPoll(round);
@@ -349,12 +354,22 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
           }),
         ]),
     ...announceButtons(state),
+    ...(round.locationOptionId === null ? [] : [pinButton(round)]),
     button({
       custom_id: POLL_CONTROL_IDS.cancelRound(round.id),
       label: "Cancel round",
       style: ButtonStyle.Danger,
     }),
   ];
+}
+
+/** Set map pin, for the round's decided location. */
+function pinButton(round: RoundView): APIButtonComponentWithCustomId {
+  return button({
+    custom_id: POLL_CONTROL_IDS.setMapPin(round.id),
+    label: "Set map pin",
+    style: ButtonStyle.Secondary,
+  });
 }
 
 function settingsButtons(
@@ -429,6 +444,7 @@ function roundSection(state: AdminPanelState) {
     const lines = finished
       ? [
           `**Last hike:** ${hikeSummary(finished)}`,
+          pinLine(finished),
           ...threadLines(state.thread),
           ...eventLines(state.event),
           ...hikeDayLines(state),
@@ -466,6 +482,7 @@ function roundSection(state: AdminPanelState) {
     if (winner !== undefined) {
       lines.unshift(
         `**Location decided:** ${winner.label} (${votes(winner.votes)})${decided.tieBroken ? ", drawn at random from a tie" : ""}.`,
+        pinLine(round),
       );
     }
   }
@@ -513,6 +530,22 @@ function announcementLines(
         return `${head} not confirmed: posting it was cut off, so it may or may not have been posted. Check the announcements channel, and click Announce ${name} only if it is missing.`;
     }
   });
+}
+
+/**
+ * Where the round's decided location is pinned: the place (or the
+ * coordinates) with a map link, or why there is no pin.
+ */
+export function pinLine(round: RoundView): string {
+  const place = round.locationPoll?.options.find(
+    (option) => option.id === round.locationOptionId,
+  )?.place;
+  if (place?.point) {
+    return `**Map pin:** ${place.name ?? formatPoint(place.point)} · [map](${osmLink(place.point, true)})`;
+  }
+  return place?.status === "pending"
+    ? "**Map pin:** being looked up on OpenStreetMap."
+    : "**Map pin:** none. Click Set map pin to add one.";
 }
 
 /** Where the last hike's forum thread stands, for its summary. */
@@ -638,8 +671,23 @@ function timezoneLine({ settings, now }: AdminPanelState): string {
 }
 
 /**
- * The settings view: one select per setting, each showing its value, and
- * the time zone with its Set time zone button.
+ * `**Home area:** Seattle, Washington (found as Seattle, King County,
+ * Washington)`, or `not set` with what that means.
+ */
+export function homeAreaLine(settings: GuildSettings): string {
+  const area = settings.homeArea;
+  if (area === null) {
+    return `**Home area:** ${NOT_SET} (locations are looked up worldwide)`;
+  }
+  return area.name === area.text
+    ? `**Home area:** ${area.text}`
+    : `**Home area:** ${area.text} (found as ${area.name})`;
+}
+
+/**
+ * The settings view: one select per setting, each showing its value, the
+ * time zone with its Set time zone button and the home area with its Set
+ * home area button.
  */
 export function renderAdminSettings(
   state: AdminPanelState,
@@ -700,6 +748,16 @@ export function renderAdminSettings(
         button({
           custom_id: ADMIN_PANEL_IDS.timezone,
           label: "Set time zone",
+          style: ButtonStyle.Secondary,
+        }),
+      ),
+      textDisplay(
+        `${homeAreaLine(settings)}\nProposed locations are looked up on OpenStreetMap; matches near the home area come first.`,
+      ),
+      actionRow(
+        button({
+          custom_id: ADMIN_PANEL_IDS.homeArea,
+          label: "Set home area",
           style: ButtonStyle.Secondary,
         }),
       ),

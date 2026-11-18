@@ -35,6 +35,8 @@ export default defineConfig({
                 DISCORD_CLIENT_SECRET: "test-client-secret",
                 SIGNING_SECRET: "test-signing-secret-of-at-least-32-chars",
                 PUBLIC_URL: "https://hikebot.example",
+                // Never the real geocoder: tests answer for it with a fetch spy.
+                NOMINATIM_BASE: "https://nominatim.test",
               },
             },
           }),

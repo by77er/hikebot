@@ -36,6 +36,7 @@ import { START_PASSED_MESSAGE, createHikeEvent } from "./hike-event";
 import { claimHikeEvent, hikeEventStatus } from "./hike-event-state";
 import { createHikeThread } from "./hike-thread";
 import { claimHikeThread, hikeThreadStatus } from "./hike-thread-state";
+import { givenPlace, scheduleNewLookup } from "./locate";
 import {
   LOCATION_POLL,
   parseInitialLocations,
@@ -141,7 +142,9 @@ export function locationVoteRefusal(
 /**
  * Starts a round with its location vote, on `labels` (one location each,
  * read as the start modal reads its lines: may be none), recording the
- * actor as starter and as proposer of each. `work` posts the poll message
+ * actor as starter and as proposer of each (an initial location holding
+ * coordinates is pinned there, the others wait for a lookup). `work`
+ * schedules the lookups, then posts the poll message
  * in the voting channel and records it; if Discord refuses, the round is
  * taken back, unless it was cancelled or its vote closed meanwhile, and a
  * message posted after that is edited to show it. Does not check that the
@@ -166,7 +169,11 @@ export function startLocationVote(
   try {
     round = store.startRound(
       actor,
-      parsed.labels.map((label) => ({ label, proposedBy: actor })),
+      parsed.labels.map((label) => ({
+        label,
+        proposedBy: actor,
+        place: givenPlace([label]),
+      })),
     );
   } catch (error) {
     if (isPollError(error, "round_active")) {
@@ -182,6 +189,7 @@ export function startLocationVote(
     round,
     poll,
     work: async () => {
+      await scheduleNewLookup(context.storage, store, store.now());
       const sent = await claimAndSend(context, poll.id, channelId);
       if (sent.ok) return [sent.note];
       if ("skipped" in sent) return [sent.skipped];

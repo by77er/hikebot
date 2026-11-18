@@ -22,6 +22,7 @@ import {
 import { GuildConfig } from "../guild/config";
 import { adminOnly } from "../guild/permissions";
 import type { ComponentHandler, HandlerContext, Router } from "../guild/router";
+import { OSM_ATTRIBUTION, placeLine } from "../geo/links";
 import { hikeStart } from "../polls/dates";
 import {
   PollStore,
@@ -30,6 +31,7 @@ import {
   type RoundView,
 } from "../polls/store";
 import { POLL_CONTROL_IDS } from "./admin-panel";
+import type { MapPinHook } from "./map-pin";
 import {
   claimHikeThread,
   clearHikeThreadAttempt,
@@ -119,13 +121,15 @@ function resultLine(
 }
 
 /**
- * The thread's first message: the location and its details, who proposed
- * it (a mention that pings no one), the date with its start in the guild's
- * time zone as a relative timestamp, the link to the hike's scheduled
- * event once it exists, and the result of both votes
- * with links to their messages. Location labels (80) and details (300) are
- * bounded, so it stays far within 40 components and 4000 characters. A
- * proposer whose id is `botId` (the application's own) is named hikebot.
+ * The thread's first message: the location and its details, its place and
+ * map links when it has a pin, who proposed it (a mention that pings no
+ * one), the date with its start in the guild's time zone as a relative
+ * timestamp, the link to the hike's scheduled event once it exists, the
+ * result of both votes with links to their messages, and OpenStreetMap's
+ * attribution under a pin. Location labels (80), details (300) and place
+ * names (80) are bounded, so it stays far within 40 components and 4000
+ * characters. A proposer whose id is `botId` (the application's own) is
+ * named hikebot.
  */
 export function renderThreadMessage(
   round: RoundView,
@@ -137,6 +141,9 @@ export function renderThreadMessage(
   const date = winnerOf(round.datePoll);
   const head = [`## ${location?.label ?? "?"}`];
   if (location?.details) head.push(location.details);
+  if (location?.place?.point) {
+    head.push(placeLine(location.place.point, location.place.name));
+  }
   if (location) {
     head.push(`Proposed by ${actorName(location.proposedBy, botId)}`);
   }
@@ -154,6 +161,7 @@ export function renderThreadMessage(
           resultLine("Date vote", round.datePoll, guildId),
         ].join("\n"),
       ),
+      ...(location?.place?.point ? [textDisplay(OSM_ATTRIBUTION)] : []),
     ]),
   ];
 }
@@ -246,6 +254,30 @@ const createAgain: ComponentHandler = adminOnly(
       ),
     ),
 );
+
+/**
+ * After the map pin changed: edits the thread's first message, when the
+ * thread exists, so it shows the new pin.
+ */
+export const updateThreadPin: MapPinHook = {
+  name: "update the hike thread",
+  run: async ({ round, guildId, timeZone }, context) => {
+    if (round.threadId === null) return;
+    // A forum thread's first message has the thread's id.
+    await discordApi(context.env).editMessage(
+      round.threadId,
+      round.threadId,
+      messageBody(
+        renderThreadMessage(
+          round,
+          guildId,
+          timeZone,
+          context.env.DISCORD_APPLICATION_ID,
+        ),
+      ),
+    );
+  },
+};
 
 /** Registers the Create hike thread button. */
 export function registerHikeThread(router: Router): Router {

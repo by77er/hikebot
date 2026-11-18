@@ -23,6 +23,7 @@ import {
   textInputValue,
 } from "../discord/components";
 import { ephemeralNotice } from "../discord/responses";
+import { placeLine } from "../geo/links";
 import { GuildConfig } from "../guild/config";
 import { adminOnly } from "../guild/permissions";
 import {
@@ -115,6 +116,9 @@ export const DATE_POLL: PollWording = {
     return [
       `**Where:** ${location?.label ?? "?"}`,
       ...(location?.details ? [location.details] : []),
+      ...(location?.place?.point
+        ? [placeLine(location.place.point, location.place.name)]
+        : []),
       whenLine(date ?? null, timeZone),
     ];
   },
