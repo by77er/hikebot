@@ -7,7 +7,7 @@
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { PageClient, stylesheetLinks } from "./harness/web";
+import { formFields, PageClient, stylesheetLinks } from "./harness/web";
 
 interface Received {
   method: string;
@@ -45,6 +45,12 @@ const server = createServer((req, res) => {
         ],
       });
       res.end("signed out");
+    } else if (path === "/form") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(
+        '<form method="post" action="/search"><input name="q" value="x"/></form>' +
+          '<form method="post" action="/logout"><input type="hidden" name="csrf" value="a.b&amp;c"/><input name="keep" value="1"/><button type="submit">Sign out</button></form>',
+      );
     } else {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       res.end("<p>home</p>");
@@ -110,6 +116,29 @@ describe("PageClient", () => {
       body: "role=Hikers+%26+friends",
       headers: { "content-type": "application/x-www-form-urlencoded" },
     });
+  });
+
+  it("submits a form found in a page from the page's origin", async () => {
+    const client = new PageClient(base);
+    const page = await client.get("/form");
+    expect(page.url.href).toBe(new URL("/form", base).href);
+    await client.submitForm(page, "/logout", { keep: "2" });
+    expect(received[1]).toMatchObject({
+      method: "POST",
+      path: "/logout",
+      body: "csrf=a.b%26c&keep=2",
+      headers: {
+        origin: base.origin,
+        "sec-fetch-site": "same-origin",
+      },
+    });
+  });
+
+  it("finds a form's fields by its action, or null", () => {
+    const html =
+      '<form action="/a"><input name="x" value="&lt;1&gt;"/><input name="y"/></form>';
+    expect(formFields(html, "/a")).toEqual({ x: "<1>", y: "" });
+    expect(formFields(html, "/b")).toBeNull();
   });
 
   it("finds the stylesheet links in a page", () => {
