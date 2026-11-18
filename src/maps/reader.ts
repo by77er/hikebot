@@ -90,6 +90,11 @@ export class MapReader {
     return [...zooms].sort((a, b) => a - b);
   }
 
+  /** The build the archives come from, or undefined without map data. */
+  async build(): Promise<string | undefined> {
+    return (await this.currentManifest())?.build;
+  }
+
   /** The attribution to print with the map, or undefined without map data. */
   async attribution(): Promise<string | undefined> {
     return (await this.currentManifest())?.attribution;

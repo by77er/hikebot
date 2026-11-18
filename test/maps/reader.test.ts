@@ -163,6 +163,14 @@ describe("MapReader.tile", () => {
     expect(await map.tile(z, x, y)).toBeUndefined();
     expect(await map.zoomsAt(lon, lat)).toEqual([]);
     expect(await map.attribution()).toBeUndefined();
+    expect(await map.build()).toBeUndefined();
+  });
+
+  it("names the build the manifest is from", async () => {
+    await putSample("builds/test/region.pmtiles");
+    await putManifest(manifestOf([sampleArchive()], { build: "20261231" }));
+
+    expect(await reader().build()).toBe("20261231");
   });
 
   it("returns nothing when the manifest is not a manifest", async () => {

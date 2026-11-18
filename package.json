@@ -21,7 +21,8 @@
     "screenshots": "tsx test/screenshots/take.ts",
     "screenshots:check": "tsx test/screenshots/take.ts --check",
     "screenshots:table": "tsx test/screenshots/table.ts",
-    "description:check": "tsx test/screenshots/description.ts"
+    "description:check": "tsx test/screenshots/description.ts",
+    "maps:samples": "tsx scripts/draw-map-samples.ts"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.8.4",
