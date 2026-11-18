@@ -9,7 +9,7 @@ import { ephemeralReply } from "../../src/discord/components";
 import { ephemeralNotice } from "../../src/discord/responses";
 import { hikeCommand } from "../../src/features/hike";
 import { renderAdminPanel } from "../../src/features/admin-panel";
-import { GuildConfig } from "../../src/guild/config";
+import { GuildConfig, type GuildSettings } from "../../src/guild/config";
 import {
   UNAVAILABLE_MESSAGE,
   type HandlerResult,
@@ -42,26 +42,26 @@ function hike(
 function run(
   guildId: string,
   interaction: APIChatInputApplicationCommandInteraction,
-): Promise<{ result: HandlerResult; config: GuildConfig }> {
+): Promise<{ result: HandlerResult; settings: GuildSettings }> {
   return runInDurableObject(
     env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(guildId)),
     async (_instance, state) => ({
       result: await hikeCommand(interaction, { env, storage: state.storage }),
-      config: new GuildConfig(state.storage),
+      settings: new GuildConfig(state.storage).get(),
     }),
   );
 }
 
 describe("/hike", () => {
   it("hands admin to the admin panel", async () => {
-    const { result, config } = await run(
+    const { result, settings } = await run(
       "hike-admin",
       hike("hike-admin", [
         { type: ApplicationCommandOptionType.Subcommand, name: "admin" },
       ]),
     );
     expect(result.response).toEqual(
-      ephemeralReply(renderAdminPanel({ settings: config.get() })),
+      ephemeralReply(renderAdminPanel({ settings })),
     );
   });
 
