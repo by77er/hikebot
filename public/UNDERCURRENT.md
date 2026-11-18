@@ -67,20 +67,17 @@ instead, or add a role as "Add a token" in `src/web/AGENTS.md` says.
 case "$FILE" in ./assets/cairn/tokens.css) exit 0 ;; esac
 perl -0777 -ne '
   my $text = $_;
-  $text =~ s{/\*.*?\*/}{ my $c = $&; $c =~ s/[^\n]/ /g; $c }gse;
-  $text =~ s{url\([^)]*\)}{ my $c = $&; $c =~ s/[^\n]/ /g; $c }ge;
-  $text =~ s{var\(\s*--[\w-]+}{var(}g;
+  my $blank = sub { my $c = shift; $c =~ s/[^\n]/ /g; $c };
+  $text =~ s!/\*.*?\*/!$blank->($&)!gse;
+  $text =~ s!url\([^)]*\)!$blank->($&)!ge;
+  $text =~ s!var\(\s*--[\w-]+!var(!g;
   my $bad = 0;
-  my $line = 0;
-  for my $l (split /\n/, $text, -1) {
-    $line++;
-    next unless $l =~ /:/;
-    my ($value) = $l =~ /:\s*(.*)$/;
-    next unless defined $value;
-    if ($value =~ /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(|\b(?:white|black|red|green|blue|gray|grey|orange|yellow|purple|pink|brown|navy|teal|olive|maroon|silver|gold|tan)\b/) {
-      print "$ARGV:$line: a raw colour; use a colour token such as var(--color-text) from public/assets/cairn/tokens.css (\"Add a token\" in src/web/AGENTS.md)\n";
-      $bad = 1;
-    }
+  while ($text =~ /([\w-]+)\s*:\s*([^;\x7b\x7d]*)(?=[;\x7d])/g) {
+    my ($value, $at) = ($2, $-[0]);
+    next unless $value =~ /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(|\b(?:white|black|red|green|blue|gray|grey|orange|yellow|purple|pink|brown|navy|teal|olive|maroon|silver|gold|tan)\b/;
+    my $line = 1 + (substr($text, 0, $at) =~ tr/\n//);
+    print "$ARGV:$line: a raw colour; use a colour token such as var(--color-text) from public/assets/cairn/tokens.css (\"Add a token\" in src/web/AGENTS.md)\n";
+    $bad = 1;
   }
   exit $bad;
 ' "$FILE"
@@ -131,19 +128,16 @@ perl -0777 -ne '
   $text =~ s!\@media[^\x7b]*!$blank->($&)!ge;
   $text =~ s!var\(\s*--[\w-]+!var(!g;
   my $bad = 0;
-  my $line = 0;
-  for my $l (split /\n/, $text, -1) {
-    $line++;
-    while ($l =~ /([\w-]+)\s*:\s*([^;\x7b\x7d]*)/g) {
-      my ($property, $value) = ($1, $2);
-      if ($value =~ /(?<![\w-])-?\d*\.?\d+(?:px|rem|em|ch|ex|vw|vh|vmin|vmax|dvh|svh|lvh|pt|ms|s)\b/) {
-        print "$ARGV:$line: a raw size or duration; use a token such as var(--space-3) or var(--duration-quick) (\"Add a token\" in src/web/AGENTS.md)\n";
-        $bad = 1;
-      }
-      if ($property eq "font-family" && $value !~ /^\s*var\(/) {
-        print "$ARGV:$line: a font family by name; use var(--font-sans), Cairn has one typeface\n";
-        $bad = 1;
-      }
+  while ($text =~ /([\w-]+)\s*:\s*([^;\x7b\x7d]*)(?=[;\x7d])/g) {
+    my ($property, $value, $at) = ($1, $2, $-[0]);
+    my $line = 1 + (substr($text, 0, $at) =~ tr/\n//);
+    if ($value =~ /(?<![\w-])-?\d*\.?\d+(?:px|rem|em|ch|ex|vw|vh|vmin|vmax|dvh|svh|lvh|pt|ms|s)\b/) {
+      print "$ARGV:$line: a raw size or duration; use a token such as var(--space-3) or var(--duration-quick) (\"Add a token\" in src/web/AGENTS.md)\n";
+      $bad = 1;
+    }
+    if ($property eq "font-family" && $value !~ /^\s*var\(/) {
+      print "$ARGV:$line: a font family by name; use var(--font-sans), Cairn has one typeface\n";
+      $bad = 1;
     }
   }
   exit $bad;
