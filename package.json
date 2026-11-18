@@ -10,8 +10,9 @@
   "scripts": {
     "dev": "wrangler dev",
     "test": "vitest run",
+    "test:e2e": "vitest run --project e2e",
     "lint": "eslint .",
-    "typecheck": "wrangler types --check && tsc --noEmit && tsc --noEmit -p test",
+    "typecheck": "wrangler types --check && tsc --noEmit && tsc --noEmit -p test && tsc --noEmit -p test/e2e && tsc --noEmit -p test/e2e/probe",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "deploy": "wrangler deploy",

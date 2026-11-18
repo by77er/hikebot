@@ -6,7 +6,11 @@
  * refuses: a missing bot token (401) and any payload that breaks a rule in
  * `validate.ts` (400 naming the rule).
  */
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import type { AddressInfo } from "node:net";
 import { ChannelType, MessageFlags } from "discord-api-types/v10";
 import {
@@ -199,7 +203,11 @@ export class FakeDiscord {
    * Answers the next request matching `method` and `path` (below the API
    * base) with a 429 asking the client to wait `retryAfter` seconds.
    */
-  rateLimitOnce(method: string, path: string | RegExp, retryAfter: number): void {
+  rateLimitOnce(
+    method: string,
+    path: string | RegExp,
+    retryAfter: number,
+  ): void {
     this.rateLimits.push({ method, path, retryAfter });
   }
 
@@ -229,7 +237,9 @@ export class FakeDiscord {
     },
     response: { type: number; data?: unknown },
   ): void {
-    const record: InteractionRecord = this.interactions.get(interaction.token) ?? {
+    const record: InteractionRecord = this.interactions.get(
+      interaction.token,
+    ) ?? {
       token: interaction.token,
       guildId: interaction.guild_id,
       channelId: interaction.channel_id ?? "",
@@ -346,7 +356,10 @@ export class FakeDiscord {
 
   // HTTP.
 
-  private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private async handle(
+    req: IncomingMessage,
+    res: ServerResponse,
+  ): Promise<void> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
     const raw = Buffer.concat(chunks).toString("utf8");
@@ -373,7 +386,13 @@ export class FakeDiscord {
       response: undefined,
     };
 
-    const result = this.route(method, url.pathname, url.searchParams, req, body);
+    const result = this.route(
+      method,
+      url.pathname,
+      url.searchParams,
+      req,
+      body,
+    );
     recorded.status = result.status;
     recorded.response = result.body;
     if (result.unexpected) this.unexpected.push(recorded);
@@ -429,9 +448,8 @@ export class FakeDiscord {
       };
     }
 
-    const webhook = /^\/webhooks\/([^/]+)\/([^/]+)(\/messages\/@original)?$/.exec(
-      path,
-    );
+    const webhook =
+      /^\/webhooks\/([^/]+)\/([^/]+)(\/messages\/@original)?$/.exec(path);
     if (webhook) {
       const [, applicationId = "", token = "", original] = webhook;
       if (original && method === "PATCH") {
@@ -509,11 +527,18 @@ export class FakeDiscord {
     if (gate) return gate;
     const violations = validateMessage(body);
     if (violations.length > 0) return invalid(violations);
-    const message = this.storeMessage(channelId, body as Record<string, unknown>);
+    const message = this.storeMessage(
+      channelId,
+      body as Record<string, unknown>,
+    );
     return { status: 200, body: messageObject(message, this.applicationId) };
   }
 
-  private editMessage(channelId: string, messageId: string, body: unknown): Reply {
+  private editMessage(
+    channelId: string,
+    messageId: string,
+    body: unknown,
+  ): Reply {
     const gate = this.channelGate(channelId);
     if (gate) return gate;
     const message = this.messages.get(messageId);
@@ -530,7 +555,7 @@ export class FakeDiscord {
     const gate = this.channelGate(channelId);
     if (gate) return gate;
     const parent = this.channels.get(channelId);
-    const violations = validateForumThread(body, parent?.type ?? -1);
+    const violations = validateForumThread(body, parent?.type);
     if (violations.length > 0) return invalid(violations);
     const request = body as { name: string; message: Record<string, unknown> };
     const thread: FakeChannel = {
@@ -552,7 +577,11 @@ export class FakeDiscord {
     };
   }
 
-  private editOriginal(applicationId: string, token: string, body: unknown): Reply {
+  private editOriginal(
+    applicationId: string,
+    token: string,
+    body: unknown,
+  ): Reply {
     const record = this.interactions.get(token);
     if (applicationId !== this.applicationId || !record) {
       return discordError(404, 10015, "Unknown Webhook");

@@ -18,7 +18,9 @@ import { createSigner, InteractionClient, type Signer } from "./interactions";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const CONFIG_PATH = "wrangler.jsonc";
-const PROBE_ENTRY = fileURLToPath(new URL("../probe/worker.ts", import.meta.url));
+const PROBE_ENTRY = fileURLToPath(
+  new URL("../probe/worker.ts", import.meta.url),
+);
 
 type InlineConfig = Extract<
   TestHarnessOptions["workers"][number],
@@ -56,6 +58,9 @@ export interface E2EOptions {
  */
 export function useE2E(options: E2EOptions = {}): E2E {
   let started: E2E | undefined;
+  // Kept apart from `started` so afterAll stops whatever began, even when
+  // the start failed or timed out half-way.
+  let running: { harness?: TestHarness; discord?: FakeDiscord } = {};
   const get = (): E2E => {
     if (!started) throw new Error("the e2e Worker has not started");
     return started;
@@ -66,8 +71,9 @@ export function useE2E(options: E2EOptions = {}): E2E {
       botToken: BOT_TOKEN,
       applicationId: APPLICATION_ID,
     });
+    running.discord = discord;
     await discord.listen();
-    const signer = await createSigner();
+    const signer = createSigner();
     const secrets = {
       DISCORD_PUBLIC_KEY: signer.publicKeyHex,
       DISCORD_APPLICATION_ID: APPLICATION_ID,
@@ -82,25 +88,20 @@ export function useE2E(options: E2EOptions = {}): E2E {
           : { configPath: CONFIG_PATH, vars, secrets },
       ],
     });
-    try {
-      const { url } = await harness.listen();
-      started = {
+    running.harness = harness;
+    const { url } = await harness.listen();
+    started = {
+      url,
+      discord,
+      signer,
+      harness,
+      client: new InteractionClient({
         url,
-        discord,
         signer,
-        harness,
-        client: new InteractionClient({
-          url,
-          signer,
-          discord,
-          applicationId: APPLICATION_ID,
-        }),
-      };
-    } catch (error) {
-      await harness.close();
-      await discord.close();
-      throw error;
-    }
+        discord,
+        applicationId: APPLICATION_ID,
+      }),
+    };
   });
 
   afterEach(({ task }) => {
@@ -120,13 +121,13 @@ export function useE2E(options: E2EOptions = {}): E2E {
   });
 
   afterAll(async () => {
-    if (!started) return;
-    const { harness, discord } = started;
+    const { harness, discord } = running;
+    running = {};
     started = undefined;
     try {
-      await harness.close();
+      await harness?.close();
     } finally {
-      await discord.close();
+      await discord?.close();
     }
   });
 
@@ -149,12 +150,27 @@ export function useE2E(options: E2EOptions = {}): E2E {
   };
 }
 
+/** The parts of the repository's Worker config the probe keeps. */
+interface ProbeSource {
+  name?: string;
+  compatibility_date?: string;
+  compatibility_flags?: string[];
+  durable_objects: object;
+  migrations: object[];
+  vars: Record<string, string>;
+}
+
 /**
  * The repository's Worker config with the probe entry point as `main`.
  * Secrets go in as vars because an inline config takes no secrets.
  */
 function probeConfig(vars: Record<string, string>): InlineConfig {
-  const config = unstable_readConfig({ config: `${ROOT}/${CONFIG_PATH}` });
+  // Wrangler's own reader, so the probe gets the same bindings and
+  // migrations as the real Worker. Its return type comes from a package
+  // Wrangler does not ship, so it is narrowed here.
+  const config = unstable_readConfig({
+    config: `${ROOT}/${CONFIG_PATH}`,
+  }) as unknown as ProbeSource;
   return {
     name: config.name,
     main: PROBE_ENTRY,

@@ -12,10 +12,9 @@ import {
   InteractionContextType,
   InteractionType,
   type APIApplicationCommandInteractionDataOption,
-  type APIInteraction,
   type APIInteractionResponse,
-  type APIModalSubmissionComponent,
 } from "discord-api-types/v10";
+import { generateKeyPairSync, sign } from "node:crypto";
 import { snowflake, type FakeDiscord } from "./fake-discord";
 import { describeViolations, validateInteractionResponse } from "./validate";
 
@@ -24,25 +23,20 @@ export const RESPONSE_DEADLINE_MS = 3_000;
 
 export interface Signer {
   publicKeyHex: string;
-  sign(timestamp: string, body: string): Promise<string>;
+  /** Hex signature of `timestamp + body`, as Discord signs requests. */
+  sign(timestamp: string, body: string): string;
 }
 
 /** A fresh Ed25519 key pair; its public key becomes DISCORD_PUBLIC_KEY. */
-export async function createSigner(): Promise<Signer> {
-  const keys = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
-    "sign",
-    "verify",
-  ])) as CryptoKeyPair;
-  const publicKey = await crypto.subtle.exportKey("raw", keys.publicKey);
+export function createSigner(): Signer {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const { x } = publicKey.export({ format: "jwk" });
   return {
-    publicKeyHex: Buffer.from(publicKey).toString("hex"),
-    async sign(timestamp, body) {
-      const signature = await crypto.subtle.sign(
-        "Ed25519",
-        keys.privateKey,
-        new TextEncoder().encode(timestamp + body),
+    publicKeyHex: Buffer.from(x ?? "", "base64url").toString("hex"),
+    sign(timestamp, body) {
+      return sign(null, Buffer.from(timestamp + body), privateKey).toString(
+        "hex",
       );
-      return Buffer.from(signature).toString("hex");
     },
   };
 }
@@ -58,14 +52,22 @@ export interface Actor {
   permissions?: string;
 }
 
-/** A plain object the client signs and sends. */
-export type Interaction = APIInteraction & Record<string, unknown>;
+/**
+ * A plain object the client signs and sends: the fields every interaction
+ * has, plus whatever its type carries.
+ */
+export type Interaction = {
+  id: string;
+  application_id: string;
+  type: InteractionType;
+  token: string;
+} & Record<string, unknown>;
 
 function base(
   actor: Actor,
   type: InteractionType,
   applicationId: string,
-): Record<string, unknown> {
+): Interaction {
   const user = {
     id: actor.userId,
     username: `user${actor.userId}`,
@@ -155,7 +157,7 @@ export class InteractionClient {
       type: InteractionType.Ping,
       token: `interaction-token-${snowflake()}`,
       version: 1,
-    } as Interaction;
+    };
   }
 
   /** A slash command, with options as Discord sends them. */
@@ -172,7 +174,7 @@ export class InteractionClient {
         type: ApplicationCommandType.ChatInput,
         ...(options.length > 0 ? { options } : {}),
       },
-    } as Interaction;
+    };
   }
 
   /** A button click on `message`. */
@@ -267,32 +269,31 @@ export class InteractionClient {
     fields: Record<string, string | string[]>,
     message?: SourceMessage,
   ): Interaction {
-    const components = Object.entries(fields).map(
-      ([fieldId, value], i): APIModalSubmissionComponent =>
-        ({
-          type: ComponentType.Label,
-          id: i * 2 + 1,
-          component:
-            typeof value === "string"
-              ? {
-                  type: ComponentType.TextInput,
-                  id: i * 2 + 2,
-                  custom_id: fieldId,
-                  value,
-                }
-              : {
-                  type: ComponentType.StringSelect,
-                  id: i * 2 + 2,
-                  custom_id: fieldId,
-                  values: value,
-                },
-        }) as APIModalSubmissionComponent,
-    );
+    const components = Object.entries(fields).map(([fieldId, value], i) => ({
+      type: ComponentType.Label,
+      id: i * 2 + 1,
+      component:
+        typeof value === "string"
+          ? {
+              type: ComponentType.TextInput,
+              id: i * 2 + 2,
+              custom_id: fieldId,
+              value,
+            }
+          : {
+              type: ComponentType.StringSelect,
+              id: i * 2 + 2,
+              custom_id: fieldId,
+              values: value,
+            },
+    }));
     return {
       ...base(actor, InteractionType.ModalSubmit, this.applicationId),
       data: { custom_id: customId, components },
-      ...(message ? { message: messageObject(message, this.applicationId) } : {}),
-    } as Interaction;
+      ...(message
+        ? { message: messageObject(message, this.applicationId) }
+        : {}),
+    };
   }
 
   private component(
@@ -304,14 +305,14 @@ export class InteractionClient {
       ...base(actor, InteractionType.MessageComponent, this.applicationId),
       data,
       message: messageObject(message, this.applicationId),
-    } as Interaction;
+    };
   }
 
   /** Signature headers for `body`, signed now. */
-  async signatureHeaders(body: string): Promise<Record<string, string>> {
+  signatureHeaders(body: string): Record<string, string> {
     const timestamp = String(Math.floor(Date.now() / 1000));
     return {
-      "X-Signature-Ed25519": await this.signer.sign(timestamp, body),
+      "X-Signature-Ed25519": this.signer.sign(timestamp, body),
       "X-Signature-Timestamp": timestamp,
     };
   }
@@ -342,12 +343,13 @@ export class InteractionClient {
     let response: Response;
     let text: string;
     try {
-      response = await this.post(body, await this.signatureHeaders(body));
+      response = await this.post(body, this.signatureHeaders(body));
       text = await response.text();
     } catch (error) {
       if (error instanceof DOMException && error.name === "TimeoutError") {
         throw new Error(
           `the Worker did not answer interaction type ${String(interaction.type)} within ${String(RESPONSE_DEADLINE_MS)} ms; Discord would show "This interaction failed"`,
+          { cause: error },
         );
       }
       throw error;
@@ -366,10 +368,19 @@ export class InteractionClient {
     let parsed: unknown;
     try {
       parsed = JSON.parse(text);
-    } catch {
-      throw new Error(`the Worker answered with a body that is not JSON: ${text}`);
+    } catch (error) {
+      throw new Error(
+        `the Worker answered with a body that is not JSON: ${text}`,
+        {
+          cause: error,
+        },
+      );
     }
-    const violations = validateInteractionResponse(interaction.type, parsed);
+    const message = interaction.message as SourceMessage | undefined;
+    const violations = validateInteractionResponse(
+      { type: interaction.type, message },
+      parsed,
+    );
     if (violations.length > 0) {
       throw new Error(
         `Discord would refuse the Worker's interaction response: ${describeViolations(violations)}\n${text}`,
@@ -378,11 +389,11 @@ export class InteractionClient {
     const answer = parsed as APIInteractionResponse;
     if (interaction.type !== InteractionType.Ping) {
       this.discord.recordInteractionResponse(
-        interaction as {
-          token: string;
-          guild_id?: string;
-          channel_id?: string;
-          message?: { id: string };
+        {
+          token: interaction.token,
+          guild_id: interaction.guild_id as string | undefined,
+          channel_id: interaction.channel_id as string | undefined,
+          message,
         },
         answer,
       );

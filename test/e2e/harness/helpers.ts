@@ -21,7 +21,9 @@ type Json = Record<string, unknown>;
 
 function children(component: Json): unknown[] {
   const nested: unknown[] = [];
-  if (Array.isArray(component.components)) nested.push(...component.components);
+  if (Array.isArray(component.components)) {
+    nested.push(...(component.components as unknown[]));
+  }
   if (component.component !== undefined) nested.push(component.component);
   if (component.accessory !== undefined) nested.push(component.accessory);
   return nested;
@@ -121,38 +123,59 @@ export class Member {
     return this.client.send(this.client.command(this.actor, name, options));
   }
 
-  /** Clicks the button `customId` on `message`. */
-  click(message: SourceMessage, customId: string): Promise<APIInteractionResponse> {
-    const button = getComponent(message.components, customId);
+  /**
+   * The message as the fake Discord API stores it now, so a member only ever
+   * acts on what the channel shows.
+   */
+  private stored(message: { id: string }): SourceMessage {
+    const stored = this.client.discord.message(message.id);
+    if (!stored) {
+      throw new Error(
+        `message ${message.id} is not in the fake Discord API; act only on messages the bot sent or the test seeded`,
+      );
+    }
+    return stored;
+  }
+
+  /** Clicks the button `customId` on the stored `message`. */
+  click(
+    message: { id: string },
+    customId: string,
+  ): Promise<APIInteractionResponse> {
+    const shown = this.stored(message);
+    const button = getComponent(shown.components, customId);
     if (button.type !== ComponentType.Button) {
-      throw new Error(`"${customId}" is a component of type ${String(button.type)}, not a button`);
+      throw new Error(
+        `"${customId}" is a component of type ${String(button.type)}, not a button`,
+      );
     }
     if (button.style === ButtonStyle.Link || button.disabled === true) {
       throw new Error(`the button "${customId}" cannot be clicked`);
     }
-    return this.client.send(this.client.button(this.actor, customId, message));
+    return this.client.send(this.client.button(this.actor, customId, shown));
   }
 
   /**
-   * Picks `values` in the select `customId` on `message`: option values for
-   * a string select, role ids for a role select, channel ids (configured in
-   * the fake) for a channel select.
+   * Picks `values` in the select `customId` on the stored `message`: option
+   * values for a string select, role ids for a role select, channel ids
+   * (configured in the fake) for a channel select.
    */
   select(
-    message: SourceMessage,
+    message: { id: string },
     customId: string,
     values: string[],
   ): Promise<APIInteractionResponse> {
-    const select = getComponent(message.components, customId);
+    const shown = this.stored(message);
+    const select = getComponent(shown.components, customId);
     checkSelection(select, customId, values);
     switch (select.type) {
       case ComponentType.StringSelect:
         return this.client.send(
-          this.client.stringSelect(this.actor, customId, values, message),
+          this.client.stringSelect(this.actor, customId, values, shown),
         );
       case ComponentType.RoleSelect:
         return this.client.send(
-          this.client.roleSelect(this.actor, customId, values, message),
+          this.client.roleSelect(this.actor, customId, values, shown),
         );
       case ComponentType.ChannelSelect: {
         const channels = values.map((id) => {
@@ -165,7 +188,7 @@ export class Member {
           return { id, type: channel.type };
         });
         return this.client.send(
-          this.client.channelSelect(this.actor, customId, channels, message),
+          this.client.channelSelect(this.actor, customId, channels, shown),
         );
       }
       default:
@@ -178,15 +201,18 @@ export class Member {
   /**
    * Fills in and submits the modal the Worker answered with. `values` maps
    * each field's custom_id to the text typed or the options picked; every
-   * id must be a field of that modal and every required field filled.
+   * id must be a field of that modal and every required field filled. Pass
+   * the message whose component opened the modal, if one did.
    */
   submitModal(
     response: APIInteractionResponse,
     values: Record<string, string | string[]>,
-    message?: SourceMessage,
+    message?: { id: string },
   ): Promise<APIInteractionResponse> {
     if (response.type !== InteractionResponseType.Modal) {
-      throw new Error(`expected a modal, got response type ${String(response.type)}`);
+      throw new Error(
+        `expected a modal, got response type ${String(response.type)}`,
+      );
     }
     const modal: APIModalInteractionResponseCallbackData = response.data;
     const fields = allComponents(modal.components).filter(
@@ -206,7 +232,9 @@ export class Member {
         checkTextInput(field, id, value);
       } else if (value !== undefined) {
         if (typeof value === "string") {
-          throw new Error(`the field "${id}" is a select; pass an array of values`);
+          throw new Error(
+            `the field "${id}" is a select; pass an array of values`,
+          );
         }
         checkSelection(field, id, value);
       } else if (field.required !== false) {
@@ -216,10 +244,16 @@ export class Member {
     const submitted: Record<string, string | string[]> = {};
     for (const field of fields) {
       const id = String(field.custom_id);
-      submitted[id] = values[id] ?? (field.type === ComponentType.TextInput ? "" : []);
+      submitted[id] =
+        values[id] ?? (field.type === ComponentType.TextInput ? "" : []);
     }
     return this.client.send(
-      this.client.modalSubmit(this.actor, modal.custom_id, submitted, message),
+      this.client.modalSubmit(
+        this.actor,
+        modal.custom_id,
+        submitted,
+        message && this.stored(message),
+      ),
     );
   }
 }

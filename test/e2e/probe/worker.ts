@@ -39,8 +39,9 @@ export class GuildHike extends RealGuildHike {
 }
 
 const probe: CommandHandler = async (interaction, { env, storage }) => {
-  const [sub] = (interaction as APIChatInputApplicationCommandInteraction).data
-    .options ?? [];
+  const [sub] =
+    (interaction as APIChatInputApplicationCommandInteraction).data.options ??
+    [];
   const options =
     sub?.type === ApplicationCommandOptionType.Subcommand
       ? (sub.options ?? [])
@@ -50,7 +51,11 @@ const probe: CommandHandler = async (interaction, { env, storage }) => {
       const notes = (await storage.get<string[]>(NOTES_KEY)) ?? [];
       notes.push(stringOption(options, "note"));
       await storage.put(NOTES_KEY, notes);
-      return { response: ephemeralReply([textDisplay(`Remembered ${String(notes.length)}`)]) };
+      return {
+        response: ephemeralReply([
+          textDisplay(`Remembered ${String(notes.length)}`),
+        ]),
+      };
     }
     case "recall": {
       const notes = (await storage.get<string[]>(NOTES_KEY)) ?? [];

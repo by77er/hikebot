@@ -84,9 +84,9 @@ function expectUnavailable(response: unknown): void {
       flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
     },
   });
-  expect(messageText((response as { data: { components: unknown[] } }).data)).toBe(
-    UNAVAILABLE,
-  );
+  expect(
+    messageText((response as { data: { components: unknown[] } }).data),
+  ).toBe(UNAVAILABLE);
 }
 
 describe("request signatures", () => {
@@ -103,10 +103,10 @@ describe("request signatures", () => {
 
   it("refuses a request signed with another key", async () => {
     const body = JSON.stringify(e2e.client.ping());
-    const other = await createSigner();
+    const other = createSigner();
     const timestamp = String(Math.floor(Date.now() / 1000));
     const response = await e2e.client.post(body, {
-      "X-Signature-Ed25519": await other.sign(timestamp, body),
+      "X-Signature-Ed25519": other.sign(timestamp, body),
       "X-Signature-Timestamp": timestamp,
     });
     expect(response.status).toBe(401);
@@ -114,7 +114,7 @@ describe("request signatures", () => {
 
   it("refuses a body changed after signing", async () => {
     const signed = JSON.stringify(e2e.client.command(actor, "hike"));
-    const headers = await e2e.client.signatureHeaders(signed);
+    const headers = e2e.client.signatureHeaders(signed);
     const tampered = signed.replace(actor.userId, "400000000000000999");
     const response = await e2e.client.post(tampered, headers);
     expect(response.status).toBe(401);
@@ -122,7 +122,7 @@ describe("request signatures", () => {
 
   it("refuses a signature replayed with another timestamp", async () => {
     const body = JSON.stringify(e2e.client.ping());
-    const headers = await e2e.client.signatureHeaders(body);
+    const headers = e2e.client.signatureHeaders(body);
     const response = await e2e.client.post(body, {
       ...headers,
       "X-Signature-Timestamp": String(
@@ -157,7 +157,9 @@ describe("interactions the bot no longer handles", () => {
       await member.select(message, "hb:retired:role", ["500000000000000001"]),
     );
     expectUnavailable(
-      await member.select(message, "hb:retired:channel", ["300000000000000002"]),
+      await member.select(message, "hb:retired:channel", [
+        "300000000000000002",
+      ]),
     );
   });
 

@@ -16,20 +16,15 @@ import {
   MessageFlags,
 } from "discord-api-types/v10";
 
-const COMPONENTS_REFERENCE =
-  "https://discord.com/developers/docs/components/reference";
-const CREATE_MESSAGE =
-  "https://discord.com/developers/docs/resources/message#create-message";
-const RESPONDING =
-  "https://discord.com/developers/docs/interactions/receiving-and-responding#responding-to-an-interaction";
-const START_FORUM_THREAD =
-  "https://discord.com/developers/docs/resources/channel#start-thread-in-forum-or-media-channel";
-const COMMAND_NAMING =
-  "https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-naming";
-const COMMAND_OBJECT =
-  "https://discord.com/developers/docs/interactions/application-commands#application-command-object-application-command-structure";
+const DOCS = "https://docs.discord.com/developers";
+const COMPONENTS_REFERENCE = `${DOCS}/components/reference`;
+const USING_COMPONENTS = `${DOCS}/components/using-message-components#sending-a-message-with-a-component`;
+const CREATE_MESSAGE = `${DOCS}/resources/message#create-message`;
+const RESPONDING = `${DOCS}/interactions/receiving-and-responding`;
+const START_FORUM_THREAD = `${DOCS}/resources/channel#start-thread-in-forum-or-media-channel`;
+const COMMANDS = `${DOCS}/interactions/application-commands`;
 
-/** A rule the fake enforces. `docs` is where Discord states it. */
+/** A rule the fake enforces. `docs` is where the limit is stated. */
 export interface Rule {
   id: string;
   docs: string;
@@ -39,48 +34,62 @@ function rule(id: string, docs: string): Rule {
   return { id, docs };
 }
 
+/** Each rule quotes the page `docs` points to. */
 export const RULES = {
-  /** "This flag ... disables traditional content and embeds." */
+  /**
+   * "Providing `content`, `embeds`, `sticker_ids`, `poll`, or
+   * `shared_client_theme` will fail with a 400 BAD REQUEST response."
+   */
   v2NoContentOrEmbeds: rule(
     "components-v2-no-content-or-embeds",
-    "https://discord.com/developers/docs/components/using-message-components",
+    CREATE_MESSAGE,
   ),
-  /** Layout and content components only exist in Components V2 messages. */
-  v2FlagRequired: rule("components-v2-flag-required", CREATE_MESSAGE),
-  /** "Setting the IS_COMPONENTS_V2 message flag cannot be reverted." */
-  v2FlagPermanent: rule(
-    "components-v2-flag-permanent",
-    "https://discord.com/developers/docs/components/using-message-components",
+  /** Text Display, Section, Container and the like need IS_COMPONENTS_V2. */
+  v2FlagRequired: rule(
+    "components-v2-flag-required",
+    `${COMPONENTS_REFERENCE}#text-display`,
   ),
+  /** "Setting the `IS_COMPONENTS_V2` message flag cannot be reverted." */
+  v2FlagPermanent: rule("components-v2-flag-permanent", USING_COMPONENTS),
   /** "Messages allow up to 40 total components." */
   maxComponents: rule("message-max-40-components", COMPONENTS_REFERENCE),
-  /** Text across all Text Displays in a V2 message is capped at 4000. */
-  maxText: rule("message-max-4000-text-characters", CREATE_MESSAGE),
-  /** A message without IS_COMPONENTS_V2: content up to 2000 characters. */
+  /**
+   * "The amount of text across all text display components cannot exceed
+   * 4000 characters." Discord's own pages do not state this cap; the
+   * discord.js guide does, and Discord's API enforces it.
+   */
+  maxText: rule(
+    "message-max-4000-text-characters",
+    "https://discordjs.guide/legacy/popular-topics/display-components",
+  ),
+  /** "Message contents (up to 2000 characters)". */
   maxContent: rule("message-content-max-2000", CREATE_MESSAGE),
-  /** "Up to 5 contextually grouped buttons" or a single select. */
+  /** "Up to 5 interactive button components or a single select component". */
   actionRow: rule(
     "action-row-5-buttons-or-1-select",
     `${COMPONENTS_REFERENCE}#action-row`,
   ),
-  /** One to three Text Displays, and an accessory. */
+  /** "One to three child components", and an accessory. */
   section: rule("section-contents", `${COMPONENTS_REFERENCE}#section`),
   /** "Specified choices in a select menu; max 25". */
   selectOptions: rule(
     "select-1-to-25-options",
     `${COMPONENTS_REFERENCE}#string-select`,
   ),
-  /** min_values 0-25, max_values 1-25, min <= max, max <= option count. */
+  /**
+   * `min_values`: "defaults to 1); min 0 ..., max 25"; `max_values`:
+   * "(defaults to 1); max 25".
+   */
   selectValues: rule(
     "select-min-max-values",
     `${COMPONENTS_REFERENCE}#string-select`,
   ),
-  /** "max 150 characters". */
+  /** "Placeholder text if nothing is selected or default; max 150 characters". */
   selectPlaceholder: rule(
     "select-placeholder-max-150",
     `${COMPONENTS_REFERENCE}#string-select`,
   ),
-  /** Option label, value and description: "max 100 characters". */
+  /** Option `label`, `value` and `description`: "max 100 characters". */
   selectOptionText: rule(
     "select-option-text-max-100",
     `${COMPONENTS_REFERENCE}#string-select-select-option-structure`,
@@ -88,49 +97,54 @@ export const RULES = {
   /** "Text that appears on the button; max 80 characters". */
   buttonLabel: rule("button-label-max-80", `${COMPONENTS_REFERENCE}#button`),
   /** Link buttons carry a url and no custom_id; other buttons a custom_id. */
-  buttonTarget: rule("button-custom-id-or-url", `${COMPONENTS_REFERENCE}#button`),
-  /** "This field is a string of 1 to 100 characters". */
-  customIdLength: rule(
-    "custom-id-1-to-100-characters",
-    `${COMPONENTS_REFERENCE}#anatomy-of-a-component`,
+  buttonTarget: rule(
+    "button-custom-id-or-url",
+    `${COMPONENTS_REFERENCE}#button`,
   ),
-  /** "Multiple components on the same message must not share the same custom_id." */
-  customIdUnique: rule(
-    "custom-id-unique-in-message",
-    `${COMPONENTS_REFERENCE}#anatomy-of-a-component`,
-  ),
-  /** Modal title: "max 45 characters". */
-  modalTitle: rule(
-    "modal-title-max-45",
-    `${RESPONDING}#interaction-response-object-modal`,
-  ),
-  /** A modal holds 1 to 5 top-level components. */
-  modalComponents: rule(
-    "modal-1-to-5-components",
-    `${RESPONDING}#interaction-response-object-modal`,
-  ),
-  /** Label text: "max 45 characters"; description "max 100 characters". */
+  /** custom_id: "This field is a string of 1 to 100 characters". */
+  customIdLength: rule("custom-id-1-to-100-characters", COMPONENTS_REFERENCE),
+  /** "Multiple components on the same message must not share the same `custom_id`." */
+  customIdUnique: rule("custom-id-unique-in-message", COMPONENTS_REFERENCE),
+  /** "Title of the popup modal, max 45 characters". */
+  modalTitle: rule("modal-title-max-45", `${RESPONDING}#modal`),
+  /** "Between 1 and 5 (inclusive) components that make up the modal". */
+  modalComponents: rule("modal-1-to-5-components", `${RESPONDING}#modal`),
+  /** "The label text; max 45 characters"; description "max 100 characters". */
   labelText: rule("label-text-max-45", `${COMPONENTS_REFERENCE}#label`),
-  /** min_length 0-4000, max_length 1-4000, value up to 4000, placeholder up to 100. */
+  /** min_length 0-4000, max_length 1-4000, value max 4000, placeholder max 100. */
   textInput: rule("text-input-limits", `${COMPONENTS_REFERENCE}#text-input`),
-  /** Thread name: 1-100 characters. */
+  /** "1-100 character channel name". */
   threadName: rule("thread-name-1-to-100", START_FORUM_THREAD),
-  /** "Creates a new thread in a forum or a media channel". */
+  /** "Creates a new thread in a forum or a media channel." */
   forumOnly: rule("forum-thread-needs-forum-channel", START_FORUM_THREAD),
-  /** Which callback types each interaction type accepts. */
+  /**
+   * Which callback types each interaction type accepts: UPDATE_MESSAGE and
+   * DEFERRED_UPDATE_MESSAGE only for components and modals opened from one,
+   * MODAL "Not available for `MODAL_SUBMIT` and `PING` interactions."
+   */
   responseType: rule(
     "interaction-response-type",
     `${RESPONDING}#interaction-response-object-interaction-callback-type`,
   ),
-  /** A deferred response carries no message, only the ephemeral flag. */
-  deferredFlags: rule(
-    "deferred-response-ephemeral-flag-only",
-    `${RESPONDING}#interaction-response-object-messages`,
+  /**
+   * A message response: "only `SUPPRESS_EMBEDS`, `EPHEMERAL`,
+   * `IS_COMPONENTS_V2`, `IS_VOICE_MESSAGE`, and `SUPPRESS_NOTIFICATIONS` can
+   * be set"; a deferred one carries only `EPHEMERAL`.
+   */
+  responseFlags: rule(
+    "interaction-response-flags",
+    `${RESPONDING}#interaction-response-object-interaction-callback-data-structure`,
   ),
   /** Chat input command names: 1-32 lowercase letters, digits, - or _. */
-  commandName: rule("command-name", COMMAND_NAMING),
+  commandName: rule(
+    "command-name",
+    `${COMMANDS}#application-command-object-application-command-naming`,
+  ),
   /** Chat input command descriptions: 1-100 characters. */
-  commandDescription: rule("command-description-1-to-100", COMMAND_OBJECT),
+  commandDescription: rule(
+    "command-description-1-to-100",
+    `${COMMANDS}#application-command-object-application-command-structure`,
+  ),
 } as const;
 
 export interface Violation {
@@ -143,7 +157,10 @@ export interface Violation {
 /** Formats violations as the fake's 400 message names them. */
 export function describeViolations(violations: readonly Violation[]): string {
   return violations
-    .map((v) => `${v.rule.id} at ${v.path || "(root)"}: ${v.detail} (${v.rule.docs})`)
+    .map(
+      (v) =>
+        `${v.rule.id} at ${v.path || "(root)"}: ${v.detail} (${v.rule.docs})`,
+    )
     .join("; ");
 }
 
@@ -184,9 +201,17 @@ class Checker {
       return;
     }
     if (s.length > max) {
-      this.fail(rule, path, `is ${String(s.length)} characters, max ${String(max)}`);
+      this.fail(
+        rule,
+        path,
+        `is ${String(s.length)} characters, max ${String(max)}`,
+      );
     } else if (s.length < min) {
-      this.fail(rule, path, `is ${String(s.length)} characters, min ${String(min)}`);
+      this.fail(
+        rule,
+        path,
+        `is ${String(s.length)} characters, min ${String(min)}`,
+      );
     }
   }
 
@@ -210,6 +235,16 @@ class Checker {
       this.customIds.set(id, at);
     }
   }
+}
+
+const COMPONENT_TYPES = new Map<number, ComponentType>(
+  Object.values(ComponentType)
+    .filter((type): type is ComponentType => typeof type === "number")
+    .map((type) => [type, type]),
+);
+
+function componentType(value: number): ComponentType | undefined {
+  return COMPONENT_TYPES.get(value);
 }
 
 const V2_ONLY_TYPES = new Set<number>([
@@ -317,12 +352,12 @@ function checkMessageComponent(
     c.fail(RULES.v2FlagRequired, path, "is not a component object");
     return;
   }
-  const type = component.type;
-  if (!v2 && V2_ONLY_TYPES.has(type)) {
+  const type = componentType(component.type);
+  if (!v2 && type !== undefined && V2_ONLY_TYPES.has(type)) {
     c.fail(
       RULES.v2FlagRequired,
       path,
-      `component type ${String(type)} needs the IS_COMPONENTS_V2 flag (32768)`,
+      `component type ${String(component.type)} needs the IS_COMPONENTS_V2 flag (32768)`,
     );
     return;
   }
@@ -384,7 +419,8 @@ function checkMessageComponent(
         children.length < 1 ||
         children.length > 3 ||
         !children.every(
-          (child) => isObject(child) && child.type === ComponentType.TextDisplay,
+          (child) =>
+            isObject(child) && child.type === ComponentType.TextDisplay,
         )
       ) {
         c.fail(
@@ -539,15 +575,10 @@ export function validateModal(data: unknown): Violation[] {
   components.forEach((component, i) => {
     const path = `components[${String(i)}]`;
     const o = isObject(component) ? component : {};
-    switch (o.type) {
+    switch (o.type as ComponentType) {
       case ComponentType.Label: {
         c.maxLength(RULES.labelText, `${path}.label`, o.label, 45, 1);
-        c.maxLength(
-          RULES.labelText,
-          `${path}.description`,
-          o.description,
-          100,
-        );
+        c.maxLength(RULES.labelText, `${path}.description`, o.description, 100);
         checkModalField(c, o.component, `${path}.component`);
         return;
       }
@@ -584,10 +615,16 @@ function checkModalField(c: Checker, field: unknown, path: string): void {
     c.customId(path, o.custom_id);
     const min = o.min_length;
     const max = o.max_length;
-    if (min !== undefined && (typeof min !== "number" || min < 0 || min > 4000)) {
+    if (
+      min !== undefined &&
+      (typeof min !== "number" || min < 0 || min > 4000)
+    ) {
       c.fail(RULES.textInput, `${path}.min_length`, "must be 0 to 4000");
     }
-    if (max !== undefined && (typeof max !== "number" || max < 1 || max > 4000)) {
+    if (
+      max !== undefined &&
+      (typeof max !== "number" || max < 1 || max > 4000)
+    ) {
       c.fail(RULES.textInput, `${path}.max_length`, "must be 1 to 4000");
     }
     c.maxLength(RULES.textInput, `${path}.value`, o.value, 4000);
@@ -617,7 +654,7 @@ function checkModalField(c: Checker, field: unknown, path: string): void {
 /** Checks the body of Start Thread in Forum or Media Channel. */
 export function validateForumThread(
   body: unknown,
-  parentType: number,
+  parentType: ChannelType | undefined,
 ): Violation[] {
   const violations: Violation[] = [];
   if (
@@ -695,7 +732,7 @@ export function validateCommands(body: unknown): Violation[] {
   return violations;
 }
 
-const ALLOWED_RESPONSES: Record<number, readonly number[]> = {
+const ALLOWED_RESPONSES: Record<number, readonly InteractionResponseType[]> = {
   [InteractionType.Ping]: [InteractionResponseType.Pong],
   [InteractionType.ApplicationCommand]: [
     InteractionResponseType.ChannelMessageWithSource,
@@ -720,44 +757,89 @@ const ALLOWED_RESPONSES: Record<number, readonly number[]> = {
   ],
 };
 
+const UPDATES: readonly InteractionResponseType[] = [
+  InteractionResponseType.DeferredMessageUpdate,
+  InteractionResponseType.UpdateMessage,
+];
+
+/** Flags a message response may set. */
+const RESPONSE_FLAGS =
+  MessageFlags.SuppressEmbeds |
+  MessageFlags.Ephemeral |
+  MessageFlags.IsComponentsV2 |
+  MessageFlags.IsVoiceMessage |
+  MessageFlags.SuppressNotifications;
+
+/** The interaction a response answers, as far as the rules need it. */
+export interface AnsweredInteraction {
+  type: InteractionType;
+  /** The message a component (or a modal opened from one) sits on. */
+  message?: { flags?: number };
+}
+
 /**
  * Checks an interaction response against the interaction it answers: the
- * callback type must be one Discord accepts for that interaction type, and
- * its data must pass the message or modal rules.
+ * callback type must be one Discord accepts for that interaction, and its
+ * data must pass the message or modal rules.
  */
 export function validateInteractionResponse(
-  interactionType: number,
+  interaction: AnsweredInteraction,
   response: unknown,
 ): Violation[] {
   const o = isObject(response) ? response : {};
-  const type = o.type;
-  const allowed = ALLOWED_RESPONSES[interactionType] ?? [];
-  if (typeof type !== "number" || !allowed.includes(type)) {
+  const allowed = (ALLOWED_RESPONSES[interaction.type] ?? []).filter(
+    (type) =>
+      !UPDATES.includes(type) ||
+      interaction.type === InteractionType.MessageComponent ||
+      interaction.message !== undefined,
+  );
+  const type = allowed.find((t) => t === o.type);
+  if (type === undefined) {
+    const why =
+      interaction.type === InteractionType.ModalSubmit &&
+      interaction.message === undefined &&
+      typeof o.type === "number" &&
+      (UPDATES as readonly number[]).includes(o.type)
+        ? "; the modal was not opened from a message, so there is no message to update"
+        : "";
     return [
       {
         rule: RULES.responseType,
         path: "type",
-        detail: `callback type ${String(type)} is not a valid answer to interaction type ${String(interactionType)}; allowed: ${allowed.join(", ")}`,
+        detail: `callback type ${String(o.type)} is not a valid answer to interaction type ${String(interaction.type)}${why}; allowed: ${allowed.join(", ")}`,
       },
     ];
   }
+  const data = isObject(o.data) ? o.data : undefined;
   switch (type) {
     case InteractionResponseType.ChannelMessageWithSource:
-    case InteractionResponseType.UpdateMessage:
-      return validateMessage(o.data ?? {}).map((v) => ({
-        ...v,
-        path: `data.${v.path}`,
-      }));
+    case InteractionResponseType.UpdateMessage: {
+      const violations = validateMessage(
+        data ?? {},
+        type === InteractionResponseType.UpdateMessage
+          ? { existingFlags: interaction.message?.flags ?? 0 }
+          : {},
+      );
+      const flags = typeof data?.flags === "number" ? data.flags : 0;
+      if ((flags & ~RESPONSE_FLAGS) !== 0) {
+        violations.push({
+          rule: RULES.responseFlags,
+          path: "flags",
+          detail: `sets ${String(flags & ~RESPONSE_FLAGS)}, which a message response cannot set`,
+        });
+      }
+      return violations.map((v) => ({ ...v, path: `data.${v.path}` }));
+    }
     case InteractionResponseType.DeferredChannelMessageWithSource: {
-      const data = isObject(o.data) ? o.data : {};
-      const extra = Object.keys(data).filter((key) => key !== "flags");
-      const flags = typeof data.flags === "number" ? data.flags : 0;
+      const fields = data ?? {};
+      const extra = Object.keys(fields).filter((key) => key !== "flags");
+      const flags = typeof fields.flags === "number" ? fields.flags : 0;
       if (extra.length > 0 || (flags & ~MessageFlags.Ephemeral) !== 0) {
         return [
           {
-            rule: RULES.deferredFlags,
+            rule: RULES.responseFlags,
             path: "data",
-            detail: `a deferred response may carry only flags: 64; it has ${JSON.stringify(data)}`,
+            detail: `a deferred response may carry only flags: 64; it has ${JSON.stringify(fields)}`,
           },
         ];
       }
