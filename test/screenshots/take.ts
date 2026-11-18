@@ -13,10 +13,13 @@
  * scale factor is 1, and fonts come from the browser package, never from
  * the machine.
  *
- * With `--check` it then fails if any file in `docs/screenshots/` differs
- * from what is committed, listing them: the screenshots are stale.
+ * With `--check` it then prints the SHA-256 of each PNG, to compare with
+ * another machine's without copying the files, and fails if any file in
+ * `docs/screenshots/` differs from what is committed, listing them: the
+ * screenshots are stale.
  */
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   mkdirSync,
   readdirSync,
@@ -111,6 +114,12 @@ async function main(): Promise<void> {
   }
 
   if (check) {
+    for (const file of [...expected].sort()) {
+      const hash = createHash("sha256")
+        .update(readFileSync(join(outDir, file)))
+        .digest("hex");
+      console.log(`${hash}  ${OUT_DIR}/${file}`);
+    }
     const stale = execFileSync(
       "git",
       ["status", "--porcelain", "--untracked-files=all", "--", OUT_DIR],

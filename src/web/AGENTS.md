@@ -202,12 +202,13 @@ and which headers they carry.
    ```
 
 4. If the CI step "Check the screenshots are current" fails while your
-   check passes, download the screenshots CI made and compare them with
-   yours:
+   check passes, compare the SHA-256 of each PNG that the step printed in
+   its log with yours. The PNGs CI made are kept as the run's artifact
+   `screenshots-<head sha>`, on the run's page on GitHub:
 
    ```sh
-   gh run download <run-id> --name screenshots-<head sha> --dir ~/screenshots-ci
-   cmp ~/screenshots-ci/<file> docs/screenshots/<file>
+   gh run view <run-id> --log | grep -E '[0-9a-f]{64}  docs/screenshots/'
+   sha256sum docs/screenshots/*.png
    ```
 
 ## Add a page to the screenshots
