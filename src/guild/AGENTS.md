@@ -216,6 +216,58 @@ take longer than Discord's 3-second window.
 
 3. Test it with "Test a follow-up job" in `test/AGENTS.md`.
 
+## Add a scheduled job
+
+Use a scheduled job for work due at a later time, or again and again, that
+must survive a restart of the object. It runs from the object's alarm.
+
+1. Pick a job name `trail:<action>` and check that no `registerFeatures` line
+   or test registers it yet (registering a name twice throws when the object
+   starts):
+
+   ```sh
+   grep -rnE 'job\(|_JOB = ' src/features test/guild
+   ```
+
+2. Keep what the job needs in `context.storage`, written before you schedule
+   it: the job gets the `HandlerContext` and no arguments. In
+   `src/features/trail.ts`, export the job. A job that throws is logged with
+   its name and not retried; to try again later, schedule it again:
+
+   ```ts
+   import type { JobHandler } from "../guild/router";
+   import { schedule } from "../guild/schedule";
+   import { PollStore } from "../polls/store";
+
+   export const remindTrail: JobHandler = async (context) => {
+     const store = new PollStore(context.storage);
+     // ...the work...
+     await schedule(context.storage, "trail:remind", store.now() + 3_600_000);
+   };
+   ```
+
+3. Register it with one line in `registerFeatures` in
+   `src/features/index.ts`, and import it at the top of that file:
+
+   ```ts
+   router.job("trail:remind", remindTrail);
+   ```
+
+4. Schedule it from a handler, a follow-up or another job, with the time from
+   the store's clock. If it is already scheduled, the earlier time is kept:
+
+   ```ts
+   await schedule(context.storage, "trail:remind", store.now() + 60_000);
+   ```
+
+5. Test it by running the alarm, as "Test a Durable Object alarm" in
+   `test/AGENTS.md` says, in `test/features/trail.test.ts`, then run it and
+   the scheduler's tests:
+
+   ```sh
+   npx vitest run test/features/trail.test.ts test/guild/schedule.test.ts
+   ```
+
 ## Add a SQLite migration
 
 1. Append a migration to the end of `migrations` in `src/guild/schema.ts`,
