@@ -160,3 +160,20 @@ perl -ne '
   END { exit($bad ? 1 : 0) }
 ' "$FILE"
 ```
+
+## The Worker under test starts from a config file with the harness's secrets
+only: *.ts
+
+Start each Worker that `createTestHarness` runs from a Wrangler config file,
+as `{ configPath, vars, secrets }`, and pass the harness's key pair, bot
+token, application id and `DISCORD_API_BASE` as those `vars` and `secrets`.
+An inline `{ config }` takes no `secrets`, and Wrangler lets the checkout's
+`.dev.vars` or `.env` override its vars, so in a checkout set up as
+`AGENTS.md` says the Worker checks signatures with another key and answers
+every interaction with 401. To run a changed config, write it to a file in a
+temporary directory and pass that file's path, as `writeProbeConfig` in
+`test/e2e/harness/worker.ts` does.
+
+```sh
+! grep -HnE '\{ *config: *(\{|[A-Za-z_$][A-Za-z0-9_$]*\()' "$FILE" | grep -v readConfig
+```
