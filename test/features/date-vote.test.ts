@@ -18,11 +18,13 @@ import {
   DATE_IDS,
   DATE_POLL,
   parseCandidateDates,
+  startModal,
 } from "../../src/features/date-vote";
 import {
   MAX_MESSAGE_COMPONENTS,
   MAX_MESSAGE_TEXT,
   POLL_IDS,
+  VOTE_CLOSED_MESSAGE,
   closePoll,
   renderAnnouncement,
   renderPollMessage,
@@ -30,6 +32,7 @@ import {
   type PollWording,
 } from "../../src/features/poll-ui";
 import { GuildConfig } from "../../src/guild/config";
+import { defaultDateCandidates, todayIn } from "../../src/polls/dates";
 import { PollStore, type PollView } from "../../src/polls/store";
 import {
   callWorker,
@@ -877,5 +880,293 @@ describe("closing the date vote", () => {
     expect(panel).toContain(
       "Could not do the second step: Discord could not be reached.",
     );
+  });
+});
+
+describe("the start modal's default dates", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("lists the next two weekends after a day, one per line", () => {
+    const form = startModal("2026-11-18") as {
+      data: { components: Node[] };
+    };
+    expect(flatten(form.data.components)).toContainEqual(
+      expect.objectContaining({
+        custom_id: DATE_IDS.dates,
+        value:
+          "2026-11-21 11:00\n2026-11-22 11:00\n2026-11-28 11:00\n2026-11-29 11:00",
+      }),
+    );
+  });
+
+  it("are computed for today in the guild's zone, not in UTC", async () => {
+    const guild = "date-start-defaults-zone";
+    await decided(guild);
+    discord(guild, () => Response.json({}));
+    // 03:00 UTC on Saturday 21 November is Friday evening in Los Angeles.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.UTC(2026, 10, 21, 3));
+    const click = componentInteraction(DATE_IDS.start, guild);
+    Object.assign(click, { member: { user: { id: OWNER }, roles: [] } });
+    const reply = await send(click);
+    expect(flatten(nodes(reply.data.components))).toContainEqual(
+      expect.objectContaining({
+        custom_id: DATE_IDS.dates,
+        value:
+          "2026-11-21 11:00\n2026-11-22 11:00\n2026-11-28 11:00\n2026-11-29 11:00",
+      }),
+    );
+  });
+
+  it("start a date vote with four dates when submitted unchanged", async () => {
+    const guild = "date-start-defaults-submit";
+    await decided(guild);
+    discord(guild, () =>
+      Response.json({ id: "900000000000000002", channel_id: TEXT }),
+    );
+    const defaults = defaultDateCandidates(todayIn(LA, Date.now()));
+    const ctx = createExecutionContext();
+    await send(startSubmit(guild, defaults.join("\n")), ctx);
+    await waitOnExecutionContext(ctx);
+    const round = await activeRound(guild);
+    expect(round?.status).toBe("date_voting");
+    expect(round?.datePoll?.options.map((o) => o.dateValue)).toEqual(defaults);
+  });
+
+  it("do not limit the admin's list to a month ahead", async () => {
+    const guild = "date-start-far-ahead";
+    await decided(guild);
+    discord(guild, () =>
+      Response.json({ id: "900000000000000003", channel_id: TEXT }),
+    );
+    const ctx = createExecutionContext();
+    await send(startSubmit(guild, "2030-06-08\n2030-06-15"), ctx);
+    await waitOnExecutionContext(ctx);
+    expect((await activeRound(guild))?.datePoll?.options).toHaveLength(2);
+  });
+});
+
+describe("proposing a date", () => {
+  /** 05:00 UTC on Thu 19 Nov 2026: still Wed 18 Nov in Los Angeles. */
+  const PROPOSE_NOW = Date.UTC(2026, 10, 19, 5);
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A guild with an open date poll on a posted message; its id. */
+  async function openDatePoll(
+    guildId: string,
+    dates = ["2026-11-28", "2026-12-12"],
+  ): Promise<number> {
+    const roundId = await decided(guildId);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(PROPOSE_NOW);
+    return runInDurableObject(stub(guildId), (_i, state) => {
+      const store = new PollStore(state.storage);
+      const poll = store.startDatePoll(roundId, OWNER, dates);
+      store.setPollMessage(poll.id, TEXT, POLL_MESSAGE);
+      return poll.id;
+    });
+  }
+
+  function proposeClick(guildId: string, pollId: number) {
+    const click = componentInteraction(DATE_IDS.propose(pollId), guildId);
+    Object.assign(click, { member: { user: { id: MEMBER }, roles: [] } });
+    return click;
+  }
+
+  function proposeSubmit(
+    guildId: string,
+    pollId: number,
+    date: string,
+  ): APIModalSubmitInteraction {
+    const interaction = modalInteraction(DATE_IDS.propose(pollId), guildId);
+    Object.assign(interaction, {
+      member: { user: { id: MEMBER }, roles: [] },
+    });
+    Object.assign(interaction.data, {
+      components: [
+        {
+          type: ComponentType.Label,
+          component: {
+            type: ComponentType.TextInput,
+            custom_id: DATE_IDS.day,
+            value: date,
+          },
+        },
+      ],
+    });
+    return interaction;
+  }
+
+  function options(guildId: string, pollId: number) {
+    return runInDurableObject(
+      stub(guildId),
+      (_i, state) => new PollStore(state.storage).getPoll(pollId)?.options,
+    );
+  }
+
+  it("opens a modal with one short Date field naming the last day and the default time", async () => {
+    const guild = "date-propose-modal";
+    const pollId = await openDatePoll(guild);
+    const reply = await send(proposeClick(guild, pollId));
+    expect(reply.type).toBe(InteractionResponseType.Modal);
+    expect(reply.data.custom_id).toBe(`hb:date:propose:${String(pollId)}`);
+    expect(reply.data.title).toBe("Propose a date");
+    expect(reply.data.components).toEqual([
+      {
+        type: ComponentType.Label,
+        label: "Date",
+        description:
+          "2026-11-18 to 2026-12-19, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time defaults to 11:00.",
+        component: {
+          type: ComponentType.TextInput,
+          style: TextInputStyle.Short,
+          custom_id: DATE_IDS.day,
+          required: true,
+          max_length: 16,
+          placeholder: "2026-11-18 or 2026-11-18 09:00",
+        },
+      },
+    ]);
+  });
+
+  it("adds the date with the member as proposer, answers ephemerally and schedules a refresh", async () => {
+    const guild = "date-propose-ok";
+    const pollId = await openDatePoll(guild);
+    const reply = await send(proposeSubmit(guild, pollId, " 2026-12-05 "));
+    expect(reply.type).toBe(InteractionResponseType.ChannelMessageWithSource);
+    expect(reply.data.flags).toBe(
+      MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+    );
+    expect(text(reply.data.components)).toBe(
+      "Added **Sat, 5 Dec 2026 · 11:00** to the date vote. Use **Vote** to vote for it.",
+    );
+    expect((await options(guild, pollId))?.map((o) => o.label)).toEqual([
+      "Sat, 28 Nov 2026 · 11:00",
+      "Sat, 5 Dec 2026 · 11:00",
+      "Sat, 12 Dec 2026 · 11:00",
+    ]);
+    expect((await options(guild, pollId))?.[1]?.proposedBy).toBe(MEMBER);
+    await runInDurableObject(stub(guild), async (_i, state) => {
+      expect(
+        await state.storage.get(`poll-refresh:${String(pollId)}`),
+      ).toBeDefined();
+      expect(await state.storage.getAlarm()).not.toBeNull();
+    });
+  });
+
+  it("accepts today, 31 days ahead and the same day at another time", async () => {
+    const guild = "date-propose-edges";
+    const pollId = await openDatePoll(guild);
+    for (const date of ["2026-11-18", "2026-12-19", "2026-11-28 08:00"]) {
+      const reply = await send(proposeSubmit(guild, pollId, date));
+      expect(text(reply.data.components)).toMatch(/^Added \*\*/);
+    }
+    expect(await options(guild, pollId)).toHaveLength(5);
+  });
+
+  it.each([
+    [
+      "not a date",
+      "next Saturday",
+      "`next Saturday` is not a date. Write it as `YYYY-MM-DD` or `YYYY-MM-DD HH:MM` (24-hour), for example `2026-12-05` or `2026-12-05 09:00`.",
+    ],
+    [
+      "yesterday",
+      "2026-11-17",
+      "Tue, 17 Nov 2026 · 11:00 is in the past: today is 2026-11-18 in America/Los_Angeles. Propose a day from 2026-11-18 to 2026-12-19.",
+    ],
+    [
+      "32 days ahead",
+      "2026-12-20",
+      "Sun, 20 Dec 2026 · 11:00 is more than 31 days away. Propose a day from 2026-11-18 to 2026-12-19, or ask an admin to plan further ahead.",
+    ],
+    [
+      "the same date and time",
+      "2026-11-28 11:00",
+      "**Sat, 28 Nov 2026 · 11:00** is already on the vote. Vote for it instead, or propose another time that day.",
+    ],
+  ])("refuses %s with its own answer", async (_name, date, answer) => {
+    const guild = `date-propose-refused-${date.replaceAll(" ", "-")}`;
+    const pollId = await openDatePoll(guild);
+    const reply = await send(proposeSubmit(guild, pollId, date));
+    expect(reply.data.flags).toBe(
+      MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+    );
+    expect(text(reply.data.components)).toBe(answer);
+    expect(await options(guild, pollId)).toHaveLength(2);
+  });
+
+  it("judges today in the guild's zone", async () => {
+    const guild = "date-propose-zone";
+    const pollId = await openDatePoll(guild);
+    // In Auckland it is already Thursday 19 November.
+    await runInDurableObject(stub(guild), (_i, state) => {
+      new GuildConfig(state.storage).setTimezone("Pacific/Auckland");
+    });
+    let reply = await send(proposeSubmit(guild, pollId, "2026-11-18"));
+    expect(text(reply.data.components)).toContain(
+      "is in the past: today is 2026-11-19 in Pacific/Auckland.",
+    );
+    reply = await send(proposeSubmit(guild, pollId, "2026-12-20"));
+    expect(text(reply.data.components)).toMatch(/^Added /);
+  });
+
+  it("refuses a full poll and a closed poll, at the button and at the modal", async () => {
+    const guild = "date-propose-full";
+    const pollId = await openDatePoll(
+      guild,
+      Array.from(
+        { length: 25 },
+        (_, i) => `2026-12-${String(i + 1).padStart(2, "0")}`,
+      ),
+    );
+    const full =
+      "This vote already has 25 dates, the most it can hold. Vote for one of them instead.";
+    let reply = await send(proposeClick(guild, pollId));
+    expect(text(reply.data.components)).toBe(full);
+    reply = await send(proposeSubmit(guild, pollId, "2026-11-30"));
+    expect(text(reply.data.components)).toBe(full);
+    await runInDurableObject(stub(guild), (_i, state) => {
+      new PollStore(state.storage).closePoll(pollId, OWNER);
+    });
+    for (const interaction of [
+      proposeClick(guild, pollId),
+      proposeSubmit(guild, pollId, "2026-11-30"),
+    ]) {
+      reply = await send(interaction);
+      expect(reply.data.flags).toBe(
+        MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+      );
+      expect(text(reply.data.components)).toBe(VOTE_CLOSED_MESSAGE);
+    }
+    expect(await options(guild, pollId)).toHaveLength(25);
+  });
+
+  it("lists a date proposed out of order in date order in the vote select", async () => {
+    const guild = "date-propose-select";
+    const pollId = await openDatePoll(guild);
+    await send(proposeSubmit(guild, pollId, "2026-11-20"));
+    const poll = await runInDurableObject(stub(guild), (_i, state) =>
+      new PollStore(state.storage).getPoll(pollId),
+    );
+    if (!poll) throw new Error("no poll");
+    // The options as stored in the order they were added.
+    const added = {
+      ...poll,
+      options: [...poll.options].sort((a, b) => a.id - b.id),
+    };
+    const select = flatten(nodes(renderVoteSelect(added, DATE_POLL))).find(
+      (c) => c.type === ComponentType.StringSelect,
+    ) as { options?: { label: string }[] } | undefined;
+    expect(select?.options?.map((o) => o.label)).toEqual([
+      "Fri, 20 Nov 2026 · 11:00",
+      "Sat, 28 Nov 2026 · 11:00",
+      "Sat, 12 Dec 2026 · 11:00",
+    ]);
   });
 });
