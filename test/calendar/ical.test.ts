@@ -86,7 +86,7 @@ describe("buildCalendar", () => {
     expect(text.endsWith("X-PUBLISHED-TTL:PT1H\r\nEND:VCALENDAR\r\n")).toBe(
       true,
     );
-    const calendar = new ICAL.Component(ICAL.parse(text));
+    const calendar = ICAL.Component.fromString(text);
     expect(calendar.getAllSubcomponents("vevent")).toEqual([]);
     expect(calendar.getFirstPropertyValue("version")).toBe("2.0");
   });
@@ -211,7 +211,7 @@ describe("parsed with ical.js", () => {
         }),
       ],
     });
-    const calendar = new ICAL.Component(ICAL.parse(text));
+    const calendar = ICAL.Component.fromString(text);
     expect(calendar.getFirstPropertyValue("method")).toBe("PUBLISH");
     expect(calendar.getFirstPropertyValue("x-wr-calname")).toBe("Hikes");
     const events = calendar
@@ -225,7 +225,7 @@ describe("parsed with ical.js", () => {
         description: event.description,
         start: event.startDate.toJSDate().getTime(),
         end: event.endDate.toJSDate().getTime(),
-        utc: event.startDate.zone?.tzid,
+        utc: event.startDate.zone.tzid,
       })),
     ).toEqual([
       {

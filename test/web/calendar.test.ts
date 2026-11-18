@@ -46,7 +46,7 @@ function spyNamespace() {
   });
   const bindings = {
     ...env,
-    GUILD_HIKE: { ...env.GUILD_HIKE, idFromName, get, idFromString: get },
+    GUILD_HIKE: { idFromName, get, idFromString: get },
   } as unknown as Env;
   return { bindings, idFromName, get };
 }
@@ -66,7 +66,7 @@ describe("GET /calendar/<guild id>/<signature>.ics", () => {
     );
     expect(response.headers.get("Cache-Control")).toBe("public, max-age=300");
     expect(response.headers.get("ETag")).toMatch(/^W\/"[0-9a-f]{32}"$/);
-    const calendar = new ICAL.Component(ICAL.parse(await response.text()));
+    const calendar = ICAL.Component.fromString(await response.text());
     const events = calendar
       .getAllSubcomponents("vevent")
       .map((vevent) => new ICAL.Event(vevent));
