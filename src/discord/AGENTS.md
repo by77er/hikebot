@@ -29,6 +29,40 @@
    `calls` table in the `allowed_mentions` block too.
 4. Run `npx vitest run test/discord/api.test.ts`.
 
+## Send a file with a message
+
+1. Pass the files as the last argument of `createMessage` or `editMessage`
+   in `src/discord/api.ts`, each a `FileUpload` (`name`, `data`,
+   `contentType`). The client sends the body as `payload_json` and each
+   file as `files[n]`, and adds an `attachments` entry naming each file.
+   Show a file in the message with a component that refers to it as
+   `attachment://<name>`:
+
+   ```ts
+   await discordApi(context.env).editMessage(
+     channelId,
+     messageId,
+     messageBody([
+       container([mediaGallery([{ url: "attachment://hike-map.png" }])]),
+     ]),
+     [{ name: "hike-map.png", data: png, contentType: "image/png" }],
+   );
+   ```
+
+2. On an edit, choose what happens to the message's attachments: with
+   files, they replace the attachments, except those `body.attachments`
+   lists by id; without files and without `attachments`, the edit keeps
+   them; `attachments: []` removes them all.
+3. For an image field, such as a scheduled event's `image`, pass
+   `imageData(bytes, "image/png")`.
+4. Test the request as the "file uploads" block of
+   `test/discord/api.test.ts` does, reading it back with
+   `request.formData()`, and run it:
+
+   ```sh
+   npx vitest run test/discord/api.test.ts
+   ```
+
 ## Call Discord from a handler or follow-up
 
 1. Build the client from the handler context:

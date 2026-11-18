@@ -226,7 +226,9 @@ permission", with the roles from their membership.
   its start plus `HIKE_DURATION_HOURS` is after now, else null. Location,
   details and proposer; the start as an instant and as the wall-clock date
   and time in the guild's time zone, which it names, with the date's label;
-  links to its thread and its Discord event (null when there is none).
+  links to its thread and its Discord event (null when there is none); and
+  `mapPictureKey`, the `MAPS` bucket key of the map picture its thread and
+  event show (null while they show none), for a page to serve.
 - `log` (`hikeLogSection`, `src/features/hike-log.ts`): one page of the
   hike log as "Hike log" defines it, newest first: entries (location, date,
   thread and event links, when it completed), `page` (clamped to
@@ -777,7 +779,12 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   "The hike's start time has passed, so no event was created."; while the
   round has no event, none is being created and its start is ahead, the
   panel offers **Create hike event** (`hb:event:create:<round id>`) after
-  Create hike thread; see "Hike event". Then, while its hike is not over,
+  Create hike thread; see "Hike event". Then where its map picture stands
+  (`mapPicture`): "**Map picture:** on the hike thread and event.", "being
+  drawn", "not shown" with the reason, or nothing when there is nothing to
+  draw; one that failed, is not confirmed, or was never shown for the
+  current pin gets **Show map picture** (`hb:map:show:<round id>`) after
+  Create hike event; see "Hike map picture". Then, while its hike is not over,
   where its hike-day announcement stands (`hikeDay`): when and where it
   will be posted (or that it will not, while no announcements channel is
   set), "posted in <#channel>", "being posted", or "not posted" with the
@@ -866,7 +873,9 @@ All tables live in the guild's `GuildHike` SQLite database.
   `complete` / `cancelled`), enforced by the code and by a partial unique
   index. Also `location_option_id` and `date_option_id` (the winners),
   `thread_id` (the hike's forum thread), `event_id` (the hike's Discord
-  scheduled event), `day_of_channel_id` / `day_of_message_id` (the
+  scheduled event), `map_picture_key` (the `MAPS` bucket key of the map
+  picture its thread and event show, migration `0007_round_map_picture`),
+  `day_of_channel_id` / `day_of_message_id` (the
   hike-day announcement, once posted), `started_by` / `started_at`, and
   `ended_by` / `ended_at` (set on complete or cancel).
 - `polls`: belongs to a round; `kind` is `location` or `date` (one of each per
@@ -1262,7 +1271,8 @@ Closing a poll picks the option with the most votes; ties are broken
 uniformly at random and the result says so. The poll message is edited to
 show final results, and a message is posted in the configured announcements
 channel. Closing the date vote also creates a thread with the hike details in
-the configured forum channel and a Discord scheduled event for the hike.
+the configured forum channel and a Discord scheduled event for the hike, and
+shows a map picture of the hike's place on both.
 
 The confirm button closes the poll with the round action `closeVote`, which
 calls the poll core's `closePoll`, before answering, so
@@ -1287,7 +1297,8 @@ flow (`runCloseFlow(pollId, context, wordings)` in
    panel. The date vote's steps create the hike's forum thread (see "Hike
    thread"), then its scheduled event (see "Hike event"), which links the
    thread, both before the announcement so that the announcement can link
-   them, then plan the hike-day announcement (see "Day of the hike"). A step that throws is named in the panel ("Could not <name>:
+   them, then show the map picture on both (see "Hike map picture"), then
+   plan the hike-day announcement (see "Day of the hike"). A step that throws is named in the panel ("Could not <name>:
    <error>") and the flow goes on.
 3. Post the announcement: the kind's heading and opening lines, the winner
    and its votes, its details, the tie note, the link to the poll message,
@@ -1322,7 +1333,7 @@ panel. No announcement is posted.
 
 Every admin control (the start buttons and modals of both votes, close,
 cancel and their confirmations, Create hike thread, Create hike event,
-Post hike-day announcement, Announce, Post vote message, Set time zone and its modal) is registered through
+Show map picture, Post hike-day announcement, Announce, Post vote message, Set time zone and its modal) is registered through
 `adminOnly`, so a member who replays its `custom_id` is refused.
 
 ### Durable close
@@ -1350,7 +1361,10 @@ panel as not confirmed, with its retry button, for the admin to check
 Discord and retry if it is missing: "**Hike thread:** not confirmed:
 creating it was cut off, so it may or may not exist. Check the hike threads
 channel, and click Create hike thread only if it is missing." (likewise for
-the hike event and the announcements).
+the hike event and the announcements). A cut-off map picture step shows as
+"**Map picture:** not confirmed" with **Show map picture**, which is safe to
+click whatever Discord has: it replaces the thread's attachment and the
+event's cover.
 
 Where a poll's announcement stands is kept under `announcement:<poll id>`
 (`src/features/announcement-state.ts`) from the moment a run starts posting
@@ -1556,7 +1570,10 @@ place to organise that hike.
   to the poll message, and, under a pin, `-# © OpenStreetMap
 contributors`. Labels, details and place names are bounded (80, 300 and
   80 characters), so it stays far within 40 components and 4000
-  characters. When the pin changes (Set map pin), the message is edited.
+  characters. While the round has a map picture, the heading and the
+  details are followed by a media gallery showing the message's
+  `hike-map.png` attachment, then the rest from the place line on (see
+  "Hike map picture"). When the pin changes (Set map pin), the message is edited.
   The thread is created before the event, so the event step edits this
   message once the event exists (see "Hike event"); a thread created later
   by **Create hike thread** has the link from the start.
@@ -1613,6 +1630,8 @@ Interested and get Discord's reminder.
   thread exists; left out when there is none of them. When the pin changes
   (Set map pin), the description is edited with `editGuildScheduledEvent`
   (`PATCH /guilds/{guild.id}/scheduled-events/{event.id}`).
+- **Cover image** (`image`): the hike's map picture, set by the map picture
+  step after the event exists (see "Hike map picture").
 
 Discord allows a name and a location of 1-100 characters and a description
 of up to 1000. A label is at most 80 characters and details at most 300, but
@@ -1664,6 +1683,81 @@ confirmed (see "Durable close"), and the button comes back.
 
 The bot needs the Create Events permission in the server; `README.md` lists
 it among the invite's permissions.
+
+## Hike map picture
+
+When the date vote closes, the close step "show the map picture" in
+`src/features/map-picture.ts`, after the thread's and the event's, puts a
+picture of the map round the hike's pin where members look: drawn by
+hikebot from its own map data (see "Map data" and "Map pictures"), with no
+outside map service and no key.
+
+- **Drawing.** The step asks `mapPainter(env).picture({ lon, lat })` for
+  the default picture (1200 by 800, zoom 12) of the decided location's pin.
+  The picture is kept in `MAPS` under its key, so drawing it again is a read.
+  The attribution is inside the picture; nothing is added for it.
+- **Thread.** The thread's first message is edited
+  (`PATCH /channels/{thread.id}/messages/{thread.id}`) as
+  `multipart/form-data`: `payload_json` holds the message, rendered with a
+  media gallery whose one item is `attachment://hike-map.png` (with alt
+  text) between the heading and the place line, and
+  `attachments: [{ id: 0, filename: "hike-map.png" }]`; `files[0]` is the
+  PNG. Discord's docs: "Uploading Files" and "Editing Message Attachments"
+  (https://docs.discord.com/developers/reference#uploading-files): only the
+  files listed in `attachments` stay, so the upload replaces any earlier
+  picture. Every other edit of that message (linking the event, a pin
+  change, any later refresh) is plain JSON without `attachments`, which
+  keeps the attachment, and is rendered from the round with the same
+  gallery item while the round has a picture.
+- **Event.** The scheduled event's cover is set with
+  `editGuildScheduledEvent(guild, event, { image })`, `image` being image
+  data, the picture as a `data:image/png;base64,…` URI
+  (https://docs.discord.com/developers/reference#image-data: JPG, GIF or
+  PNG). Discord's docs state no size limit for image data; the picture is
+  about 0.5 MB. Discord crops event covers to a wide band, so the top and
+  bottom of the picture may be cut; the pin is in its centre.
+- **Stored.** On success the round records the picture's bucket key
+  (`setRoundMapPicture`, `rounds.map_picture_key`), which the web view
+  exposes as `plannedHike.mapPictureKey`. The step adds nothing to the
+  announcement.
+
+**Nothing to draw.** A hike without a pin, or without a thread and an
+event, is skipped without drawing. When our map data does not cover the pin
+(`picture` answers undefined), nothing is sent to Discord, the thread keeps
+its links, and the panel shows no line and no button for it.
+
+**Failures.** If drawing fails or Discord refuses the upload or the cover,
+the close goes on and the announcement is posted, and the thread keeps its
+links. The reason is shown under the last hike, "**Map picture:** not shown.
+Could not show the map picture on the hike thread: <error>. Click Show map
+picture to try again.", with **Show map picture** (`hb:map:show:<round
+id>`, the round action `retryMapPicture`). The button, through `adminOnly`,
+works for the last round while it is `complete`, its picture failed, was
+cut off, or was never shown for its pin; it is refused with a sentence when
+the picture is shown, when there is nothing to draw, or while a run is in
+progress.
+
+**One run at a time.** Where the picture stands is kept in `storage.kv`
+under `map-picture:<round id>` (`src/features/map-picture-state.ts`): being
+shown (since when), the reason it failed, that there was nothing to draw,
+or that the pin moved since. The step, the button and the pin hook claim it
+synchronously before drawing; a claim older than a minute
+(`PICTURE_CLAIM_MS`) counts as cut off and shows as not confirmed.
+
+**When the pin moves.** Set map pin records that the pin moved, then its
+hooks run; the last one draws the picture of the new pin and uploads it in
+place of the old one on the thread, and sets it as the event's cover. When
+the pin is cleared, or the new place is outside our map data, the old
+picture is taken off: the thread's message is edited with
+`attachments: []` and without the gallery, and the event's `image` is set to
+null. If the hooks never ran (the object restarted), the panel offers Show
+map picture. Only a completed round's picture is shown; a pin set before
+the date vote closes is drawn by the close step.
+
+**Retried thread or event.** A thread created later by Create hike thread
+is created without the picture, then Create hike thread shows the picture
+again on the thread and the event; Create hike event does the same for the
+new event.
 
 ## Day of the hike
 
@@ -1830,7 +1924,11 @@ both links (`📍 <place> · [OpenStreetMap](https://www.openstreetmap.org/?mlat
 is in the location vote's announcement, the hike announcement (under
 "**Where:**"), the hike thread's first message, the hike-day announcement
 and, as plain URLs, the event's description, each with the attribution. Neither map link needs a
-key. Coordinates are written with at most five decimals.
+key. Coordinates are written with at most five decimals. The hike thread's
+first message also shows a map picture of the pin, above the place line, and
+the event uses it as its cover (see "Hike map picture"); without a pin, or
+where our map data does not reach, there is no picture and the links are
+all there is.
 
 **Set map pin** fixes a wrong or missing match for the decided location of
 the active round (once decided) or of the last completed one. Its modal
@@ -1843,9 +1941,11 @@ panel with the result and a line for each hook that failed. Other code
 sets a pin with `setMapPin` (`src/features/map-pin.ts`), which stores the
 pin and runs the hooks it is given; the panel uses its two halves,
 `storeMapPin` before answering and `runMapPinHooks` in the follow-up. The hooks are listed in
-`MAP_PIN_HOOKS` in `src/features/index.ts`: today the hike thread's first
-message and the event's description are edited when they exist; a feature
-that shows the pin (a map picture, a web page) adds its hook there.
+`MAP_PIN_HOOKS` in `src/features/index.ts`: the hike thread's first
+message and the event's description are edited when they exist, then the
+map picture is drawn again for the new pin and replaces the old one on both
+(see "Hike map picture"); a feature that shows the pin (a web page) adds its
+hook there.
 
 ## Map data
 
