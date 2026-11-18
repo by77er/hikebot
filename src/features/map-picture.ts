@@ -18,15 +18,16 @@ import type { ComponentHandler, HandlerContext, Router } from "../guild/router";
 import { mapPainter } from "../maps/map-painter";
 import type { MapPicture } from "../maps/picture";
 import { PollStore, type RoundView } from "../polls/store";
-import { POLL_CONTROL_IDS } from "./admin-panel";
 import { renderThreadMessage } from "./hike-thread";
 import type { MapPinHook } from "./map-pin";
 import {
   claimMapPicture,
   clearMapPictureAttempt,
   recordMapPictureFailure,
+  recordMapPinMoved,
   recordNoMapPicture,
   roundPin,
+  samePin,
 } from "./map-picture-state";
 import {
   actorOf,
@@ -36,10 +37,6 @@ import {
   type CloseStep,
 } from "./poll-ui";
 import { retryMapPicture } from "./round-actions";
-
-export const MAP_PICTURE_IDS = {
-  show: POLL_CONTROL_IDS.showMapPicture,
-} as const;
 
 /**
  * The picture's file name on the thread's first message, which the media
@@ -117,14 +114,19 @@ function pictureFile(picture: MapPicture): FileUpload {
   };
 }
 
+/** How many times a run draws again for a pin that moved while it drew. */
+const MAX_DRAWS = 3;
+
 /**
  * Draws the picture of round `roundId`'s pin and shows it on the round's
  * thread and event in place of the one they show, then records its bucket
  * key on the round. With no pin or no map data there, records that there
  * was nothing to draw, and takes a picture shown before off them; when
- * none was shown, Discord is not asked. On failure records why, for the
- * panel, and leaves the thread's links as they are. The caller has claimed
- * it with `claimMapPicture`.
+ * none was shown, Discord is not asked. A pin that moves while it draws is
+ * drawn again; one that moves while Discord is asked is recorded as moved,
+ * so the panel offers to show it. On failure records why, for the panel,
+ * and leaves the thread's links as they are. The caller has claimed it
+ * with `claimMapPicture`.
  */
 export async function showMapPicture(
   roundId: number,
@@ -133,26 +135,35 @@ export async function showMapPicture(
   context: HandlerContext,
 ): Promise<Shown> {
   const store = new PollStore(context.storage);
-  const round = store.getRound(roundId);
-  if (round === null) {
+  let current = store.getRound(roundId);
+  let pin = current === null ? null : roundPin(current);
+  let picture: MapPicture | undefined;
+  for (let draws = 1; current !== null; draws += 1) {
+    try {
+      picture =
+        pin === null
+          ? undefined
+          : await mapPainter(context.env).picture({
+              lon: pin.lon,
+              lat: pin.lat,
+            });
+    } catch (error) {
+      const why = error instanceof Error ? error.message : String(error);
+      const reason = `Could not draw the map picture: ${why}. ${RETRY}`;
+      recordMapPictureFailure(context.storage, roundId, reason);
+      return { ok: false, reason };
+    }
+    // Read again: the pin may have moved, and the thread or the event may
+    // have been made, meanwhile.
+    current = store.getRound(roundId);
+    const now = current === null ? null : roundPin(current);
+    if (samePin(now, pin) || draws === MAX_DRAWS) break;
+    pin = now;
+  }
+  if (current === null) {
     clearMapPictureAttempt(context.storage, roundId);
     return { ok: true, key: null };
   }
-  const pin = roundPin(round);
-  let picture: MapPicture | undefined;
-  try {
-    picture =
-      pin === null
-        ? undefined
-        : await mapPainter(context.env).picture({ lon: pin.lon, lat: pin.lat });
-  } catch (error) {
-    const why = error instanceof Error ? error.message : String(error);
-    const reason = `Could not draw the map picture: ${why}. ${RETRY}`;
-    recordMapPictureFailure(context.storage, roundId, reason);
-    return { ok: false, reason };
-  }
-  // Read again: the thread or the event may have been made meanwhile.
-  const current = store.getRound(roundId) ?? round;
   if (picture === undefined && current.mapPictureKey === null) {
     recordNoMapPicture(context.storage, roundId);
     return { ok: true, key: null };
@@ -165,13 +176,18 @@ export async function showMapPicture(
     recordMapPictureFailure(context.storage, roundId, failed);
     return { ok: false, reason: failed };
   }
-  if (picture === undefined) {
-    recordNoMapPicture(context.storage, roundId);
-    return { ok: true, key: null };
+  const key = picture?.key ?? null;
+  store.setRoundMapPicture(roundId, key);
+  const after = store.getRound(roundId);
+  if (after !== null && !samePin(roundPin(after), pin)) {
+    // What is shown is the old pin's: the panel offers the new one.
+    clearMapPictureAttempt(context.storage, roundId);
+    recordMapPinMoved(context.storage, after, store.now());
+    return { ok: true, key };
   }
-  store.setRoundMapPicture(roundId, picture.key);
-  clearMapPictureAttempt(context.storage, roundId);
-  return { ok: true, key: picture.key };
+  if (picture === undefined) recordNoMapPicture(context.storage, roundId);
+  else clearMapPictureAttempt(context.storage, roundId);
+  return { ok: true, key };
 }
 
 /**
@@ -246,8 +262,9 @@ const showAgain: ComponentHandler = adminOnly(
  * After the map pin changed: draws the picture of the new pin and puts it
  * on the thread and the event in place of the old one, or takes the old one
  * off when the pin was cleared or our map data does not cover it. Only for
- * a completed round, whose thread or event exists; a failure shows on the
- * panel by itself.
+ * a completed round, whose thread or event exists. While another run is
+ * drawing, it leaves the new pin to that run, which checks the pin again; a
+ * failure shows on the panel by itself.
  */
 export const updateMapPicture: MapPinHook = {
   name: "update the map picture",
@@ -259,11 +276,7 @@ export const updateMapPicture: MapPinHook = {
       return;
     }
     const store = new PollStore(context.storage);
-    if (!claimMapPicture(context.storage, round, store.now())) {
-      throw new Error(
-        "it is being drawn for the old pin; click Show map picture once that is done",
-      );
-    }
+    if (!claimMapPicture(context.storage, round, store.now())) return;
     await showMapPicture(round.id, guildId, timeZone, context);
   },
 };

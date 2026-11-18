@@ -14,6 +14,8 @@
  * whatever `.dev.vars`, `.env` files or the environment hold, so the Worker
  * runs the same in any checkout. `useE2E` in `./worker` starts one per test
  * file; the screenshot script in `test/screenshots/` starts one of its own.
+ * Both fakes stamp their records for the outbound request log
+ * (`./outbound.ts`), which `E2E.outbound` reads.
  */
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -29,6 +31,11 @@ import { FakeDiscord } from "./fake-discord";
 import { FakeNominatim } from "./fake-nominatim";
 import { createSigner, InteractionClient, type Signer } from "./interactions";
 import { seedMaps, type MapsBucket } from "./maps";
+import {
+  outboundMark,
+  outboundRequests,
+  type OutboundRequest,
+} from "./outbound";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const CONFIG_PATH = "wrangler.jsonc";
@@ -57,6 +64,18 @@ export interface E2E {
   /** Sends signed interactions and checks the Worker's answers. */
   client: InteractionClient;
   harness: TestHarness;
+  /**
+   * The outbound request log: every request the fake Discord API (`host`
+   * "discord") and the fake geocoder ("nominatim") recorded after the mark
+   * `after` (all without it), in the order they were recorded, each with
+   * its `seq` and the time `at`. These stand in for every outside service
+   * the Worker is configured to call, so a scenario checks what an action
+   * called by taking a mark with `outboundMark()` before it and reading
+   * `outbound(mark)` after.
+   */
+  outbound(after?: number): OutboundRequest[];
+  /** The mark for `outbound`: the `seq` of the last request recorded so far. */
+  outboundMark(): number;
 }
 
 export interface E2EOptions {
@@ -134,6 +153,9 @@ export class E2ERun {
       geocoder,
       signer,
       harness,
+      outbound: (after = 0) =>
+        outboundRequests(discord.requests, geocoder.requests, after),
+      outboundMark: () => outboundMark(discord.requests, geocoder.requests),
       client: new InteractionClient({
         url,
         signer,

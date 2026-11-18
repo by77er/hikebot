@@ -5,9 +5,14 @@
  * interaction responses in memory so
  * tests can assert on what Discord would now show, and refuses what Discord
  * refuses: a missing bot token (401) and any payload that breaks a rule in
- * `validate.ts` (400 naming the rule). It also plays Discord's OAuth2
- * provider for web sign-in, in `fake-discord-oauth.ts`.
+ * `validate.ts` (400 naming the rule). Message routes take a JSON body or a
+ * `multipart/form-data` one, whose `payload_json` field is the JSON body
+ * and whose `files[n]` fields are files to attach; the fake keeps each
+ * message's attachments and each scheduled event's cover image. It also
+ * plays Discord's OAuth2 provider for web sign-in, in
+ * `fake-discord-oauth.ts`.
  */
+import { createHash } from "node:crypto";
 import {
   createServer,
   type IncomingMessage,
@@ -16,14 +21,18 @@ import {
 import type { AddressInfo } from "node:net";
 import { ChannelType, MessageFlags } from "discord-api-types/v10";
 import { FakeOAuth, type FakeUser } from "./fake-discord-oauth";
+import { nextSequence } from "./outbound";
 import {
   RULES,
+  decodeImageData,
   describeViolations,
   validateCommands,
   validateForumThread,
   validateMessage,
   validateScheduledEvent,
   validateScheduledEventEdit,
+  validateUploadFields,
+  validateUploadSize,
   type Rule,
   type Violation,
 } from "./validate";
@@ -76,10 +85,27 @@ export interface FakeScheduledEvent {
   entity_type: number;
   entity_id: string | null;
   entity_metadata: { location?: string } | null;
+  /**
+   * "the cover image hash of the scheduled event", null without one; the
+   * fake's hash is the SHA-1 of the image's bytes, which
+   * `scheduledEventImage` returns.
+   */
+  image: string | null;
 }
 
 /** Discord allows this many SCHEDULED or ACTIVE events per guild. */
 export const MAX_SCHEDULED_EVENTS = 100;
+
+/** A file attached to a message, as the fake stores it. */
+export interface FakeAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  /** The file's size in bytes. */
+  size: number;
+  /** The file itself. */
+  bytes: Uint8Array;
+}
 
 /** A message as the fake stores it, with the fields tests read. */
 export interface FakeMessage {
@@ -89,6 +115,8 @@ export interface FakeMessage {
   content: string;
   embeds: unknown[];
   components: unknown[];
+  /** The files attached to the message, in order. */
+  attachments: FakeAttachment[];
   /** True for a message only the interacting user sees. */
   ephemeral: boolean;
   /** The token of the interaction this message answers, if any. */
@@ -97,16 +125,51 @@ export interface FakeMessage {
   edits: number;
 }
 
+/** A file of a multipart request, as `RecordedRequest.files` lists it. */
+export interface RecordedFile {
+  /** The form field's name, such as `files[0]`. */
+  field: string;
+  filename: string;
+  contentType: string;
+  /** The file's size in bytes. */
+  size: number;
+}
+
 export interface RecordedRequest {
+  /** Its place in the outbound request log (`./outbound.ts`). */
+  seq: number;
+  /** `Date.now()` when the fake recorded it, after any hold. */
+  at: number;
   method: string;
   /** Path below the API base, with the query string, e.g. `/channels/1/messages`. */
   path: string;
   /** The path with interaction tokens replaced by `:token`. */
   route: string;
   headers: Record<string, string | undefined>;
+  /**
+   * The parsed JSON body; for a `multipart/form-data` request, its
+   * `payload_json` field parsed.
+   */
   body: unknown;
+  /** The files of a `multipart/form-data` request, in order. */
+  files?: RecordedFile[];
   status: number;
   response: unknown;
+}
+
+/** A file field of a `multipart/form-data` request. */
+interface UploadedFile {
+  field: string;
+  filename: string;
+  contentType: string;
+  bytes: Uint8Array;
+}
+
+/** What a `multipart/form-data` request carried besides its JSON body. */
+interface Upload {
+  files: UploadedFile[];
+  /** The whole request body's size in bytes. */
+  size: number;
 }
 
 interface InteractionRecord {
@@ -161,6 +224,10 @@ export class FakeDiscord {
   private readonly channels = new Map<string, FakeChannel>();
   private readonly messages = new Map<string, FakeMessage>();
   private readonly events = new Map<string, FakeScheduledEvent[]>();
+  /** Each scheduled event's cover image, by `<guild id>/<event id>`. */
+  private readonly eventImages = new Map<string, Uint8Array>();
+  /** Channels whose next upload fails, with the status it fails with. */
+  private readonly failingUploads = new Map<string, 413 | 500>();
   /** Guilds where the bot lacks Create Events. */
   private readonly withoutCreateEvents = new Set<string>();
   private readonly interactions = new Map<string, InteractionRecord>();
@@ -288,6 +355,17 @@ export class FakeDiscord {
 
   clearChannelFailure(channelId: string): void {
     this.failures.delete(channelId);
+  }
+
+  /**
+   * Makes the next message request that uploads files (a
+   * `multipart/form-data` create or edit with a `files[n]`) in the channel,
+   * or in any thread of it when it is a forum, fail as Discord would: 500
+   * Internal Server Error, or with 413 a "Request entity too large" (code
+   * 40005). The refusal is one the test set up, not counted as unexpected.
+   */
+  failNextUpload(channelId: string, status: 413 | 500 = 500): void {
+    this.failingUploads.set(channelId, status);
   }
 
   /**
@@ -476,6 +554,14 @@ export class FakeDiscord {
     return [...(this.events.get(guildId) ?? [])];
   }
 
+  /** The bytes of the event's cover image, undefined without one. */
+  scheduledEventImage(
+    guildId: string,
+    eventId: string,
+  ): Uint8Array | undefined {
+    return this.eventImages.get(`${guildId}/${eventId}`);
+  }
+
   /** Threads started in a forum channel, oldest first. */
   threads(forumChannelId: string): FakeChannel[] {
     return [...this.channels.values()].filter(
@@ -554,12 +640,19 @@ export class FakeDiscord {
   ): Promise<void> {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
-    const raw = Buffer.concat(chunks).toString("utf8");
+    const bytes = Buffer.concat(chunks);
+    const contentType = req.headers["content-type"] ?? "";
     let body: unknown;
-    try {
-      body = raw === "" ? undefined : JSON.parse(raw);
-    } catch {
-      body = raw;
+    let upload: Upload | undefined;
+    if (/^multipart\/form-data\b/i.test(contentType)) {
+      ({ body, upload } = readMultipart(bytes, contentType));
+    } else {
+      const raw = bytes.toString("utf8");
+      try {
+        body = raw === "" ? undefined : JSON.parse(raw);
+      } catch {
+        body = raw;
+      }
     }
     const url = new URL(req.url ?? "/", this.origin);
     const method = req.method ?? "GET";
@@ -583,6 +676,8 @@ export class FakeDiscord {
       this.held -= 1;
     }
     const recorded: RecordedRequest = {
+      seq: 0,
+      at: 0,
       method,
       path,
       route: path.replace(/^(\/webhooks\/[^/]+\/)[^/?]+/, "$1:token"),
@@ -592,6 +687,14 @@ export class FakeDiscord {
         "user-agent": req.headers["user-agent"],
       },
       body,
+      ...(upload && {
+        files: upload.files.map((file) => ({
+          field: file.field,
+          filename: file.filename,
+          contentType: file.contentType,
+          size: file.bytes.length,
+        })),
+      }),
       status: 0,
       response: undefined,
     };
@@ -602,7 +705,10 @@ export class FakeDiscord {
       url.searchParams,
       req,
       body,
+      upload,
     );
+    recorded.seq = nextSequence();
+    recorded.at = Date.now();
     recorded.status = result.status;
     recorded.response = result.body;
     if (result.unexpected) this.unexpected.push(recorded);
@@ -628,6 +734,7 @@ export class FakeDiscord {
     query: URLSearchParams,
     req: IncomingMessage,
     body: unknown,
+    upload: Upload | undefined,
   ): Reply {
     const path = pathname.replace(/^\/api\/v10/, "");
     const oauth = this.oauth.route(method, pathname, query, req, body);
@@ -665,10 +772,10 @@ export class FakeDiscord {
     if (webhook) {
       const [, applicationId = "", token = "", original] = webhook;
       if (original && method === "PATCH") {
-        return this.editOriginal(applicationId, token, body);
+        return this.editOriginal(applicationId, token, body, upload);
       }
       if (!original && method === "POST") {
-        return this.createFollowUp(applicationId, token, query, body);
+        return this.createFollowUp(applicationId, token, query, body, upload);
       }
       return notFound(`${method} is not implemented on this webhook route`);
     }
@@ -687,11 +794,11 @@ export class FakeDiscord {
 
     let match = /^\/channels\/([^/]+)\/messages$/.exec(path);
     if (match && method === "POST") {
-      return this.createMessage(match[1] ?? "", body);
+      return this.createMessage(match[1] ?? "", body, upload);
     }
     match = /^\/channels\/([^/]+)\/messages\/([^/]+)$/.exec(path);
     if (match && method === "PATCH") {
-      return this.editMessage(match[1] ?? "", match[2] ?? "", body);
+      return this.editMessage(match[1] ?? "", match[2] ?? "", body, upload);
     }
     match = /^\/channels\/([^/]+)\/threads$/.exec(path);
     if (match && method === "POST") {
@@ -750,14 +857,26 @@ export class FakeDiscord {
     return undefined;
   }
 
-  private createMessage(channelId: string, body: unknown): Reply {
-    const gate = this.channelGate(channelId);
+  private createMessage(
+    channelId: string,
+    body: unknown,
+    upload: Upload | undefined,
+  ): Reply {
+    const gate =
+      this.channelGate(channelId) ?? this.uploadGate(channelId, upload);
     if (gate) return gate;
-    const violations = validateMessage(body);
+    const { attachments, violations } = withAttachments(body, upload);
+    violations.push(
+      ...validateMessage(body, {
+        attachments: attachments.map((a) => a.filename),
+      }),
+    );
     if (violations.length > 0) return invalid(violations);
     const message = this.storeMessage(
       channelId,
       body as Record<string, unknown>,
+      snowflake(),
+      attachments,
     );
     return { status: 200, body: messageObject(message, this.applicationId) };
   }
@@ -766,17 +885,80 @@ export class FakeDiscord {
     channelId: string,
     messageId: string,
     body: unknown,
+    upload: Upload | undefined,
   ): Reply {
-    const gate = this.channelGate(channelId);
+    const gate =
+      this.channelGate(channelId) ?? this.uploadGate(channelId, upload);
     if (gate) return gate;
     const message = this.messages.get(messageId);
     if (message?.channel_id !== channelId) {
       return discordError(404, 10008, "Unknown Message");
     }
-    const violations = validateMessage(body, { existingFlags: message.flags });
+    return this.edit(message, body, upload);
+  }
+
+  /** Edits `message` as Edit Message and the webhook edit do. */
+  private edit(
+    message: FakeMessage,
+    body: unknown,
+    upload: Upload | undefined,
+  ): Reply {
+    const { attachments, violations } = withAttachments(
+      body,
+      upload,
+      message.attachments,
+    );
+    violations.push(
+      ...validateMessage(body, {
+        existingFlags: message.flags,
+        attachments: attachments.map((a) => a.filename),
+      }),
+    );
     if (violations.length > 0) return invalid(violations);
-    this.applyEdit(message, body as Record<string, unknown>);
+    this.applyEdit(message, body as Record<string, unknown>, attachments);
     return { status: 200, body: messageObject(message, this.applicationId) };
+  }
+
+  /**
+   * Refuses an upload that is too large, as Discord does with 413, or that
+   * `failNextUpload` set up to fail.
+   */
+  private uploadGate(
+    channelId: string,
+    upload: Upload | undefined,
+  ): Reply | undefined {
+    if (upload === undefined) return undefined;
+    const tooLarge = validateUploadSize(
+      upload.files.map((f) => ({ field: f.field, size: f.bytes.length })),
+      upload.size,
+    );
+    if (tooLarge.length > 0) {
+      return {
+        ...invalid(tooLarge),
+        status: 413,
+        body: {
+          code: 40005,
+          message: `Request entity too large: ${describeViolations(tooLarge)}`,
+          errors: tooLarge.map((v) => ({
+            rule: v.rule.id,
+            path: v.path,
+            detail: v.detail,
+            docs: v.rule.docs,
+          })),
+        },
+      };
+    }
+    if (upload.files.length === 0) return undefined;
+    const parentId = this.channels.get(channelId)?.parent_id;
+    const failing = [channelId, parentId].find(
+      (id): id is string => id !== undefined && this.failingUploads.has(id),
+    );
+    if (failing === undefined) return undefined;
+    const status = this.failingUploads.get(failing);
+    this.failingUploads.delete(failing);
+    return status === 413
+      ? discordError(413, 40005, "Request entity too large")
+      : discordError(500, 0, "500: Internal Server Error");
   }
 
   private startForumThread(channelId: string, body: unknown): Reply {
@@ -833,6 +1015,7 @@ export class FakeDiscord {
       this.applicationId,
       body as Record<string, unknown>,
     );
+    this.setEventImage(event, (body as Record<string, unknown>).image);
     events.push(event);
     this.events.set(guildId, events);
     return { status: 200, body: event };
@@ -925,13 +1108,32 @@ export class FakeDiscord {
     if (o.entity_metadata !== undefined) {
       event.entity_metadata = o.entity_metadata ?? null;
     }
+    this.setEventImage(event, o.image);
     return { status: 200, body: event };
+  }
+
+  /**
+   * Sets the event's cover from validated image data, or removes it for
+   * null; leaves it for undefined.
+   */
+  private setEventImage(event: FakeScheduledEvent, image: unknown): void {
+    if (image === undefined) return;
+    const key = `${event.guild_id}/${event.id}`;
+    const decoded = image === null ? null : decodeImageData(image);
+    if (decoded !== null && "bytes" in decoded) {
+      this.eventImages.set(key, decoded.bytes);
+      event.image = createHash("sha1").update(decoded.bytes).digest("hex");
+    } else {
+      this.eventImages.delete(key);
+      event.image = null;
+    }
   }
 
   private editOriginal(
     applicationId: string,
     token: string,
     body: unknown,
+    upload: Upload | undefined,
   ): Reply {
     const record = this.interactions.get(token);
     if (applicationId !== this.applicationId || !record) {
@@ -942,10 +1144,10 @@ export class FakeDiscord {
         ? undefined
         : this.messages.get(record.originalId);
     if (!message) return discordError(404, 10008, "Unknown Message");
-    const violations = validateMessage(body, { existingFlags: message.flags });
-    if (violations.length > 0) return invalid(violations);
-    this.applyEdit(message, body as Record<string, unknown>);
-    return { status: 200, body: messageObject(message, this.applicationId) };
+    return (
+      this.uploadGate(message.channel_id, upload) ??
+      this.edit(message, body, upload)
+    );
   }
 
   private createFollowUp(
@@ -953,16 +1155,26 @@ export class FakeDiscord {
     token: string,
     query: URLSearchParams,
     body: unknown,
+    upload: Upload | undefined,
   ): Reply {
     const record = this.interactions.get(token);
     if (applicationId !== this.applicationId || !record) {
       return discordError(404, 10015, "Unknown Webhook");
     }
-    const violations = validateMessage(body);
+    const gate = this.uploadGate(record.channelId, upload);
+    if (gate) return gate;
+    const { attachments, violations } = withAttachments(body, upload);
+    violations.push(
+      ...validateMessage(body, {
+        attachments: attachments.map((a) => a.filename),
+      }),
+    );
     if (violations.length > 0) return invalid(violations);
     const message = this.storeMessage(
       record.channelId,
       body as Record<string, unknown>,
+      snowflake(),
+      attachments,
     );
     message.interaction_token = token;
     record.followUpIds.push(message.id);
@@ -975,6 +1187,7 @@ export class FakeDiscord {
     channelId: string,
     body: Record<string, unknown>,
     id = snowflake(),
+    attachments: FakeAttachment[] = [],
   ): FakeMessage {
     const flags = typeof body.flags === "number" ? body.flags : 0;
     const message: FakeMessage = {
@@ -984,6 +1197,7 @@ export class FakeDiscord {
       content: typeof body.content === "string" ? body.content : "",
       embeds: Array.isArray(body.embeds) ? body.embeds : [],
       components: Array.isArray(body.components) ? body.components : [],
+      attachments,
       ephemeral: (flags & MessageFlags.Ephemeral) !== 0,
       edits: 0,
     };
@@ -991,7 +1205,11 @@ export class FakeDiscord {
     return message;
   }
 
-  private applyEdit(message: FakeMessage, body: Record<string, unknown>): void {
+  private applyEdit(
+    message: FakeMessage,
+    body: Record<string, unknown>,
+    attachments?: FakeAttachment[],
+  ): void {
     if (typeof body.flags === "number") {
       // Edits cannot change whether a message is ephemeral.
       message.flags =
@@ -1001,6 +1219,7 @@ export class FakeDiscord {
     if (typeof body.content === "string") message.content = body.content;
     if (Array.isArray(body.embeds)) message.embeds = body.embeds;
     if (Array.isArray(body.components)) message.components = body.components;
+    if (attachments !== undefined) message.attachments = attachments;
     message.edits += 1;
   }
 }
@@ -1053,7 +1272,182 @@ function scheduledEvent(
     entity_type: Number(body.entity_type),
     entity_id: null,
     entity_metadata: metadata ?? null,
+    image: null,
   };
+}
+
+/**
+ * Reads a `multipart/form-data` body: "Non-file parameters can be sent as
+ * individual form fields or collectively as JSON in the `payload_json` form
+ * field." The JSON body is `payload_json` parsed, or else the other text
+ * fields; each file field is kept with its name. A body that is not a valid
+ * form reads as no body, which the message rules refuse.
+ * https://docs.discord.com/developers/reference#uploading-files
+ */
+function readMultipart(
+  bytes: Buffer,
+  contentType: string,
+): { body: unknown; upload: Upload } {
+  const upload: Upload = { files: [], size: bytes.length };
+  const parts = multipartParts(bytes, contentType);
+  if (parts === null) return { body: undefined, upload };
+  let payload: unknown;
+  const fields: Record<string, string> = {};
+  for (const part of parts) {
+    if (part.filename !== undefined) {
+      upload.files.push({
+        field: part.name,
+        filename: part.filename,
+        contentType: part.contentType ?? "application/octet-stream",
+        bytes: new Uint8Array(part.content),
+      });
+    } else if (part.name === "payload_json") {
+      const text = part.content.toString("utf8");
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = text;
+      }
+    } else {
+      fields[part.name] = part.content.toString("utf8");
+    }
+  }
+  return { body: payload ?? fields, upload };
+}
+
+/** One part of a `multipart/form-data` body. */
+interface FormPart {
+  name: string;
+  /** The file name, for a file field. */
+  filename?: string;
+  contentType?: string;
+  content: Buffer;
+}
+
+/**
+ * Splits a `multipart/form-data` body (RFC 7578) at the boundary its
+ * Content-Type names into its parts, or null when it is not one.
+ */
+function multipartParts(bytes: Buffer, contentType: string): FormPart[] | null {
+  const match = /;\s*boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(contentType);
+  const boundary = match?.[1] ?? match?.[2];
+  if (boundary === undefined) return null;
+  const delimiter = Buffer.from(`--${boundary}`);
+  const between = Buffer.from(`\r\n--${boundary}`);
+  let at = bytes.indexOf(delimiter);
+  if (at === -1) return null;
+  at += delimiter.length;
+  const parts: FormPart[] = [];
+  for (;;) {
+    const after = bytes.subarray(at, at + 2).toString("latin1");
+    if (after === "--") return parts;
+    if (after !== "\r\n") return null;
+    const next = bytes.indexOf(between, at + 2);
+    if (next === -1) return null;
+    const part = bytes.subarray(at + 2, next);
+    const split = part.indexOf("\r\n\r\n");
+    if (split === -1) return null;
+    const headers = part.subarray(0, split).toString("utf8");
+    const disposition =
+      /^content-disposition:\s*form-data(.*)$/im.exec(headers)?.[1] ?? "";
+    const name = /;\s*name="([^"]*)"/i.exec(disposition)?.[1];
+    if (name === undefined) return null;
+    parts.push({
+      name,
+      filename: /;\s*filename="([^"]*)"/i.exec(disposition)?.[1],
+      contentType: /^content-type:\s*(.*)$/im.exec(headers)?.[1]?.trim(),
+      content: part.subarray(split + 4),
+    });
+    at = next + between.length;
+  }
+}
+
+/**
+ * The attachments a message has after a request with `body` and `upload`,
+ * and what in them breaks Discord's rules. On create (`existing`
+ * undefined), every uploaded `files[n]`. On edit, "Any provided files will
+ * be **appended** to the message. To remove or replace files you will have
+ * to supply the `attachments` field which specifies the files to retain on
+ * the message after edit." Without `attachments`, the message's attachments
+ * and the uploaded files; with it, "only files listed in the `attachments`
+ * parameter will be appended to the message" and "Any previously-added
+ * files that aren't included will be removed": the existing attachments it
+ * lists by id and the uploaded files it names by their `n`.
+ * https://docs.discord.com/developers/resources/message#edit-message
+ */
+function withAttachments(
+  body: unknown,
+  upload: Upload | undefined,
+  existing?: readonly FakeAttachment[],
+): { attachments: FakeAttachment[]; violations: Violation[] } {
+  const files = upload?.files ?? [];
+  const violations = validateUploadFields(
+    files.map((f) => ({ field: f.field, size: f.bytes.length })),
+  );
+  const byIndex = new Map<string, UploadedFile>();
+  for (const file of files) {
+    const n = /^files\[(\d+)\]$/.exec(file.field)?.[1];
+    if (n !== undefined && !byIndex.has(n)) byIndex.set(n, file);
+  }
+  const attach = (file: UploadedFile, filename?: string): FakeAttachment => ({
+    id: snowflake(),
+    filename: filename ?? file.filename,
+    content_type: file.contentType,
+    size: file.bytes.length,
+    bytes: file.bytes,
+  });
+  const listed =
+    typeof body === "object" &&
+    body !== null &&
+    Array.isArray((body as { attachments?: unknown }).attachments)
+      ? (body as { attachments: unknown[] }).attachments
+      : undefined;
+  if (listed === undefined) {
+    return {
+      attachments: [
+        ...(existing ?? []),
+        ...[...byIndex.values()].map((file) => attach(file)),
+      ],
+      violations,
+    };
+  }
+  const attachments: FakeAttachment[] = [];
+  const used = new Set<string>();
+  listed.forEach((entry, i) => {
+    const o = (typeof entry === "object" && entry !== null ? entry : {}) as {
+      id?: unknown;
+      filename?: unknown;
+    };
+    const id =
+      typeof o.id === "string" || typeof o.id === "number"
+        ? String(o.id)
+        : undefined;
+    const kept = existing?.find((a) => a.id === id);
+    if (kept) {
+      attachments.push(kept);
+      return;
+    }
+    const file = id === undefined || used.has(id) ? undefined : byIndex.get(id);
+    if (id !== undefined && file) {
+      used.add(id);
+      attachments.push(
+        attach(file, typeof o.filename === "string" ? o.filename : undefined),
+      );
+      return;
+    }
+    violations.push({
+      rule: RULES.attachmentReference,
+      path: `attachments[${String(i)}].id`,
+      detail: `${JSON.stringify(o.id)} names no uploaded files[n] and no attachment of the message`,
+    });
+  });
+  if (existing === undefined) {
+    // A new message gets every file sent with it.
+    for (const [n, file] of byIndex) {
+      if (!used.has(n)) attachments.push(attach(file));
+    }
+  }
+  return { attachments, violations };
 }
 
 function notFound(detail: string): Reply {
@@ -1108,7 +1502,14 @@ function messageObject(
     flags: message.flags,
     timestamp: new Date().toISOString(),
     edited_timestamp: message.edits > 0 ? new Date().toISOString() : null,
-    attachments: [],
+    attachments: message.attachments.map((a) => ({
+      id: a.id,
+      filename: a.filename,
+      size: a.size,
+      content_type: a.content_type,
+      url: `https://cdn.discordapp.com/attachments/${message.channel_id}/${a.id}/${a.filename}`,
+      proxy_url: `https://media.discordapp.net/attachments/${message.channel_id}/${a.id}/${a.filename}`,
+    })),
     mentions: [],
     mention_roles: [],
     pinned: false,

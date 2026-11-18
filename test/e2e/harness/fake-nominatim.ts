@@ -20,6 +20,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import type { AddressInfo } from "node:net";
+import { nextSequence } from "./outbound";
 
 const SEARCH_DOCS = "https://nominatim.org/release-docs/latest/api/Search/";
 const USAGE_POLICY = "https://operations.osmfoundation.org/policies/nominatim/";
@@ -67,6 +68,8 @@ export interface FakePlace {
 export interface NominatimRequest {
   /** `Date.now()` when the request arrived. */
   at: number;
+  /** Its place in the outbound request log (`./outbound.ts`). */
+  seq: number;
   method: string;
   /** The path, without the query string. */
   path: string;
@@ -278,6 +281,7 @@ export class FakeNominatim {
     const reply = this.answer(method, url, userAgent);
     const recorded: NominatimRequest = {
       at,
+      seq: nextSequence(),
       method,
       path: url.pathname,
       query: Object.fromEntries(url.searchParams),

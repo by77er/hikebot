@@ -122,14 +122,22 @@ export function recordNoMapPicture(
 }
 
 /**
- * Records that the round's pin moved, so the picture shown, if any, is of
- * the old pin, ending any claim.
+ * Records that the pin of `round` moved, so the picture shown, if any, is
+ * of the old pin. A run in progress keeps its claim: it checks the pin again
+ * itself (`showMapPicture`).
  */
 export function recordMapPinMoved(
   storage: DurableObjectStorage,
-  roundId: number,
+  round: RoundView,
+  now: number,
 ): void {
-  storage.kv.put<PictureAttempt>(key(roundId), { moved: true });
+  if (mapPictureStatus(storage, round, now).state === "showing") return;
+  storage.kv.put<PictureAttempt>(key(round.id), { moved: true });
+}
+
+/** Whether two pins are the same place; two missing pins are. */
+export function samePin(a: PlacePoint | null, b: PlacePoint | null): boolean {
+  return a?.lat === b?.lat && a?.lon === b?.lon;
 }
 
 /** Forgets the round's attempt once its picture's key is on the round. */

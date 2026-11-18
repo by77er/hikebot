@@ -41,6 +41,7 @@ import { MAP_PIN_HOOKS } from "../../src/features/index";
 import {
   MAP_PICTURE_FILE,
   MAP_PICTURE_URL,
+  showMapPicture,
 } from "../../src/features/map-picture";
 import {
   PICTURE_CLAIM_MS,
@@ -203,7 +204,9 @@ interface Sent {
  */
 function discord(
   guildId: string,
-  refuse: (route: string) => Response | undefined = () => undefined,
+  refuse: (
+    route: string,
+  ) => Response | undefined | Promise<Response | undefined> = () => undefined,
 ) {
   const sent: Sent[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -234,7 +237,7 @@ function discord(
       }
       sent.push({ host: url.host, route, body, files });
     }
-    const refused = refuse(route);
+    const refused = await refuse(route);
     if (refused) return refused;
     if (path === `/guilds/${guildId}`) {
       return Response.json({ id: guildId, owner_id: OWNER });
@@ -684,6 +687,114 @@ describe("after the picture is shown", () => {
     expect((await roundOf(guild, view))?.mapPictureKey).toContain(
       `${MOVED.lat.toFixed(5)},${MOVED.lon.toFixed(5)}`,
     );
+  });
+
+  it("shows the new pin when the pin moves while a run is drawing the old one", async () => {
+    const guild = "200000000000000916";
+    const { view, sent } = await shownRound(guild);
+    const original = Object.getOwnPropertyDescriptor(
+      MapPainter.prototype,
+      "picture",
+    )?.value as MapPainter["picture"];
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const painted = vi
+      .spyOn(MapPainter.prototype, "picture")
+      .mockImplementationOnce(async function (this: MapPainter, request) {
+        await held;
+        return original.call(this, request);
+      });
+    // A run (Show map picture) starts drawing the old pin...
+    const showing = inObject(guild, (storage) => {
+      const store = new PollStore(storage);
+      const round = store.getRound(view.roundId);
+      if (round === null) throw new Error("no round");
+      expect(claimMapPicture(storage, round, store.now())).toBe(true);
+      return showMapPicture(view.roundId, guild, "America/Los_Angeles", {
+        env,
+        storage,
+      });
+    });
+    await vi.waitFor(() => {
+      expect(painted).toHaveBeenCalledTimes(1);
+    });
+    // ...the admin moves the pin meanwhile: its hook leaves it to that run.
+    const notes = await inObject(guild, async (storage) => {
+      const set = await setMapPin(
+        { env, storage },
+        { roundId: view.roundId, point: MOVED, guildId: guild },
+        MAP_PIN_HOOKS,
+      );
+      const store = new PollStore(storage);
+      const round = store.getRound(view.roundId);
+      expect(round && mapPictureStatus(storage, round, store.now())).toEqual({
+        state: "showing",
+      });
+      return set?.notes;
+    });
+    expect(notes).toEqual([]);
+    expect(uploads(sent)).toHaveLength(1);
+    release();
+    expect(await showing).toMatchObject({ ok: true });
+
+    // The run drew the new pin and uploaded only that.
+    expect(painted).toHaveBeenCalledTimes(2);
+    expect(painted.mock.calls[1]?.[0]).toMatchObject(MOVED);
+    expect(uploads(sent)).toHaveLength(2);
+    const round = await roundOf(guild, view);
+    expect(round?.mapPictureKey).toContain(
+      `${MOVED.lat.toFixed(5)},${MOVED.lon.toFixed(5)}`,
+    );
+    expect((await panel(guild)).shown).toContain(
+      "**Map picture:** on the hike thread and event.",
+    );
+  });
+
+  it("offers the new pin when the pin moves while the old one is being uploaded", async () => {
+    const guild = "200000000000000917";
+    const view = await dateVoting(guild, INSIDE);
+    let moved = false;
+    const sent = discord(guild);
+    await close(guild, view);
+    vi.restoreAllMocks();
+    // Discord answers the next upload only after the pin moved.
+    const moving = discord(guild, async (route) => {
+      const last = moving[moving.length - 1];
+      if (route === `PATCH ${THREAD_MESSAGE}` && last?.files.length && !moved) {
+        moved = true;
+        await inObject(guild, (storage) => {
+          storeMapPin(storage, view.roundId, MOVED, guild, "UTC");
+        });
+      }
+      return undefined;
+    });
+    expect(uploads(sent)).toHaveLength(1);
+    const status = await inObject(guild, async (storage) => {
+      const store = new PollStore(storage);
+      const round = store.getRound(view.roundId);
+      if (round === null) throw new Error("no round");
+      claimMapPicture(storage, round, store.now());
+      const shown = await showMapPicture(
+        view.roundId,
+        guild,
+        "America/Los_Angeles",
+        { env, storage },
+      );
+      expect(shown).toMatchObject({ ok: true });
+      const after = store.getRound(view.roundId);
+      return after && mapPictureStatus(storage, after, store.now());
+    });
+    expect(moved).toBe(true);
+    expect(uploads(moving)).toHaveLength(1);
+    // What is shown is the old pin's, so the panel offers the new one.
+    expect(status).toEqual({ state: "missing" });
+    const { shown, buttons } = await panel(guild);
+    expect(shown).toContain(
+      "**Map picture:** not shown. Click Show map picture to draw it.",
+    );
+    expect(buttons).toContain(POLL_CONTROL_IDS.showMapPicture(view.roundId));
   });
 
   it("takes the picture off both when the pin is cleared", async () => {

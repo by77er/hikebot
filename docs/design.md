@@ -1742,11 +1742,17 @@ under `map-picture:<round id>` (`src/features/map-picture-state.ts`): being
 shown (since when), the reason it failed, that there was nothing to draw,
 or that the pin moved since. The step, the button and the pin hook claim it
 synchronously before drawing; a claim older than a minute
-(`PICTURE_CLAIM_MS`) counts as cut off and shows as not confirmed.
+(`PICTURE_CLAIM_MS`) counts as cut off and shows as not confirmed. A pin
+move never takes a live claim away: the run holding it reads the pin again
+after drawing and draws again if it moved (up to three times), and reads it
+once more after Discord answered; if it moved during the upload, the
+picture shown is recorded as the old pin's, and the panel offers Show map
+picture.
 
 **When the pin moves.** Set map pin records that the pin moved, then its
 hooks run; the last one draws the picture of the new pin and uploads it in
-place of the old one on the thread, and sets it as the event's cover. When
+place of the old one on the thread, and sets it as the event's cover (while
+another run is drawing, the hook leaves the new pin to that run). When
 the pin is cleared, or the new place is outside our map data, the old
 picture is taken off: the thread's message is edited with
 `attachments: []` and without the gallery, and the event's `image` is set to

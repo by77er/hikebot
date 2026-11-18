@@ -109,7 +109,7 @@ export function storeMapPin(
     throw error;
   }
   // Until the hooks show the new pin's picture, the panel offers to.
-  recordMapPinMoved(storage, round.id);
+  recordMapPinMoved(storage, round, store.now());
   const after = store.getRound(roundId);
   const location = after && decided(after);
   if (!after || !location) return null;
