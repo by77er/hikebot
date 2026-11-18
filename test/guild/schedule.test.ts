@@ -141,13 +141,17 @@ describe("scheduled jobs", () => {
   it("scheduled by a request while the alarm runs get an alarm", async () => {
     const guild = "schedule-by-a-request";
     const runs: string[] = [];
-    let started = () => undefined as void;
-    const running = new Promise<void>((resolve) => (started = resolve));
-    let release = () => undefined as void;
-    const held = new Promise<void>((resolve) => (release = resolve));
+    let runningStarted = () => {};
+    const running = new Promise<void>((resolve) => {
+      runningStarted = resolve;
+    });
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     await registerJobs(guild, {
       "test:first": async () => {
-        started();
+        runningStarted();
         await held;
         runs.push("first");
       },

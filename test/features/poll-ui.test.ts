@@ -481,14 +481,18 @@ describe("the debounced refresh", () => {
   it("gives a vote that arrives during a refresh a refresh of its own", async () => {
     const guild = "poll-ui-refresh-during-run";
     const view = await openPoll(guild, ["Ridge", "Lake"]);
-    let editing = () => undefined as void;
-    const started = new Promise<void>((resolve) => (editing = resolve));
-    let release = () => undefined as void;
-    const held = new Promise<void>((resolve) => (release = resolve));
+    let editingStarted = () => {};
+    const editing = new Promise<void>((resolve) => {
+      editingStarted = resolve;
+    });
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockImplementationOnce(async () => {
-        editing();
+        editingStarted();
         await held;
         return Response.json({ id: POLL_MESSAGE });
       })
@@ -500,7 +504,7 @@ describe("the debounced refresh", () => {
     await vote("400000000000000011");
 
     const firstRun = runDurableObjectAlarm(stub(guild));
-    await started;
+    await editing;
     await vote("400000000000000012");
     release();
     expect(await firstRun).toBe(true);
