@@ -961,7 +961,7 @@ describe("OAuth2 sign-in", () => {
     });
     return {
       status: response.status,
-      body: (await response.json()) as unknown,
+      body: await response.json(),
     };
   }
 
@@ -971,7 +971,7 @@ describe("OAuth2 sign-in", () => {
     });
     return {
       status: response.status,
-      body: (await response.json()) as unknown,
+      body: await response.json(),
     };
   }
 
@@ -1000,7 +1000,7 @@ describe("OAuth2 sign-in", () => {
     const approved = await authorize(authorizeQuery());
     expect(approved.status).toBe(302);
     expect(
-      approved.location?.origin + (approved.location?.pathname ?? ""),
+      `${approved.location?.origin ?? ""}${approved.location?.pathname ?? ""}`,
     ).toBe(REDIRECT);
     expect(approved.location?.searchParams.get("state")).toBe("s-1");
     expect(approved.location?.searchParams.get("code")).toMatch(/^fake-code-/);
