@@ -2,9 +2,8 @@
 
 ## Add a poll kind to the shared poll UI
 
-The shared poll message, Vote select, refresh, close and cancel flows live in
-`src/features/poll-ui.ts`; a poll kind brings its wording and its own
-controls. The example adds the `date` kind in `src/features/date-vote.ts`.
+The example adds a kind named `date` in `src/features/date-vote.ts`; use
+your kind's name and file.
 
 1. Export a `PollWording` for the kind, with its own buttons after Vote in
    `extraButtons` (return `[]` for none) and `showProposer: false` when the
@@ -28,8 +27,7 @@ controls. The example adds the `date` kind in `src/features/date-vote.ts`.
    };
    ```
 
-2. Add it to `POLL_KINDS` in `src/features/index.ts`, so Vote, the select,
-   the refresh, Close and Cancel serve its polls:
+2. Add it to `POLL_KINDS` in `src/features/index.ts`:
 
    ```ts
    const POLL_KINDS: PollWordings = {

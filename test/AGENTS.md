@@ -207,9 +207,9 @@ Run `npm test` for the whole suite before opening a pull request.
 
 3. Run the file: `npx vitest run test/features/poll-ui.test.ts -t "debounced refresh"`.
 
-In an end-to-end scenario the alarm fires on its own a few seconds later;
-wait for what it changes with `eventually` or `waitForMessage`, as "Write an
-end-to-end scenario" says.
+4. In an end-to-end scenario, wait for what the alarm changes with
+   `eventually` or `waitForMessage` instead, as "Write an end-to-end
+   scenario" says.
 
 ## Run the end-to-end suite
 
