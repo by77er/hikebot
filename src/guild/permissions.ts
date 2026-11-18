@@ -30,15 +30,59 @@ export type AdminCheck =
   | { allowed: false; response: APIInteractionResponse };
 
 /**
- * Decides whether the member who sent `interaction` may use the admin panel:
- * the guild owner, or a member with the configured admin role. The owner id
- * comes from `getGuild` and is cached in the guild's settings. A cached id is
- * trusted for {@link OWNER_CACHE_MS}, measured with the interaction's own
- * timestamp; after that it is fetched again before it decides anything, so
- * after an ownership transfer the new owner gets in and the former owner is
- * refused. A member with the admin role is let in without a lookup. Makes
- * at most one Discord REST call; if it fails, the member is refused with
- * Discord's error.
+ * Whether a member is an admin, or why that could not be decided: `error` is
+ * what the owner lookup threw.
+ */
+export type AdminDecision =
+  | { ok: true; isAdmin: boolean; settings: GuildSettings }
+  | { ok: false; error: unknown };
+
+/**
+ * The one admin rule, for Discord interactions and web pages alike: user
+ * `userId` of guild `guildId`, holding `roleIds`, is an admin if they hold
+ * the configured admin role or own the guild. A member with the admin role
+ * is an admin without a lookup. Otherwise the owner id comes from `getGuild`
+ * and is cached in the guild's settings: a cached id is trusted for
+ * {@link OWNER_CACHE_MS} measured with `now`, then fetched again before it
+ * decides anything, so after an ownership transfer the new owner is an admin
+ * and the former owner is not. Makes at most one Discord REST call; if it
+ * fails, nothing is decided.
+ */
+export async function decideAdmin(
+  storage: DurableObjectStorage,
+  api: DiscordApi,
+  member: { guildId: string; userId: string; roleIds: readonly string[] },
+  now: number,
+): Promise<AdminDecision> {
+  const config = new GuildConfig(storage);
+  let settings = config.get();
+  if (
+    settings.adminRoleId !== null &&
+    member.roleIds.includes(settings.adminRoleId)
+  ) {
+    return { ok: true, isAdmin: true, settings };
+  }
+
+  const stale =
+    settings.ownerId === null ||
+    settings.ownerFetchedAt === null ||
+    now - settings.ownerFetchedAt >= OWNER_CACHE_MS;
+  if (stale) {
+    try {
+      const guild = await api.getGuild(member.guildId);
+      settings = config.setOwner(guild.owner_id, now);
+    } catch (error) {
+      return { ok: false, error };
+    }
+  }
+  return { ok: true, isAdmin: settings.ownerId === member.userId, settings };
+}
+
+/**
+ * Decides whether the member who sent `interaction` may use the admin panel,
+ * with {@link decideAdmin}, measuring the owner cache's age with the
+ * interaction's own timestamp. If the owner lookup fails, the member is
+ * refused with Discord's error.
  */
 export async function checkAdmin(
   interaction: AdminInteraction,
@@ -50,34 +94,22 @@ export async function checkAdmin(
   if (guildId === undefined || userId === undefined) {
     return { allowed: false, response: ephemeralNotice(GUILD_ONLY_MESSAGE) };
   }
-  const config = new GuildConfig(context.storage);
-  let settings = config.get();
-  const roles = interaction.member?.roles ?? [];
-  if (settings.adminRoleId !== null && roles.includes(settings.adminRoleId)) {
-    return { allowed: true, settings };
+  const decision = await decideAdmin(
+    context.storage,
+    api,
+    { guildId, userId, roleIds: interaction.member?.roles ?? [] },
+    snowflakeTime(interaction.id),
+  );
+  if (!decision.ok) {
+    return { allowed: false, response: ownerLookupFailed(decision.error) };
   }
-
-  const now = snowflakeTime(interaction.id);
-  const stale =
-    settings.ownerId === null ||
-    settings.ownerFetchedAt === null ||
-    now - settings.ownerFetchedAt >= OWNER_CACHE_MS;
-  if (stale) {
-    try {
-      const guild = await api.getGuild(guildId);
-      settings = config.setOwner(guild.owner_id, now);
-    } catch (error) {
-      return { allowed: false, response: ownerLookupFailed(error) };
-    }
-  }
-
-  if (settings.ownerId === userId) {
-    return { allowed: true, settings };
+  if (decision.isAdmin) {
+    return { allowed: true, settings: decision.settings };
   }
   return {
     allowed: false,
     response: ephemeralNotice(
-      settings.adminRoleId === null
+      decision.settings.adminRoleId === null
         ? ADMIN_ONLY_NO_ROLE_MESSAGE
         : ADMIN_ONLY_MESSAGE,
     ),
