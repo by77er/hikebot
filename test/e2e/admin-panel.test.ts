@@ -31,7 +31,16 @@ const ID = {
   vote: "hb:admin:vote-channel",
   announce: "hb:admin:announce-channel",
   forum: "hb:admin:forum-channel",
+  timezone: "hb:admin:timezone",
+  timezoneName: "hb:admin:timezone-name",
 };
+
+const CLOCK = / · now (?:Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d\d:\d\d/g;
+
+/** A panel's text with the clock masked, to compare views drawn apart. */
+function steady(text: string): string {
+  return text.replace(CLOCK, " · now <clock>");
+}
 
 /**
  * A guild with an owner, a would-be admin, a stranger and one channel of
@@ -171,7 +180,7 @@ describe("the admin panel", () => {
     ).toEqual([{ id: channels.text, type: "channel" }]);
 
     await owner.click(panel, ID.back);
-    const status = messageText(shown(panel));
+    const status = steady(messageText(shown(panel)));
     expect(status).toContain(`Admin role:** <@&${role}>`);
     expect(status).toContain(`Voting channel:** <#${channels.text}>`);
     expect(status).toContain(`Announcements channel:** <#${channels.news}>`);
@@ -179,16 +188,16 @@ describe("the admin panel", () => {
     expect(status).toContain("Setup is complete.");
 
     await owner.click(panel, ID.refresh);
-    expect(messageText(shown(panel))).toBe(status);
+    expect(steady(messageText(shown(panel)))).toBe(status);
 
     await lead.run("hike", [subcommand("admin")]);
-    expect(messageText(lead.lastReply())).toBe(status);
+    expect(steady(messageText(lead.lastReply()))).toBe(status);
 
     const refused = await stranger.run("hike", [subcommand("admin")]);
     expectRefused(refused, stranger, ADMIN_ONLY);
 
     await owner.run("hike", [subcommand("admin")]);
-    expect(messageText(owner.lastReply())).toBe(status);
+    expect(steady(messageText(owner.lastReply()))).toBe(status);
   });
 
   it("refuses a non-admin replaying the settings controls, and keeps the settings", async () => {
@@ -197,7 +206,7 @@ describe("the admin panel", () => {
     const panel = owner.lastReply();
     await owner.click(panel, ID.settings);
     await owner.select(panel, ID.role, [role]);
-    const before = messageText(shown(panel));
+    const before = steady(messageText(shown(panel)));
 
     expectRefused(
       await stranger.select(panel, ID.vote, [channels.text]),
@@ -210,12 +219,83 @@ describe("the admin panel", () => {
       ADMIN_ONLY,
     );
     expectRefused(await stranger.click(panel, ID.back), stranger, ADMIN_ONLY);
-    expect(messageText(shown(panel))).toBe(before);
+    expect(steady(messageText(shown(panel)))).toBe(before);
 
     await owner.click(panel, ID.back);
     const status = messageText(shown(panel));
     expect(status).toContain(`Admin role:** <@&${role}>`);
     expect(status).toContain("Voting channel:** not set");
+  });
+
+  it("sets the time zone through its modal and shows it in both views", async () => {
+    const { owner, stranger, role } = guild(6);
+    await owner.run("hike", [subcommand("admin")]);
+    const panel = owner.lastReply();
+    expect(messageText(panel)).toMatch(
+      /\*\*Time zone:\*\* America\/Los_Angeles · now (?:Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d\d:\d\d/,
+    );
+    await owner.click(panel, ID.settings);
+    await owner.select(panel, ID.role, [role]);
+    expect(messageText(shown(panel))).toContain(
+      "**Time zone:** America/Los_Angeles · now ",
+    );
+
+    const opened = await owner.click(panel, ID.timezone);
+    expect(opened.type).toBe(InteractionResponseType.Modal);
+    if (opened.type !== InteractionResponseType.Modal) return;
+    expect(opened.data.title).toBe("Set time zone");
+    expect(opened.data.components[0]).toMatchObject({
+      type: ComponentType.Label,
+      component: { custom_id: ID.timezoneName, value: "America/Los_Angeles" },
+    });
+
+    const saved = await owner.submitModal(
+      opened,
+      { [ID.timezoneName]: "america/denver" },
+      panel,
+    );
+    expect(saved.type).toBe(InteractionResponseType.UpdateMessage);
+    expect(messageText(shown(panel))).toContain(
+      "Time zone set to America/Denver.",
+    );
+    expect(messageText(shown(panel))).toContain(
+      "**Time zone:** America/Denver · now ",
+    );
+
+    // Something that is not a zone changes nothing and says what would.
+    const again = await owner.click(panel, ID.timezone);
+    if (again.type !== InteractionResponseType.Modal) {
+      throw new Error("Set time zone did not open its modal again");
+    }
+    expect(again.data.components[0]).toMatchObject({
+      component: { value: "America/Denver" },
+    });
+    const refused = await owner.submitModal(
+      again,
+      { [ID.timezoneName]: "Mars/Olympus" },
+      panel,
+    );
+    expect(refused.type).toBe(InteractionResponseType.ChannelMessageWithSource);
+    const reply = owner.lastReply();
+    expectEphemeralV2(reply);
+    expect(messageText(reply)).toContain(
+      "`Mars/Olympus` is not a time zone, so it is still America/Denver.",
+    );
+    expect(messageText(reply)).toContain(
+      "`America/Los_Angeles`, `Europe/Berlin` or `Asia/Kolkata`",
+    );
+
+    // A stranger cannot open the modal.
+    expectRefused(
+      await stranger.click(panel, ID.timezone),
+      stranger,
+      ADMIN_ONLY,
+    );
+
+    await owner.click(panel, ID.back);
+    expect(messageText(shown(panel))).toMatch(
+      /\*\*Time zone:\*\* America\/Denver · now (?:Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d\d:\d\d/,
+    );
   });
 
   it("refuses @everyone as the admin role and a channel of the wrong type", async () => {

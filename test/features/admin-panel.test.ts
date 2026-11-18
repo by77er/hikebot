@@ -704,7 +704,10 @@ describe("the admin panel", () => {
       await send(click(ADMIN_PANEL_IDS.refresh, guild, OWNER)),
     );
     expect(refresh.type).toBe(InteractionResponseType.UpdateMessage);
-    expect(refresh.data.components).toEqual(back.data.components);
+    // The clock in the time zone line may have moved on between the two.
+    const steady = (view: Node[]) =>
+      JSON.stringify(view).replace(/ · now \w{3} \d\d:\d\d/, "");
+    expect(steady(refresh.data.components)).toBe(steady(back.data.components));
   });
 
   it("saves each select and shows the saved values", async () => {
