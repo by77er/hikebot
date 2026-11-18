@@ -2,9 +2,9 @@
  * Seeds the Worker's local `MAPS` bucket with the committed sample map
  * archive (`maps/sample/`) and a manifest naming it, as the `Map data`
  * workflow's build leaves the real bucket: the archive under a build prefix,
- * then `manifest.json`. The manifest's shape is the one
- * `src/maps/manifest.ts` reads, written out here because the end-to-end
- * suite imports nothing from `src/`.
+ * then `manifest.json`. The manifest's shape is the one the Worker's map
+ * reader parses (`MapManifest`), written out here because the end-to-end
+ * suite reaches the Worker's code only over HTTP.
  */
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
