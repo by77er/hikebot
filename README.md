@@ -102,8 +102,7 @@ overwrite, so running it again changes nothing. It reads
 the commands Discord registered, never prints the token, and exits non-zero
 when a variable is missing or Discord refuses the request, which fails the
 deploy. The `Deploy` workflow runs it after every deploy; to run it by hand,
-follow "Register the slash commands" in [`AGENTS.md`](AGENTS.md). Discord can
-take a few minutes to show a changed global command in clients.
+follow "Register the slash commands" in [`AGENTS.md`](AGENTS.md).
 
 To confirm a deploy, roll back, read production logs or rotate a secret,
 follow the procedures in [`AGENTS.md`](AGENTS.md).
