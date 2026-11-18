@@ -146,6 +146,39 @@ describe("migrations", () => {
     });
   });
 
+  it("create the guild_settings row with every setting null and keep it across restarts", async () => {
+    const stub = stubFor("schema-guild-settings");
+    const rows = (storage: DurableObjectStorage) =>
+      storage.sql.exec("SELECT * FROM guild_settings").toArray();
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(rows(state.storage)).toEqual([
+        {
+          id: 1,
+          admin_role_id: null,
+          vote_channel_id: null,
+          announce_channel_id: null,
+          forum_channel_id: null,
+          owner_id: null,
+          owner_fetched_at: null,
+        },
+      ]);
+      state.storage.sql.exec(
+        "UPDATE guild_settings SET vote_channel_id = '12' WHERE id = 1",
+      );
+      expect(() =>
+        state.storage.sql.exec("INSERT INTO guild_settings (id) VALUES (2)"),
+      ).toThrow();
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(appliedNames(state.storage)).toEqual(shipped);
+      expect(rows(state.storage)).toMatchObject([{ vote_channel_id: "12" }]);
+    });
+  });
+
   it("allow only one active round", async () => {
     await runInDurableObject(
       stubFor("schema-one-active"),
