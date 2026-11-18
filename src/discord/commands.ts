@@ -26,6 +26,11 @@ export const commands = [
         name: "admin",
         description: "Open the hikebot admin panel",
       },
+      {
+        type: ApplicationCommandOptionType.Subcommand,
+        name: "log",
+        description: "Show the group's hikes",
+      },
     ],
   },
 ] satisfies RESTPutAPIApplicationCommandsJSONBody;

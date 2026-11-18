@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { commands } from "../../src/discord/commands";
 
 describe("commands", () => {
-  it("define the guild-only /hike command with its admin subcommand", () => {
+  it("define the guild-only /hike command with its admin and log subcommands", () => {
     expect(commands).toEqual([
       {
         type: ApplicationCommandType.ChatInput,
@@ -21,6 +21,11 @@ describe("commands", () => {
             type: ApplicationCommandOptionType.Subcommand,
             name: "admin",
             description: "Open the hikebot admin panel",
+          },
+          {
+            type: ApplicationCommandOptionType.Subcommand,
+            name: "log",
+            description: "Show the group's hikes",
           },
         ],
       },

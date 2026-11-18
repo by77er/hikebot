@@ -9,6 +9,7 @@ import { ephemeralReply } from "../../src/discord/components";
 import { ephemeralNotice } from "../../src/discord/responses";
 import { hikeCommand } from "../../src/features/hike";
 import { renderAdminPanel } from "../../src/features/admin-panel";
+import { NO_HIKES_MESSAGE } from "../../src/features/hike-log";
 import { GuildConfig, type GuildSettings } from "../../src/guild/config";
 import {
   UNAVAILABLE_MESSAGE,
@@ -63,6 +64,16 @@ describe("/hike", () => {
     expect(result.response).toEqual(
       ephemeralReply(renderAdminPanel({ settings, round: null })),
     );
+  });
+
+  it("hands log to the hike log", async () => {
+    const { result } = await run(
+      "hike-log",
+      hike("hike-log", [
+        { type: ApplicationCommandOptionType.Subcommand, name: "log" },
+      ]),
+    );
+    expect(JSON.stringify(result.response)).toContain(NO_HIKES_MESSAGE);
   });
 
   it("answers an unknown subcommand with the unavailable notice", async () => {
