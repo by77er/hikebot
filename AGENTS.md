@@ -140,6 +140,32 @@ them by hand, for example for your own test application:
    DISCORD_API_BASE=http://127.0.0.1:<port>/api/v10 npm run register
    ```
 
+## Add a dependency
+
+1. Install it with npm 12, which keeps `package-lock.json` as it is apart
+   from the new package; an older npm rewrites unrelated entries. Leave out
+   `-D` for a package the Worker itself imports:
+
+   ```sh
+   npx -y npm@12 install -D <package>
+   ```
+
+2. Check that the lockfile gained only the package's entries (a few lines
+   per package, no deletions):
+
+   ```sh
+   git diff --stat package.json package-lock.json
+   ```
+
+   If it shows deletions, run `git checkout package.json package-lock.json`
+   and install again with step 1.
+
+3. Run the tests:
+
+   ```sh
+   npm test
+   ```
+
 ## Change wrangler.jsonc
 
 1. Edit `wrangler.jsonc`.

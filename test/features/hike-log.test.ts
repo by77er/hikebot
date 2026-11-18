@@ -8,8 +8,10 @@ import {
   type APIMessageTopLevelComponent,
 } from "discord-api-types/v10";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { calendarAddress } from "../../src/calendar/address";
 import { registerFeatures } from "../../src/features";
 import {
+  CALENDAR_HINT,
   HIKES_PER_PAGE,
   LOG_DETAILS_CAP,
   NO_HIKES_MESSAGE,
@@ -130,6 +132,11 @@ function entries(components: APIMessageTopLevelComponent[]): string[] {
   );
 }
 
+/** The log's last lines, for the guild "log" the interactions come from. */
+async function calendarLines(): Promise<string> {
+  return `Calendar: ${await calendarAddress(env, "log")}\n${CALENDAR_HINT}`;
+}
+
 describe("/hike log", () => {
   it("answers any member with an ephemeral Components V2 message that pings no one", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -151,7 +158,9 @@ describe("/hike log", () => {
       store.startRound("u-admin", [{ label: "Lake", proposedBy: "u1" }]);
     });
     const shown = text(reply?.components ?? []);
-    expect(shown).toBe(`## Hike log\n0 hikes\n${NO_HIKES_MESSAGE}`);
+    expect(shown).toBe(
+      `## Hike log\n0 hikes\n${NO_HIKES_MESSAGE}\n${await calendarLines()}`,
+    );
     expect(buttons(reply?.components ?? [])).toEqual([]);
   });
 
@@ -175,6 +184,7 @@ describe("/hike log", () => {
         "Fri, 1 Mar 2030 · 11:00 · **Lake**",
         "[Event](https://discord.com/events/log/700000000000000002)",
         "Tue, 1 Jan 2030 · 11:00 · **Bay**",
+        await calendarLines(),
       ].join("\n"),
     );
   });
@@ -240,6 +250,19 @@ describe("/hike log", () => {
     expect(text(junk?.components ?? [])).toContain("page 1 of 3");
   });
 
+  it("ends with the guild's calendar address on PUBLIC_URL, on every page", async () => {
+    const [first, second] = await play(11, ["hb:log:page:2"]);
+    const address = await calendarAddress(env, "log");
+    expect(address).toMatch(
+      /^https:\/\/hikebot\.example\/calendar\/log\/[A-Za-z0-9_-]{43}\.ics$/,
+    );
+    for (const reply of [first, second]) {
+      const shown = text(reply?.components ?? []);
+      expect(shown.endsWith(`\n${await calendarLines()}`)).toBe(true);
+    }
+    expect(CALENDAR_HINT).toContain("Calendar apps can subscribe");
+  });
+
   it("uses custom_ids of the hb scheme", async () => {
     const [reply] = await play(11);
     for (const { id } of buttons(reply?.components ?? [])) {
@@ -273,6 +296,7 @@ describe("renderHikeLog", () => {
         total: 9999,
       },
       "2".repeat(20),
+      `https://hiking.bitcru.sh/calendar/${"2".repeat(20)}/${"s".repeat(43)}.ics`,
     );
     const all = nodes(components);
     expect(all.length).toBeLessThanOrEqual(MAX_MESSAGE_COMPONENTS);

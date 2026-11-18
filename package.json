@@ -27,6 +27,7 @@
     "discord-api-types": "^0.38.59",
     "eslint": "^10.15.0",
     "globals": "^17.14.0",
+    "ical.js": "^2.2.1",
     "prettier": "^3.10.1",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3",
