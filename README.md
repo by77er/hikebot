@@ -9,6 +9,33 @@ holding that server's state. It receives Discord interactions over HTTP only,
 with no gateway connection. See [`docs/design.md`](docs/design.md) for the
 design and [`AGENTS.md`](AGENTS.md) for how to work on the code.
 
+## Weekly schedule
+
+A server's admins can let hikebot run the rounds by itself on a fixed day
+each week. In Discord, run `/hike admin`, open **Settings**, and under
+**Schedule** pick the weekday, the time (**Set schedule time**, `HH:MM` in
+the server's time zone) and how many days the date vote stays open, then
+click **Turn schedule on**. It needs the voting, announcements and hike
+threads channels set first. With the defaults, Wednesday at 09:00:
+
+1. On a Wednesday, hikebot opens a location vote with no options; members
+   propose places or suggest a past one again.
+2. The next Wednesday it closes that vote and announces the winner, then
+   opens the date vote with every Saturday and Sunday in the two weeks after
+   the vote closes. Members can add other days in those two weeks.
+3. Two days later, on Friday, it closes the date vote: the hike is
+   announced, with its forum thread and Discord event.
+4. On the first Wednesday after the hike, it starts again.
+
+If nobody proposes or votes, the location vote stays open another week, and
+hikebot says so in the announcements channel. If nobody votes on a date,
+the date vote stays open a day at a time; once the earliest date is less
+than a day away, hikebot cancels the round and starts a new one the next
+Wednesday. The panel shows whether the schedule is on and what hikebot
+does next, and when. Admins can still start, close, withdraw or cancel a
+vote by hand at any time; hikebot carries on from whatever it finds.
+**Turn schedule off** stops it and leaves any open vote as it is.
+
 ## Local development
 
 Requires Node.js 22.13 or later. To set up a checkout, run the bot locally,
