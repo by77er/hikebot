@@ -5,6 +5,10 @@ location, then on a date; admins run the votes from a panel; results are
 announced and a forum thread is created for the hike. It receives Discord
 interactions over HTTP only: no gateway, no WebSocket.
 
+This document is the design: what the bot does and why, its data model and
+its architecture. It does not record which parts are built; the code shows
+that, and progress is tracked on the task board.
+
 ## Runtime
 
 One Cloudflare Worker, `hikebot`. Secrets: `DISCORD_PUBLIC_KEY`,

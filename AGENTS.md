@@ -6,17 +6,24 @@ the repository root unless a step says otherwise.
 ## Before you change a directory
 
 1. Read this file.
-2. Read the `AGENTS.md` of every directory between the root and the files you
+2. Find the files involved. List the tracked files, then read the comment at
+   the top of each module and class you will touch:
+
+   ```sh
+   git ls-files src test docs
+   ```
+
+3. Read the `AGENTS.md` of every directory between the root and the files you
    are changing, for example `src/guild/AGENTS.md` before you change
    `src/guild/schema.ts`. Each one holds the procedures for its directory.
-3. List the Undercurrent rules that govern each file you will change, then
+4. List the Undercurrent rules that govern each file you will change, then
    read them in the `UNDERCURRENT.md` files the listing names:
 
    ```sh
    uc explain src/guild/schema.ts
    ```
 
-4. Read the sections of `docs/design.md` that describe the behaviour you are
+5. Read the sections of `docs/design.md` that describe the behaviour you are
    changing.
 
 ## Set up a checkout
