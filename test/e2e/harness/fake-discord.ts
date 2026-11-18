@@ -123,6 +123,10 @@ export class FakeDiscord {
   private readonly channels = new Map<string, FakeChannel>();
   private readonly messages = new Map<string, FakeMessage>();
   private readonly interactions = new Map<string, InteractionRecord>();
+  /** Interactions on their way to the Worker, by token; see `sendingInteraction`. */
+  private readonly sending = new Map<string, () => void>();
+  private readonly answered = new Map<string, Promise<void>>();
+  private held = 0;
   private readonly failures = new Map<string, ChannelFailure>();
   private readonly rateLimits: RateLimit[] = [];
   private readonly waiters: Waiter[] = [];
@@ -224,6 +228,34 @@ export class FakeDiscord {
   }
 
   /**
+   * Tells the fake that the client is sending the interaction with `token`
+   * to the Worker. Until the client calls `recordInteractionResponse` or
+   * `sentInteraction`, the fake holds webhook requests for that token:
+   * Discord has processed an interaction's response by the time the bot
+   * calls a webhook with its token, but here the Worker's follow-up job can
+   * reach the fake before the client has read the response.
+   */
+  sendingInteraction(token: string): void {
+    this.answered.set(
+      token,
+      new Promise((resolve) => {
+        this.sending.set(token, resolve);
+      }),
+    );
+  }
+
+  /**
+   * Releases webhook requests held for `token`. The client calls it once it
+   * is done with the interaction, also when the Worker's answer failed;
+   * requests for an interaction never recorded then get Unknown Webhook.
+   */
+  sentInteraction(token: string): void {
+    this.sending.get(token)?.();
+    this.sending.delete(token);
+    this.answered.delete(token);
+  }
+
+  /**
    * Tells the fake about an interaction the test sent, so its webhook routes
    * accept the token, and records the Worker's response as Discord would
    * show it. The interaction client calls this.
@@ -257,18 +289,19 @@ export class FakeDiscord {
         });
         message.interaction_token = interaction.token;
         record.originalId = message.id;
-        return;
+        break;
       }
       case 7: {
         const target = interaction.message
           ? this.messages.get(interaction.message.id)
           : undefined;
         if (target) this.applyEdit(target, data);
-        return;
+        break;
       }
       default:
-        return;
+        break;
     }
+    this.sentInteraction(interaction.token);
   }
 
   // Reading state.
@@ -297,6 +330,11 @@ export class FakeDiscord {
     return [...this.channels.values()].filter(
       (c) => c.parent_id === forumChannelId,
     );
+  }
+
+  /** How many webhook requests wait for their interaction's response. */
+  get heldRequests(): number {
+    return this.held;
   }
 
   /** The original response to an interaction, after any edits. */
@@ -372,6 +410,13 @@ export class FakeDiscord {
     const url = new URL(req.url ?? "/", this.origin);
     const method = req.method ?? "GET";
     const path = url.pathname.replace(/^\/api\/v10/, "") + url.search;
+    const token = /^\/webhooks\/[^/]+\/([^/?]+)/.exec(path)?.[1];
+    const answered = token === undefined ? undefined : this.answered.get(token);
+    if (answered) {
+      this.held += 1;
+      await answered;
+      this.held -= 1;
+    }
     const recorded: RecordedRequest = {
       method,
       path,
