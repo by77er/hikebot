@@ -140,6 +140,45 @@ perl -0777 -ne '
 ' "$FILE"
 ```
 
+## A scenario waits on what the bot shows before reading what it stored
+only: *.test.ts
+
+The fake Discord API holds a new thread or message as soon as it receives
+the request, before its answer reaches the Worker, and the Worker stores the
+new id only once that answer arrives. A wait on the fake's state
+(`e2e.discord.threads(...)`, `channelMessages(...)`, `requests`) therefore
+ends before the bot has stored anything, and an interaction sent next, such
+as Refresh, can be answered without it. After an action whose follow-up
+creates something on Discord, wait with `eventually` or
+`waitForOriginalResponse` until the reply or panel shows the follow-up's
+result, and only then send the next interaction or assert on what the bot
+shows. Assertions on the fake's state may follow that wait, as "Write an
+end-to-end scenario" in `test/AGENTS.md` says.
+
+```ts good
+await Promise.all([g.owner.click(panel, id), g.owner.click(panel, id)]);
+await eventually(() => {
+  expect(messageText(play.shown(panel))).toContain("The hike thread is open");
+});
+await g.owner.click(panel, ROUND_IDS.refresh);
+const [thread] = e2e.discord.threads(g.channels.forum);
+expect(messageText(play.shown(panel))).toContain(
+  `**Hike thread:** <#${thread?.id ?? ""}>`,
+);
+```
+
+```ts bad
+await Promise.all([g.owner.click(panel, id), g.owner.click(panel, id)]);
+await eventually(() => {
+  expect(e2e.discord.threads(g.channels.forum)).toHaveLength(1);
+});
+await g.owner.click(panel, ROUND_IDS.refresh);
+const [thread] = e2e.discord.threads(g.channels.forum);
+expect(messageText(play.shown(panel))).toContain(
+  `**Hike thread:** <#${thread?.id ?? ""}>`,
+);
+```
+
 ## End-to-end servers listen on a free port
 only: *.ts
 
