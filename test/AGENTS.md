@@ -437,14 +437,14 @@ Run `npm test` for the whole suite before opening a pull request.
    `play.submitDates(g, panel, text)` and check the reply with
    `expectEphemeral(g.owner, "<text>")`.
 
-   Closing the date vote creates the hike's thread in `g.channels.forum`.
-   To make that fail, before `closeVote` call
+   To make creating the hike's thread in `g.channels.forum` fail when the
+   date vote closes, call
    `e2e.discord.failChannel(g.channels.forum, "missing-permissions")`
-   (lift it with `clearChannelFailure`), or turn the forum into a text
-   channel with
-   `e2e.discord.addChannel({ id: g.channels.forum, guildId: g.guildId })`;
-   Discord refuses that thread with a 400, so take it with
-   `e2e.discord.takeRejections()` and assert on it.
+   before `closeVote` and lift it with `clearChannelFailure`, or turn the
+   forum into a text channel with
+   `e2e.discord.addChannel({ id: g.channels.forum, guildId: g.guildId })`
+   and take the refused thread with `e2e.discord.takeRejections()`,
+   asserting on it.
 
 3. Assert on what members see with `play.shown(message)`,
    `buttonLabels(message)` and `e2e.discord.channelMessages(id)` (for a
