@@ -67,6 +67,22 @@ export const migrations: readonly Migration[] = [
       CREATE INDEX poll_votes_by_user ON poll_votes (poll_id, user_id);
     `,
   },
+  {
+    // One row per guild database, so `GuildConfig` always finds it.
+    name: "0002_guild_settings",
+    sql: `
+      CREATE TABLE guild_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        admin_role_id TEXT,
+        vote_channel_id TEXT,
+        announce_channel_id TEXT,
+        forum_channel_id TEXT,
+        owner_id TEXT,
+        owner_fetched_at INTEGER
+      );
+      INSERT INTO guild_settings (id) VALUES (1);
+    `,
+  },
 ];
 
 /**

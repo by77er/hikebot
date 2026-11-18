@@ -105,6 +105,39 @@ nothing, read `/tmp/hikebot-dev.log`. On macOS install GNU coreutils
 To exercise interactions, write a test that sends a signed interaction, as
 `test/AGENTS.md` describes.
 
+## Register the slash commands
+
+The `Deploy` workflow registers the commands after every deploy. To register
+them by hand, for example for your own test application:
+
+1. Export the application's id and bot token, typing the token at the
+   prompt so it stays out of your shell history (values from the Discord
+   developer portal, as the secrets table in `README.md` says):
+
+   ```sh
+   export DISCORD_APPLICATION_ID=<application id>
+   read -rs DISCORD_BOT_TOKEN && export DISCORD_BOT_TOKEN
+   ```
+
+2. Register them. It replaces all of the application's global commands with
+   the ones in `src/discord/commands.ts`, so running it twice is safe:
+
+   ```sh
+   npm run register
+   ```
+
+   It prints `Registered <n> global command(s) for application <id>:` and a
+   line per command, such as `/hike (admin)`. A non-zero exit means a
+   variable was missing or Discord refused the request; the message says
+   which.
+
+3. To try it without Discord, point it at another API base, such as the
+   fake Discord API of the end-to-end harness:
+
+   ```sh
+   DISCORD_API_BASE=http://127.0.0.1:<port>/api/v10 npm run register
+   ```
+
 ## Change wrangler.jsonc
 
 1. Edit `wrangler.jsonc`.

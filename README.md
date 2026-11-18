@@ -84,7 +84,25 @@ certificate itself.
    signed PING to check it before saving.
 2. Invite the bot to the server with the scopes `bot` and
    `applications.commands`: under OAuth2, URL Generator, tick both scopes,
-   then open the generated URL.
+   tick the bot permissions below, then open the generated URL.
+3. Make sure the bot has these permissions in the voting, announcements and
+   hike threads channels (through the invite or the channels' permission
+   overrides): View Channel, Send Messages, Send Messages in Threads, Create
+   Public Threads, Embed Links and Read Message History.
+4. In the server, run `/hike admin` as the server owner, open Settings, and
+   pick the admin role and the three channels.
+
+### Slash commands
+
+The bot has one global slash command, `/hike`, with the subcommand `admin`,
+defined in `src/discord/commands.ts`. `npm run register` replaces the
+application's global commands with those definitions through Discord's bulk
+overwrite, so running it again changes nothing. It reads
+`DISCORD_APPLICATION_ID` and `DISCORD_BOT_TOKEN` from the environment, prints
+the commands Discord registered, never prints the token, and exits non-zero
+when a variable is missing or Discord refuses the request, which fails the
+deploy. The `Deploy` workflow runs it after every deploy; to run it by hand,
+follow "Register the slash commands" in [`AGENTS.md`](AGENTS.md).
 
 To confirm a deploy, roll back, read production logs or rotate a secret,
 follow the procedures in [`AGENTS.md`](AGENTS.md).

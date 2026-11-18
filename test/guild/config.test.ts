@@ -1,0 +1,107 @@
+import { evictDurableObject, runInDurableObject } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { describe, expect, it } from "vitest";
+import {
+  GuildConfig,
+  setupComplete,
+  type GuildSettings,
+} from "../../src/guild/config";
+
+function stubFor(name: string) {
+  return env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(name));
+}
+
+const empty: GuildSettings = {
+  adminRoleId: null,
+  voteChannelId: null,
+  announceChannelId: null,
+  forumChannelId: null,
+  ownerId: null,
+  ownerFetchedAt: null,
+};
+
+describe("GuildConfig", () => {
+  it("starts with every setting unset", async () => {
+    const settings = await runInDurableObject(
+      stubFor("config-empty"),
+      (_instance, state) => new GuildConfig(state.storage).get(),
+    );
+    expect(settings).toEqual(empty);
+  });
+
+  it("sets, returns and clears each setting", async () => {
+    await runInDurableObject(stubFor("config-set"), (_instance, state) => {
+      const config = new GuildConfig(state.storage);
+      expect(config.set("adminRoleId", "11")).toEqual({
+        ...empty,
+        adminRoleId: "11",
+      });
+      config.set("voteChannelId", "12");
+      config.set("announceChannelId", "13");
+      expect(config.set("forumChannelId", "14")).toEqual({
+        ...empty,
+        adminRoleId: "11",
+        voteChannelId: "12",
+        announceChannelId: "13",
+        forumChannelId: "14",
+      });
+      expect(config.set("adminRoleId", null).adminRoleId).toBeNull();
+      expect(config.get().voteChannelId).toBe("12");
+    });
+  });
+
+  it("caches the owner id with its fetch time", async () => {
+    await runInDurableObject(stubFor("config-owner"), (_instance, state) => {
+      const config = new GuildConfig(state.storage);
+      expect(config.setOwner("21", 1_700_000_000_000)).toEqual({
+        ...empty,
+        ownerId: "21",
+        ownerFetchedAt: 1_700_000_000_000,
+      });
+      config.setOwner("22", 1_700_000_100_000);
+      expect(config.get()).toMatchObject({
+        ownerId: "22",
+        ownerFetchedAt: 1_700_000_100_000,
+      });
+    });
+  });
+
+  it("keeps the settings across a restart", async () => {
+    const stub = stubFor("config-restart");
+    await runInDurableObject(stub, (_instance, state) => {
+      new GuildConfig(state.storage).set("forumChannelId", "31");
+    });
+    await evictDurableObject(stub);
+    const settings = await runInDurableObject(stub, (_instance, state) =>
+      new GuildConfig(state.storage).get(),
+    );
+    expect(settings.forumChannelId).toBe("31");
+  });
+
+  it("keeps each guild's settings apart", async () => {
+    await runInDurableObject(stubFor("config-guild-a"), (_instance, state) => {
+      new GuildConfig(state.storage).set("adminRoleId", "41");
+    });
+    const other = await runInDurableObject(
+      stubFor("config-guild-b"),
+      (_instance, state) => new GuildConfig(state.storage).get(),
+    );
+    expect(other).toEqual(empty);
+  });
+});
+
+describe("setupComplete", () => {
+  it("needs the voting, announcements and hike threads channels, not the role", () => {
+    const channels = {
+      ...empty,
+      voteChannelId: "1",
+      announceChannelId: "2",
+      forumChannelId: "3",
+    };
+    expect(setupComplete(channels)).toBe(true);
+    expect(setupComplete(empty)).toBe(false);
+    expect(setupComplete({ ...channels, voteChannelId: null })).toBe(false);
+    expect(setupComplete({ ...channels, announceChannelId: null })).toBe(false);
+    expect(setupComplete({ ...channels, forumChannelId: null })).toBe(false);
+  });
+});

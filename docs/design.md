@@ -138,7 +138,8 @@ constructor applies, in list order, every migration whose name is not yet in
 the `_migrations` table, each in its own transaction together with its
 record. Migrations are never renamed, reordered or edited once shipped; new
 ones are appended. `0001_polls` creates the poll tables described under
-"Polls".
+"Polls". `0002_guild_settings` creates `guild_settings`, described under
+"Guild settings".
 
 ## Conventions
 
@@ -227,9 +228,83 @@ signature check, guild routing and follow-up path work in workerd.
 
 ## Commands
 
-One slash command, `/hike admin`, guild-only. It is visible to everyone;
-permission is enforced by the bot: the guild owner or members with the
-configured admin role.
+One global slash command, `/hike`, with one subcommand, `admin` ("Open the
+hikebot admin panel"). `src/discord/commands.ts` defines it: guild-only
+(`contexts: [0]`, `integration_types: [0]`) and without
+`default_member_permissions`, so every member sees it and the bot enforces
+who may use it. `npm run register` (`scripts/register-commands.ts`, logic in
+`scripts/register.ts`) sends these definitions to Discord's bulk overwrite of
+the application's global commands through `DiscordApi`, so a run replaces
+the whole set and repeating it changes nothing. It reads
+`DISCORD_APPLICATION_ID` and `DISCORD_BOT_TOKEN`, prints what Discord
+registered, never prints the token, and exits non-zero on a missing variable
+or a failed request. The `Deploy` workflow runs it after every deploy.
+
+`/hike` is routed to `hikeCommand` (`src/features/hike.ts`), which hands the
+interaction to the handler of its subcommand; an unknown or missing
+subcommand gets the "no longer available" notice.
+
+## Admin permission
+
+`checkAdmin` (`src/guild/permissions.ts`) decides who may use the admin
+panel: the guild owner, or a member whose `interaction.member.roles` holds
+the configured admin role. Until an admin role is set, only the owner gets
+in. An interaction without a guild or member is refused.
+
+The owner id comes from `GET /guilds/{guild.id}` (`getGuild`) and is cached
+in `guild_settings` with the time it was fetched. A cached id is trusted for
+an hour, measured with the interaction's snowflake timestamp; after that it
+is fetched again before it decides anything, so after an ownership transfer
+the new owner gets in and the former owner is refused. A member with the
+admin role is let in without a lookup, so a check makes at most one REST
+call. If the lookup fails, the panel stays closed and the member gets an
+ephemeral reply with Discord's error.
+
+Everyone else gets an ephemeral Components V2 reply saying the panel is
+limited to the server owner and the admin role (and, when no role is set,
+that only the owner can use it). `adminOnly(handler)` wraps a command,
+component or modal handler in this check; every admin control's handler is
+registered through it, so a member who replays an admin `custom_id` is
+refused like one who runs the command.
+
+## Guild settings
+
+Each guild's settings are one row of `guild_settings` in its `GuildHike`
+database (migration `0002_guild_settings`, read and written by `GuildConfig`
+in `src/guild/config.ts`):
+
+| Column                | Meaning                                                      |
+| --------------------- | ------------------------------------------------------------ |
+| `id`                  | Always 1: the table holds one row, created by the migration  |
+| `admin_role_id`       | Members with this role may use the admin panel               |
+| `vote_channel_id`     | Text channel where the location and date polls are posted    |
+| `announce_channel_id` | Text or announcement channel where results are announced     |
+| `forum_channel_id`    | Forum channel that gets a thread per hike                    |
+| `owner_id`            | The guild owner's user id, as `getGuild` last returned it    |
+| `owner_fetched_at`    | When `owner_id` was fetched, in milliseconds since the epoch |
+
+Every column but `id` is null until it is set. Setup is complete when the
+three channels are set.
+
+## Admin panel
+
+`/hike admin` opens the panel (`src/features/admin-panel.ts`) as an
+ephemeral Components V2 reply; its buttons and selects update that message
+in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
+
+- **Status view**: the bot's name, the admin role and the three channels as
+  mentions or "not set", whether setup is complete, and the action buttons.
+  `actionButtons(state)` returns the buttons for the current state: Settings
+  (primary until setup is complete) and Refresh. Poll controls are added
+  there, before Settings.
+- **Settings view**: a role select for the admin role and three channel
+  selects, for voting (text channels), announcements (text and announcement
+  channels) and hike threads (forum channels). Each shows the current value
+  as its default and saves on change; emptying a select clears the setting.
+  The bot checks the pick again: the `@everyone` role (whose id is the
+  guild's) is refused as the admin role, and a channel missing from the
+  interaction's `resolved` channels or of a type the setting does not take
+  is refused. Back returns to the status view.
 
 ## Polls
 

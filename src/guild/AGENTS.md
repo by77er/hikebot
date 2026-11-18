@@ -92,6 +92,43 @@ The examples use a feature named `trail`; replace it with your feature's name
    `componentInteraction("hb:trail:pick:7", "<guild id>")`, then run
    `npx vitest run test/features/trail.test.ts`.
 
+## Add an action to the admin panel
+
+1. Add the button to `actionButtons` in `src/features/admin-panel.ts`,
+   before Settings, with an id from `customId("<feature>", "<action>")`.
+   Return it only in the states where the action makes sense (read them
+   from `AdminPanelState`; add what you need to `AdminPanelState` and
+   `loadAdminPanelState`). Keep the status view within 40 components and
+   4000 characters.
+2. Write the handler in `src/features/<feature>.ts` and wrap it in
+   `adminOnly`, so non-admins who replay the `custom_id` are refused. Answer
+   with `adminPanelUpdate(context, "<what happened>")` to redraw the status
+   view in place:
+
+   ```ts
+   import { adminPanelUpdate } from "./admin-panel";
+   import { adminOnly } from "../guild/permissions";
+   import type { ComponentHandler } from "../guild/router";
+
+   export const startTrail: ComponentHandler = adminOnly((_i, context) =>
+     adminPanelUpdate(context, "Trail vote started."),
+   );
+   ```
+
+3. Register it in `registerFeatures`:
+   `router.component("hb:trail:start", startTrail);`.
+4. In `test/features/admin-panel.test.ts`, add the button's id to the
+   status view test of the state that shows it and to the "refuses a
+   non-admin replaying" list; test the handler in
+   `test/features/<feature>.test.ts`. Add the click to an end-to-end
+   scenario with `owner.click(panel, "hb:trail:start")`.
+5. Run them:
+
+   ```sh
+   npx vitest run test/features/admin-panel.test.ts
+   npx vitest run --project e2e test/e2e/admin-panel.test.ts
+   ```
+
 ## Add a modal and its submit handler
 
 1. Pick an action name and check that no `registerFeatures` line or test
