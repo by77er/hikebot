@@ -132,6 +132,7 @@ describe("the hike thread", () => {
     );
     expect(buttonLabels(play.shown(panel))).toEqual([
       "Start location vote",
+      "Set map pin",
       "Settings",
       "Refresh",
     ]);
