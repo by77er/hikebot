@@ -2,7 +2,8 @@
  * Starts the Worker under test in local workerd with Wrangler's
  * `createTestHarness`, next to a fake Discord API. Each start gets fresh
  * in-memory Durable Object storage, a `MAPS` bucket holding the sample map
- * archive and its manifest (`./maps.ts`), a newly generated signing key pair, a
+ * archive and its manifest (`./maps.ts`) unless `maps` is false, a newly
+ * generated signing key pair, a
  * dummy bot token, application id, OAuth client secret and SIGNING_SECRET,
  * PUBLIC_URL set to an example origin, and DISCORD_API_BASE and
  * DISCORD_OAUTH_AUTHORIZE_URL pointing at the fake, which accepts
@@ -66,6 +67,12 @@ export interface E2EOptions {
    * harness self-tests that need a checkout with other local files.
    */
   root?: () => string;
+  /**
+   * Put the sample map archive and its manifest into the `MAPS` bucket.
+   * Defaults to true; false starts the Worker as production is before the
+   * first map data build.
+   */
+  maps?: boolean;
 }
 
 /**
@@ -110,7 +117,7 @@ export class E2ERun {
     this.harness = harness;
     const { url } = await harness.listen();
     const env = await harness.getWorker<{ MAPS?: MapsBucket }>().getEnv();
-    if (env.MAPS) await seedMaps(env.MAPS);
+    if (env.MAPS && options.maps !== false) await seedMaps(env.MAPS);
     return {
       url,
       discord,

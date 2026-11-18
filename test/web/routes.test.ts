@@ -1,8 +1,16 @@
 import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { sessionCookie } from "../../src/web/auth/session";
 import { webRouter } from "../../src/web/routes";
+import {
+  clearBucket,
+  manifestOf,
+  putManifest,
+  putSample,
+  sampleArchive,
+} from "../maps/helpers";
+import { decodePng } from "../maps/png";
 import { EXPECTED_PAGE_HEADERS, outline, pageHeaders } from "./helpers";
 
 function get(
@@ -159,5 +167,28 @@ describe("static assets", () => {
       expect(response.status, path).toBe(404);
       await response.arrayBuffer();
     }
+  });
+});
+
+describe("GET /maps/sample.png", () => {
+  beforeEach(async () => {
+    await clearBucket();
+  });
+
+  it("answers the sample point's map picture as a PNG", async () => {
+    await putSample("builds/test/region.pmtiles");
+    await putManifest(manifestOf([sampleArchive()]));
+    const response = await get("/maps/sample.png");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("image/png");
+    expect(response.headers.get("Cache-Control")).toBe("public, max-age=3600");
+    const png = await decodePng(new Uint8Array(await response.arrayBuffer()));
+    expect([png.width, png.height]).toEqual([1200, 800]);
+  });
+
+  it("answers the HTML 404 page while there is no map data", async () => {
+    const response = await get("/maps/sample.png");
+    expect(response.status).toBe(404);
+    expect(pageHeaders(response)).toEqual(EXPECTED_PAGE_HEADERS);
   });
 });
