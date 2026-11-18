@@ -40,6 +40,7 @@ import {
 import {
   POLL_CONTROL_IDS,
   adminPanelUpdate,
+  listing,
   missingSettings,
 } from "./admin-panel";
 import {
@@ -119,7 +120,7 @@ export function parseInitialLocations(text: string): ParsedLocations {
 }
 
 function setupMissing(missing: string[]): string {
-  return `Set the ${missing.join(", ")} under Settings before starting a vote.`;
+  return `Set the ${listing(missing)} under Settings before starting a vote.`;
 }
 
 /** Start location vote: opens the modal for the initial locations. */

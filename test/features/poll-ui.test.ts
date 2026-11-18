@@ -187,7 +187,7 @@ describe("renderPollMessage", () => {
     const open = renderPollMessage(fullPoll(), LOCATION_POLL);
     expectWithinLimits(open);
     expect(text(open)).toContain("…");
-    expect(text(open)).toContain(`**${"00"}${"L".repeat(78)}** · 999 votes`);
+    expect(text(open)).toContain(`**00${"L".repeat(78)}** · 999 votes`);
     expect(text(open).match(/Proposed by <@1\d{19}>/g)).toHaveLength(25);
 
     const closed = renderPollMessage(
@@ -261,7 +261,7 @@ describe("renderVoteSelect", () => {
       LOCATION_POLL,
     );
     const select = flatten(nodes(view)).find(
-      (c) => c.type === ComponentType.StringSelect,
+      (c) => c.type === (ComponentType.StringSelect as number),
     ) as unknown as {
       custom_id: string;
       min_values: number;
@@ -367,17 +367,39 @@ async function send(interaction: unknown) {
     await signedRequest(signer, interaction),
   );
   expect(response.status).toBe(200);
-  return (await response.json()) as {
+  return response.json<{
     type: InteractionResponseType;
     data: { components: APIMessageTopLevelComponent[] };
-  };
+  }>();
 }
 
-function requests(spy: ReturnType<typeof vi.spyOn>) {
+interface Sent {
+  method: string;
+  url: string;
+  body: string;
+}
+
+function requests(spy: {
+  mock: { calls: Parameters<typeof fetch>[] };
+}): Sent[] {
   return spy.mock.calls.map(([input, init]) => {
-    const request = new Request(input as RequestInfo, init as RequestInit);
-    return { method: request.method, url: request.url, init };
+    const request = new Request(input, init);
+    return {
+      method: request.method,
+      url: request.url,
+      body: typeof init?.body === "string" ? init.body : "",
+    };
   });
+}
+
+function bodyOf(sent: Sent | undefined): {
+  components: APIMessageTopLevelComponent[];
+  allowed_mentions?: unknown;
+} {
+  return JSON.parse(sent?.body ?? "{}") as {
+    components: APIMessageTopLevelComponent[];
+    allowed_mentions?: unknown;
+  };
 }
 
 describe("voting", () => {
@@ -451,9 +473,7 @@ describe("the debounced refresh", () => {
     expect(sent.map((r) => `${r.method} ${new URL(r.url).pathname}`)).toEqual([
       `PATCH /api/v10/channels/${TEXT}/messages/${POLL_MESSAGE}`,
     ]);
-    const body = JSON.parse(String(sent[0]?.init?.body)) as {
-      components: APIMessageTopLevelComponent[];
-    };
+    const body = bodyOf(sent[0]);
     expect(text(body.components)).toContain("4 members have voted.");
     expect(await runDurableObjectAlarm(stub(guild))).toBe(false);
   });
@@ -555,13 +575,7 @@ describe("closePoll", () => {
       `POST /api/v10/channels/${NEWS}/messages`,
       "PATCH /api/v10/webhooks/100/interaction-token/messages/@original",
     ]);
-    const bodies = sent.map(
-      (r) =>
-        JSON.parse(String(r.init?.body)) as {
-          components: APIMessageTopLevelComponent[];
-          allowed_mentions: unknown;
-        },
-    );
+    const bodies = sent.map(bodyOf);
     expect(text(bodies[0]?.components ?? [])).toContain(
       "🏆 **Lake** won with 1 vote.",
     );
@@ -606,13 +620,7 @@ describe("closePoll", () => {
       );
     });
     const panel = requests(fetchSpy).at(-1);
-    const shown = text(
-      (
-        JSON.parse(String(panel?.init?.body)) as {
-          components: APIMessageTopLevelComponent[];
-        }
-      ).components,
-    );
+    const shown = text(bodyOf(panel).components);
     expect(shown).toContain(
       `Could not update the poll message in <#${TEXT}>: Discord answered: Missing Permissions (HTTP 403, code 50013).`,
     );
@@ -689,14 +697,10 @@ describe("cancel round", () => {
     });
     await waitOnExecutionContext(ctx);
     const sent = requests(fetchSpy).filter((r) => r.method === "PATCH");
-    const edit = JSON.parse(String(sent[0]?.init?.body)) as {
-      components: APIMessageTopLevelComponent[];
-    };
+    const edit = bodyOf(sent[0]);
     expect(text(edit.components)).toContain("This vote was cancelled.");
     expect(ids(edit.components)).toEqual([]);
-    const panel = JSON.parse(String(sent[1]?.init?.body)) as {
-      components: APIMessageTopLevelComponent[];
-    };
+    const panel = bodyOf(sent[1]);
     expect(text(panel.components)).toContain(
       `Could not mark the poll message in <#${TEXT}> as cancelled: Discord answered: Unknown Message (HTTP 404, code 10008).`,
     );

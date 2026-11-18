@@ -469,7 +469,7 @@ function selected(
 }
 
 /** `a`, `a and b`, `a, b and c`. */
-function listing(items: string[]): string {
+export function listing(items: string[]): string {
   return items.length <= 1
     ? items.join("")
     : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1] ?? ""}`;

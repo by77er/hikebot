@@ -61,7 +61,7 @@ describe("/hike", () => {
       ]),
     );
     expect(result.response).toEqual(
-      ephemeralReply(renderAdminPanel({ settings })),
+      ephemeralReply(renderAdminPanel({ settings, round: null })),
     );
   });
 
