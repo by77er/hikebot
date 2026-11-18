@@ -1,0 +1,60 @@
+name: Undercurrent
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  commands:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - if: github.event_name == 'pull_request'
+        uses: by77er/undercurrent@v0
+        with:
+          mode: commands
+      - if: github.event_name == 'push'
+        uses: by77er/undercurrent@v0
+        with:
+          mode: commands
+          all: "true"
+          rules-from: head
+  semantic:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: by77er/undercurrent@v0
+        with:
+          mode: semantic
+          typesafe-api-key: ${{ secrets.TYPESAFE_API_KEY }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+  review:
+    if: always() && github.event_name == 'pull_request'
+    needs: [commands, semantic]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: by77er/undercurrent@v0
+        with:
+          mode: review
