@@ -38,14 +38,20 @@ jobs:
           DISCORD_PUBLIC_KEY: ${{ secrets.DISCORD_PUBLIC_KEY }}
           DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          SIGNING_SECRET: ${{ secrets.SIGNING_SECRET }}
         run: |
           missing=0
-          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DISCORD_PUBLIC_KEY DISCORD_APPLICATION_ID DISCORD_BOT_TOKEN; do
+          names="CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DISCORD_PUBLIC_KEY DISCORD_APPLICATION_ID DISCORD_BOT_TOKEN DISCORD_CLIENT_SECRET SIGNING_SECRET"
+          for name in $names; do
             if [ -z "${!name}" ]; then
               echo "::error::GitHub Actions secret $name is missing or empty. Add it under Settings > Secrets and variables > Actions, then re-run this workflow."
               missing=1
             fi
           done
+          if [ "$missing" = 0 ]; then
+            echo "These secrets are set: $names"
+          fi
           exit "$missing"
 
       - name: Skip unless the commit is the tip of main
@@ -84,13 +90,28 @@ jobs:
           DISCORD_PUBLIC_KEY: ${{ secrets.DISCORD_PUBLIC_KEY }}
           DISCORD_APPLICATION_ID: ${{ secrets.DISCORD_APPLICATION_ID }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+          SIGNING_SECRET: ${{ secrets.SIGNING_SECRET }}
           SECRETS_FILE: ${{ runner.temp }}/worker-secrets.json
         run: |
           node -e '
-          const { DISCORD_PUBLIC_KEY, DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN, SECRETS_FILE } = process.env;
+          const {
+            DISCORD_PUBLIC_KEY,
+            DISCORD_APPLICATION_ID,
+            DISCORD_BOT_TOKEN,
+            DISCORD_CLIENT_SECRET,
+            SIGNING_SECRET,
+            SECRETS_FILE,
+          } = process.env;
           require("node:fs").writeFileSync(
             SECRETS_FILE,
-            JSON.stringify({ DISCORD_PUBLIC_KEY, DISCORD_APPLICATION_ID, DISCORD_BOT_TOKEN }),
+            JSON.stringify({
+              DISCORD_PUBLIC_KEY,
+              DISCORD_APPLICATION_ID,
+              DISCORD_BOT_TOKEN,
+              DISCORD_CLIENT_SECRET,
+              SIGNING_SECRET,
+            }),
             { mode: 0o600 },
           );
           '

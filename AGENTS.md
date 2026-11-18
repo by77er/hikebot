@@ -170,7 +170,7 @@ them by hand, for example for your own test application:
 
 7. In `.github/workflows/deploy.yml`, add `<NAME>: ${{ secrets.<NAME> }}` to
    the `env` of the steps "Check the secrets are set" and "Write the Worker
-   secrets file", add the name to the `for name in` list of the first, and
+   secrets file", add the name to the `names` list of the first, and
    add it to the object passed to `JSON.stringify` in the second.
 8. Follow "Check a workflow change". Once the pull request merges, follow
    "Confirm a merge was deployed", then list the Worker's secrets:
@@ -305,15 +305,24 @@ them by hand, for example for your own test application:
 
 1. Make the new value where the secrets table in `README.md` says it comes
    from (for `DISCORD_BOT_TOKEN`, Bot, Reset Token in the Discord developer
-   portal).
+   portal). The table also says what rotating each one does; rotating
+   `SIGNING_SECRET` signs everyone out and changes every calendar address.
 2. Replace the GitHub Actions secret, typing the value at the prompt (or
    under Settings, Secrets and variables, Actions on GitHub). Each deploy
-   sets the three `DISCORD_*` Worker secrets from these GitHub secrets, so a
-   value set with `npx wrangler secret put` for one of them is replaced at
-   the next deploy:
+   sets the five Worker secrets (the three `DISCORD_*` ones,
+   `DISCORD_CLIENT_SECRET` and `SIGNING_SECRET`) from these GitHub secrets,
+   so a value set with `npx wrangler secret put` for one of them is replaced
+   at the next deploy:
 
    ```sh
    gh secret set DISCORD_BOT_TOKEN
+   ```
+
+   For `SIGNING_SECRET`, pipe a new random value straight in, so it is never
+   shown or stored:
+
+   ```sh
+   openssl rand -base64 48 | gh secret set SIGNING_SECRET
    ```
 
 3. Deploy `main` by hand, so the Worker gets the new value:

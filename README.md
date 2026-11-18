@@ -16,7 +16,8 @@ run the tests and check a change, follow [`AGENTS.md`](AGENTS.md); each
 directory with procedures of its own has an `AGENTS.md` too.
 
 Put your Discord application's values in `.dev.vars`; it is git-ignored, so
-they are never committed.
+they are never committed. `.dev.vars.example` sets `PUBLIC_URL` to the local
+dev server, so the links the Worker builds point at it.
 
 To receive real interactions locally, expose the dev server with a tunnel
 (for example `cloudflared tunnel --url http://localhost:8787`) and use the
@@ -35,9 +36,10 @@ without a manual step:
    moved on to a newer commit by then, it skips with a log line and the newer
    commit's own run deploys. A failed or cancelled `Undercurrent` run deploys
    nothing.
-3. `Deploy` checks that the five secrets below are set, runs
+3. `Deploy` checks that the seven secrets below are set, runs
    `wrangler deploy` with the repository's own wrangler, setting the Worker's
-   three secrets from the GitHub secrets, then runs
+   five secrets (all but the two `CLOUDFLARE_*` ones) from the GitHub
+   secrets, then runs
    `npm run register --if-present` to register the slash commands, and
    finally requests `https://hiking.bitcru.sh/` until it answers
    `hikebot is running`, failing after about two minutes.
@@ -48,17 +50,21 @@ for `hiking.bitcru.sh`; there is no other infrastructure.
 ### GitHub Actions secrets
 
 Set under Settings, Secrets and variables, Actions in the GitHub repository.
-The three `DISCORD_*` values are from the
-[Discord developer portal](https://discord.com/developers/applications); the
-deploy sets them as the Worker's secrets on every run.
+The `DISCORD_*` values are from the
+[Discord developer portal](https://discord.com/developers/applications);
+`SIGNING_SECRET` is a random value you make. The deploy sets these five as the
+Worker's secrets on every run. To change one, follow "Rotate a secret" in
+[`AGENTS.md`](AGENTS.md).
 
-| Secret                   | What it is for                                        | Where to find it                         |
-| ------------------------ | ----------------------------------------------------- | ---------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`   | Lets wrangler deploy the Worker and its Custom Domain | Cloudflare dashboard, API Tokens (below) |
-| `CLOUDFLARE_ACCOUNT_ID`  | The Cloudflare account that holds the Worker and zone | Cloudflare dashboard, account home       |
-| `DISCORD_PUBLIC_KEY`     | The Worker verifies interaction signatures with it    | General Information, Public Key          |
-| `DISCORD_APPLICATION_ID` | The application the slash commands are registered for | General Information, Application ID      |
-| `DISCORD_BOT_TOKEN`      | The Worker and the register step call Discord's API   | Bot, Token                               |
+| Secret                   | What it is for                                                                                                                                                        | Where to find it                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`   | Lets wrangler deploy the Worker and its Custom Domain                                                                                                                 | Cloudflare dashboard, API Tokens (below)                                              |
+| `CLOUDFLARE_ACCOUNT_ID`  | The Cloudflare account that holds the Worker and zone                                                                                                                 | Cloudflare dashboard, account home                                                    |
+| `DISCORD_PUBLIC_KEY`     | The Worker verifies interaction signatures with it                                                                                                                    | General Information, Public Key                                                       |
+| `DISCORD_APPLICATION_ID` | The application the slash commands are registered for                                                                                                                 | General Information, Application ID                                                   |
+| `DISCORD_BOT_TOKEN`      | The Worker and the register step call Discord's API                                                                                                                   | Bot, Token                                                                            |
+| `DISCORD_CLIENT_SECRET`  | The Worker exchanges web sign-in codes with Discord's OAuth2 API. Rotating it fails sign-ins until the next deploy has the new value; sessions already signed in stay | OAuth2, Client Secret (Reset Secret makes a new one)                                  |
+| `SIGNING_SECRET`         | The Worker signs session cookies, sign-in state, form tokens and calendar addresses. Rotating it signs everyone out and changes every calendar address                | Any random value of 32 bytes or more, such as the output of `openssl rand -base64 48` |
 
 ### Cloudflare API token
 
