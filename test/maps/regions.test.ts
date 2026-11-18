@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import regions from "../../maps/regions.json";
+import sample from "../../maps/sample/sample.json";
 import { isBBox, type BBox } from "../../src/maps/manifest";
+import { sampleBytes } from "./helpers";
 
 function inside(lon: number, lat: number, [w, s, e, n]: BBox): boolean {
   return lon >= w && lon <= e && lat >= s && lat <= n;
@@ -60,5 +62,20 @@ describe("maps/regions.json", () => {
   it("records the attribution and licence the manifest carries", () => {
     expect(regions.attribution).toContain("OpenStreetMap");
     expect(regions.license).toContain("ODbL");
+  });
+
+  it("matches the committed sample archive's note", () => {
+    expect(sample.bbox).toEqual(regions.sample.bbox);
+    expect(sample.minzoom).toBe(regions.sample.minzoom);
+    expect(sample.maxzoom).toBe(regions.sample.maxzoom);
+    expect(sample.point).toEqual({
+      lon: regions.samplePoint.lon,
+      lat: regions.samplePoint.lat,
+    });
+    expect(sampleBytes().length).toBe(sample.bytes);
+    expect(sample.bytes).toBeLessThanOrEqual(regions.sample.maxBytes);
+    expect(sample.license).toBe(regions.license);
+    expect(sample.attribution).toBe(regions.attribution);
+    expect(sample.schemaVersion).toMatch(/^4\./);
   });
 });
