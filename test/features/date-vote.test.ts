@@ -684,12 +684,14 @@ describe("closing the date vote", () => {
     const sent = requests(fetchSpy);
     expect(sent.map((r) => `${r.method} ${new URL(r.url).pathname}`)).toEqual([
       `PATCH /api/v10/channels/${TEXT}/messages/${POLL_MESSAGE}`,
+      `POST /api/v10/channels/${FORUM}/threads`,
       `POST /api/v10/channels/${NEWS}/messages`,
       "PATCH /api/v10/webhooks/100/interaction-token/messages/@original",
     ]);
-    const [edit, announcement, panel] = sent.map((r) =>
+    const [edit, , announcement, panel] = sent.map((r) =>
       text(bodyOf(r).components),
     );
+    expect(announcement?.split("\n").at(-1)).toBe("**Hike thread:** <#1>");
     expect(edit).toContain("🏆 **Sat, 15 Jun 2030** won with 1 vote.");
     expect(announcement).toContain("**Where:** Ridge Trail");
     expect(announcement).toContain("**When:** Sat, 15 Jun 2030");
@@ -702,7 +704,8 @@ describe("closing the date vote", () => {
     expect(panel).toContain(
       "**Last hike:** **Ridge Trail** on **Sat, 15 Jun 2030**.",
     );
-    expect(ids(bodyOf(sent[2]).components)).toContain("hb:location:start");
+    expect(panel).toContain("**Hike thread:** <#1>");
+    expect(ids(bodyOf(sent[3]).components)).toContain("hb:location:start");
     for (const r of sent) {
       expect(bodyOf(r).allowed_mentions).toEqual({ parse: [] });
     }
@@ -740,6 +743,12 @@ describe("closing the date vote", () => {
     );
     expect(panel).toContain(
       "**Last hike:** **Ridge Trail** on **Sat, 8 Jun 2030**.",
+    );
+    expect(panel).toContain(
+      `**Hike thread:** not created. Could not create the hike thread in <#${FORUM}>: Discord could not be reached.`,
+    );
+    expect(ids(bodyOf(requests(fetchSpy).at(-1)).components)).toContain(
+      "hb:thread:create:1",
     );
   });
 

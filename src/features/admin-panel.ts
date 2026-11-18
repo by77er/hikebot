@@ -267,7 +267,10 @@ function roundSection(state: AdminPanelState) {
   const { round, finished } = state;
   if (round === null) {
     const lines = finished
-      ? [`**Last hike:** ${hikeSummary(finished)}`, ...threadLines(state.thread)]
+      ? [
+          `**Last hike:** ${hikeSummary(finished)}`,
+          ...threadLines(state.thread),
+        ]
       : [];
     if (setupComplete(state.settings)) {
       lines.push("No hike is being planned. Start a location vote.");

@@ -20,11 +20,7 @@ import {
 } from "../discord/components";
 import { GuildConfig } from "../guild/config";
 import { adminOnly } from "../guild/permissions";
-import type {
-  ComponentHandler,
-  HandlerContext,
-  Router,
-} from "../guild/router";
+import type { ComponentHandler, HandlerContext, Router } from "../guild/router";
 import { PollStore, type PollView, type RoundView } from "../polls/store";
 import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
 import {
@@ -174,7 +170,10 @@ export const createHikeThreadStep: CloseStep = {
   name: "create the hike thread",
   run: async ({ round, guildId }, context) => {
     const store = new PollStore(context.storage);
-    if (round === null || !claimHikeThread(context.storage, round, store.now())) {
+    if (
+      round === null ||
+      !claimHikeThread(context.storage, round, store.now())
+    ) {
       return {};
     }
     const created = await createHikeThread(round, guildId, context);
