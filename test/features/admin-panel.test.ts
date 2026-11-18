@@ -782,6 +782,7 @@ function votingRound(poll: PollView): RoundView {
     dateOptionId: null,
     threadId: null,
     eventId: null,
+    dayOf: null,
     startedBy: OWNER,
     startedAt: 0,
     endedBy: null,

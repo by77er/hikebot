@@ -282,6 +282,7 @@ function round(poll: PollView | null) {
     dateOptionId: null,
     threadId: null,
     eventId: null,
+    dayOf: null,
     startedBy: OWNER,
     startedAt: 0,
     endedBy: null,

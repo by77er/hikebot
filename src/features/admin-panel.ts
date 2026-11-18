@@ -55,6 +55,11 @@ import {
   announcementStatus,
   type AnnouncementStatus,
 } from "./announcement-state";
+import {
+  hikeDayHours,
+  hikeDayStatus,
+  type HikeDayStatus,
+} from "./hike-day-state";
 import { hikeEventStatus, type HikeEventStatus } from "./hike-event-state";
 import { hikeThreadStatus, type HikeThreadStatus } from "./hike-thread-state";
 import {
@@ -73,6 +78,11 @@ export interface AdminPanelState {
   thread?: HikeThreadStatus | null;
   /** Where the finished round's scheduled event stands. */
   event?: HikeEventStatus | null;
+  /**
+   * Where the finished round's hike-day announcement stands and when it
+   * goes out; null once its hike is over without one.
+   */
+  hikeDay?: { status: HikeDayStatus; at: number } | null;
   /**
    * The announcements of the shown round's closed polls (the active
    * round's, or the finished one's) that are not known to be posted.
@@ -118,6 +128,8 @@ export const POLL_CONTROL_IDS = {
     customId("thread", "create", String(roundId)),
   createHikeEvent: (roundId: number) =>
     customId("event", "create", String(roundId)),
+  postHikeDay: (roundId: number) =>
+    customId("hike-day", "post", String(roundId)),
   announce: (pollId: number) => customId("poll", "announce", String(pollId)),
   postVoteMessage: (pollId: number) => customId("poll", "post", String(pollId)),
 } as const;
@@ -180,10 +192,28 @@ export function loadAdminPanelState(
       finished === null
         ? null
         : hikeEventStatus(storage, finished, now, settings.timezone),
+    hikeDay:
+      finished === null ? null : hikeDayState(storage, finished, now, settings),
     announcements: pollAnnouncements(storage, round ?? finished, now),
     voteMessage: open === null ? null : voteMessageStatus(storage, open, now),
     now,
   };
+}
+
+/**
+ * The finished round's hike-day announcement: posted, or else where it
+ * stands while its hike is not over.
+ */
+function hikeDayState(
+  storage: DurableObjectStorage,
+  finished: RoundView,
+  now: number,
+  settings: GuildSettings,
+): AdminPanelState["hikeDay"] {
+  const status = hikeDayStatus(storage, finished, now);
+  const { at, end } = hikeDayHours(finished, settings.timezone);
+  if (status.state !== "posted" && !(end > now)) return null;
+  return { status, at };
 }
 
 /** The announcements of the round's closed polls not known to be posted. */
@@ -266,6 +296,19 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
             button({
               custom_id: POLL_CONTROL_IDS.createHikeEvent(finished.id),
               label: "Create hike event",
+              style: ButtonStyle.Secondary,
+            }),
+          ]
+        : []),
+      // Only while the hike-day announcement failed or was cut off, and
+      // its hike is not over.
+      ...(finished &&
+      (state.hikeDay?.status.state === "failed" ||
+        state.hikeDay?.status.state === "unconfirmed")
+        ? [
+            button({
+              custom_id: POLL_CONTROL_IDS.postHikeDay(finished.id),
+              label: "Post hike-day announcement",
               style: ButtonStyle.Secondary,
             }),
           ]
@@ -388,6 +431,7 @@ function roundSection(state: AdminPanelState) {
           `**Last hike:** ${hikeSummary(finished)}`,
           ...threadLines(state.thread),
           ...eventLines(state.event),
+          ...hikeDayLines(state),
           ...announcementLines(state.announcements),
         ]
       : [];
@@ -513,6 +557,33 @@ function eventLines(event: HikeEventStatus | null | undefined): string[] {
     case "missing":
       return [
         "**Hike event:** not created. Click Create hike event to create it.",
+      ];
+    default:
+      return [];
+  }
+}
+
+/** Where the last hike's hike-day announcement stands, for its summary. */
+function hikeDayLines({ hikeDay, settings }: AdminPanelState): string[] {
+  const head = "**Hike-day announcement:**";
+  switch (hikeDay?.status.state) {
+    case "posted":
+      return [`${head} posted in <#${hikeDay.status.channelId}>.`];
+    case "planned": {
+      const when = `<t:${String(Math.floor(hikeDay.at / 1000))}:f>`;
+      return [
+        settings.announceChannelId === null
+          ? `${head} due ${when}, but no announcements channel is set, so it will not be posted. Pick one under Settings.`
+          : `${head} ${when} in <#${settings.announceChannelId}>.`,
+      ];
+    }
+    case "posting":
+      return [`${head} being posted.`];
+    case "failed":
+      return [`${head} not posted. ${hikeDay.status.reason}`];
+    case "unconfirmed":
+      return [
+        `${head} not confirmed: posting it was cut off, so it may or may not have been posted. Check the announcements channel, and click Post hike-day announcement only if it is missing.`,
       ];
     default:
       return [];

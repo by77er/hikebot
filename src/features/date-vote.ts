@@ -47,6 +47,7 @@ import {
   type RoundView,
 } from "../polls/store";
 import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
+import { planHikeDayStep } from "./hike-day";
 import { createHikeEventStep } from "./hike-event";
 import { createHikeThreadStep, whenLine } from "./hike-thread";
 import {
@@ -117,7 +118,7 @@ export const DATE_POLL: PollWording = {
       whenLine(date ?? null, timeZone),
     ];
   },
-  closeSteps: [createHikeThreadStep, createHikeEventStep],
+  closeSteps: [createHikeThreadStep, createHikeEventStep, planHikeDayStep],
 };
 
 /** The candidate dates an admin typed, or why they are refused. */

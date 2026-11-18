@@ -93,6 +93,14 @@ export const migrations: readonly Migration[] = [
     name: "0004_round_event",
     sql: "ALTER TABLE rounds ADD COLUMN event_id TEXT",
   },
+  {
+    // Where a completed round's hike-day announcement was posted, if it was.
+    name: "0005_round_day_of",
+    sql: `
+      ALTER TABLE rounds ADD COLUMN day_of_channel_id TEXT;
+      ALTER TABLE rounds ADD COLUMN day_of_message_id TEXT;
+    `,
+  },
 ];
 
 /**

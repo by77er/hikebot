@@ -4,6 +4,7 @@ import { PollStore } from "../polls/store";
 import { registerAdminPanel } from "./admin-panel";
 import { registerDateVote } from "./date-vote";
 import { hikeCommand } from "./hike";
+import { registerHikeDay } from "./hike-day";
 import { registerHikeEvent } from "./hike-event";
 import { registerHikeLog } from "./hike-log";
 import { registerHikeThread } from "./hike-thread";
@@ -31,6 +32,7 @@ export function registerFeatures(router: Router): Router {
   registerDateVote(router);
   registerHikeThread(router);
   registerHikeEvent(router);
+  registerHikeDay(router);
   registerHikeLog(router);
   return router;
 }
