@@ -42,6 +42,9 @@
     "DISCORD_API_BASE": "https://discord.com/api/v10",
     // The Worker's own origin, for absolute links; tests set an example one.
     "PUBLIC_URL": "https://hiking.bitcru.sh",
+    // Where web sign-in sends the browser to authorize; tests point it at the
+    // fake Discord API.
+    "DISCORD_OAUTH_AUTHORIZE_URL": "https://discord.com/oauth2/authorize",
   },
   // The deploy workflow sets them from GitHub Actions secrets; locally they come
   // from .dev.vars.

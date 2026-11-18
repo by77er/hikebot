@@ -1,6 +1,9 @@
 import type {
   APIAllowedMentions,
   RESTError,
+  RESTGetAPICurrentUserGuildsQuery,
+  RESTGetAPICurrentUserGuildsResult,
+  RESTGetAPICurrentUserResult,
   RESTGetAPIGuildChannelsResult,
   RESTGetAPIGuildMemberResult,
   RESTGetAPIGuildResult,
@@ -16,11 +19,58 @@ import type {
   RESTPostAPIGuildScheduledEventResult,
   RESTPostAPIWebhookWithTokenJSONBody,
   RESTPostAPIWebhookWithTokenWaitResult,
+  RESTPostOAuth2AccessTokenResult,
   RESTPutAPIApplicationCommandsJSONBody,
   RESTPutAPIApplicationCommandsResult,
 } from "discord-api-types/v10";
 
 export const DEFAULT_DISCORD_API_BASE = "https://discord.com/api/v10";
+
+/**
+ * Where web sign-in sends the browser to authorize, when the
+ * `DISCORD_OAUTH_AUTHORIZE_URL` var is empty. The token, revoke and user
+ * routes go through the API base like every other call.
+ */
+export const DEFAULT_DISCORD_OAUTH_AUTHORIZE_URL =
+  "https://discord.com/oauth2/authorize";
+
+/** The query of Discord's authorize address, as web sign-in sends it. */
+export interface OAuthAuthorizeQuery {
+  clientId: string;
+  scope: string;
+  redirectUri: string;
+  state: string;
+}
+
+/**
+ * The address that asks Discord to authorize the application for the
+ * signed-in Discord user (the authorization code grant), with
+ * `prompt=none`, so a user who authorized before goes straight back.
+ * https://discord.com/developers/docs/topics/oauth2#authorization-code-grant
+ */
+export function oauthAuthorizeUrl(
+  env: { DISCORD_OAUTH_AUTHORIZE_URL?: string },
+  query: OAuthAuthorizeQuery,
+): string {
+  const url = new URL(
+    env.DISCORD_OAUTH_AUTHORIZE_URL || DEFAULT_DISCORD_OAUTH_AUTHORIZE_URL,
+  );
+  url.search = new URLSearchParams({
+    response_type: "code",
+    client_id: query.clientId,
+    scope: query.scope,
+    redirect_uri: query.redirectUri,
+    state: query.state,
+    prompt: "none",
+  }).toString();
+  return url.href;
+}
+
+/** The application's OAuth2 client credentials. */
+export interface OAuthClient {
+  id: string;
+  secret: string;
+}
 
 /**
  * The link to a guild's scheduled event, which members open to see it and
@@ -99,8 +149,15 @@ interface Call {
   /** Path as reported in errors; defaults to `path`. */
   route?: string;
   body?: unknown;
+  /** A form body, sent as `application/x-www-form-urlencoded`. */
+  form?: Record<string, string>;
   /** Send the bot token. False for interaction webhook routes. */
   auth: boolean;
+  /**
+   * The `Authorization` value of an OAuth2 route (client credentials or a
+   * user's access token), in place of the bot token.
+   */
+  authorization?: string;
 }
 
 /** Builds a client from the Worker's environment. */
@@ -260,16 +317,101 @@ export class DiscordApi {
     });
   }
 
+  // OAuth2, for web sign-in: the authorization code grant. These routes
+  // carry the application's client credentials or a user's access token in
+  // place of the bot token, never in the path, so errors name no secret.
+  // https://discord.com/developers/docs/topics/oauth2#authorization-code-grant
+
+  /** Exchanges an authorization code for the user's access token. */
+  exchangeOAuthCode(
+    client: OAuthClient,
+    code: string,
+    redirectUri: string,
+  ): Promise<RESTPostOAuth2AccessTokenResult> {
+    return this.call({
+      method: "POST",
+      path: "/oauth2/token",
+      form: {
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+      },
+      auth: false,
+      authorization: basicAuth(client),
+    });
+  }
+
+  /** Revokes a user's access token, ending the application's access. */
+  async revokeOAuthToken(client: OAuthClient, token: string): Promise<void> {
+    await this.call({
+      method: "POST",
+      path: "/oauth2/token/revoke",
+      form: { token, token_type_hint: "access_token" },
+      auth: false,
+      authorization: basicAuth(client),
+    });
+  }
+
+  /** The user an access token belongs to (scope `identify`). */
+  getOAuthUser(accessToken: string): Promise<RESTGetAPICurrentUserResult> {
+    return this.call({
+      method: "GET",
+      path: "/users/@me",
+      auth: false,
+      authorization: `Bearer ${accessToken}`,
+    });
+  }
+
+  /**
+   * The servers of the user an access token belongs to (scope `guilds`):
+   * the first 200, which is as many as a user can join.
+   */
+  getOAuthUserGuilds(
+    accessToken: string,
+  ): Promise<RESTGetAPICurrentUserGuildsResult> {
+    return this.call({
+      method: "GET",
+      path: "/users/@me/guilds",
+      auth: false,
+      authorization: `Bearer ${accessToken}`,
+    });
+  }
+
+  /**
+   * One page of the servers the bot is in, in id order: up to `limit` (at
+   * most 200) after the id `after`.
+   */
+  getBotGuilds(
+    query: Pick<RESTGetAPICurrentUserGuildsQuery, "after" | "limit"> = {},
+  ): Promise<RESTGetAPICurrentUserGuildsResult> {
+    const params = new URLSearchParams();
+    if (query.after !== undefined) params.set("after", query.after);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    const search = params.size > 0 ? `?${params.toString()}` : "";
+    return this.call({
+      method: "GET",
+      path: `/users/@me/guilds${search}`,
+      route: "/users/@me/guilds",
+      auth: true,
+    });
+  }
+
   private async call<T>(call: Call): Promise<T> {
     const route = call.route ?? call.path;
     const headers: Record<string, string> = { "User-Agent": USER_AGENT };
     if (call.auth) headers.Authorization = `Bot ${this.token}`;
-    if (call.body !== undefined) headers["Content-Type"] = "application/json";
-    const init: RequestInit = {
-      method: call.method,
-      headers,
-      body: call.body === undefined ? undefined : JSON.stringify(call.body),
-    };
+    if (call.authorization !== undefined) {
+      headers.Authorization = call.authorization;
+    }
+    let body: string | undefined;
+    if (call.form !== undefined) {
+      headers["Content-Type"] = "application/x-www-form-urlencoded";
+      body = new URLSearchParams(call.form).toString();
+    } else if (call.body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(call.body);
+    }
+    const init: RequestInit = { method: call.method, headers, body };
 
     let retries = 0;
     let waitedMs = 0;
@@ -304,6 +446,11 @@ export class DiscordApi {
       );
     }
   }
+}
+
+/** HTTP Basic credentials, `client_id:client_secret`, for OAuth2 routes. */
+function basicAuth(client: OAuthClient): string {
+  return `Basic ${btoa(`${client.id}:${client.secret}`)}`;
 }
 
 function withoutPings<B extends { allowed_mentions?: unknown }>(body: B): B {
