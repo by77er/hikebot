@@ -155,6 +155,7 @@ interface ProbeSource {
   migrations: object[];
   assets?: { directory?: string; binding?: string };
   r2_buckets?: object[];
+  rules?: object[];
   vars: Record<string, string>;
   secrets?: object;
 }
@@ -189,6 +190,8 @@ async function writeProbeConfig(
       directory: resolve(dirname(configPath), config.assets.directory ?? "."),
     },
     r2_buckets: config.r2_buckets,
+    // Module rules, such as the map fonts imported as data.
+    rules: config.rules,
     vars: config.vars,
     secrets: config.secrets,
   };

@@ -6,7 +6,7 @@
  * not in every guild's object. Reach it through `mapPainter(env)`.
  */
 import { DurableObject } from "cloudflare:workers";
-import { PollStore } from "../polls/store";
+import { systemNow } from "../clock";
 import { mapPicture, type MapPicture, type MapPictureRequest } from "./picture";
 import { MapReader } from "./reader";
 
@@ -15,9 +15,7 @@ export class MapPainter extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.reader = new MapReader(env.MAPS, {
-      now: new PollStore(ctx.storage).now,
-    });
+    this.reader = new MapReader(env.MAPS, { now: systemNow });
   }
 
   /**
