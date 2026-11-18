@@ -374,6 +374,26 @@ describe("edits, follow-ups and threads are checked too", () => {
     );
   });
 
+  it("edits the component's message as the original response after a deferred update", async () => {
+    const created = await call(
+      "POST",
+      `/channels/${TEXT_CHANNEL}/messages`,
+      v2(text("Panel")),
+    );
+    const { id } = created.body as { id: string };
+    const token = "fake-test-deferred-update-token";
+    discord.recordInteractionResponse(
+      { token, guild_id: GUILD, channel_id: TEXT_CHANNEL, message: { id } },
+      { type: InteractionResponseType.DeferredMessageUpdate },
+    );
+    const original = `/webhooks/${APPLICATION_ID}/${token}/messages/@original`;
+    expect(
+      await call("PATCH", original, v2(text("Updated")), null),
+    ).toMatchObject({ status: 200 });
+    expect(messageText(discord.message(id) ?? {})).toBe("Updated");
+    expect(discord.originalResponse(token)?.id).toBe(id);
+  });
+
   it("holds webhook requests for an interaction until its response is recorded", async () => {
     const token = "fake-test-sending-token";
     discord.sendingInteraction(token);

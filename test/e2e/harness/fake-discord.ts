@@ -291,11 +291,17 @@ export class FakeDiscord {
         record.originalId = message.id;
         break;
       }
+      case 6:
       case 7: {
+        // After an update, deferred or not, the interaction's original
+        // response is the message its component (or modal) was on.
         const target = interaction.message
           ? this.messages.get(interaction.message.id)
           : undefined;
-        if (target) this.applyEdit(target, data);
+        if (target) {
+          record.originalId = target.id;
+          if (response.type === 7) this.applyEdit(target, data);
+        }
         break;
       }
       default:
