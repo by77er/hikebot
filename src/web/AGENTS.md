@@ -377,10 +377,13 @@ trail from a form on `/trails`.
    its `name` (lower-case words joined by hyphens; it names the PNG files),
    the `path` to open, the `status` it must answer with, the `seed` that
    sets up the data it shows, and the `user` signed in: `null` for a
-   signed-out visitor. The script opens pages signed out only and refuses
-   any other `user`; a page that needs a member signed in needs signing in
-   added to `capture` in `test/screenshots/take.ts` first. Add one entry per
-   state worth seeing, such as `hike-empty` and `hike-many-locations`.
+   signed-out visitor, or the id of the Discord user the seed adds with
+   `e2e.discord.addUser` (such as `MEMBER_ID` in
+   `test/screenshots/seeds.ts`), whom the script signs in through the fake
+   Discord API first. For the page a member sees after pressing Cancel at
+   Discord, give `"path": "/auth/callback"` and `"cancel": true`. Add one
+   entry per state worth seeing, such as `servers`, `servers-many` and
+   `servers-none`.
 
    ```json
    {
