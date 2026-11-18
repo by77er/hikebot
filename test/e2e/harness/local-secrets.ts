@@ -34,8 +34,8 @@ type DiscordEnv = Record<keyof typeof OTHER_SECRETS, string>;
  * Registers hooks that make a checkout in a temporary directory, with the
  * repository's `wrangler.jsonc`, links to its `src/`, `public/` and
  * `node_modules/`, and `secretsFile` holding OTHER_SECRETS, and that set the
- * same values in the environment. Returns the directory, for `useE2E({ root })`; call it
- * before `useE2E`, so its hooks run first.
+ * same values in the environment. Returns the directory, for
+ * `useE2E({ root })`; call it before `useE2E`, so its hooks run first.
  */
 export function useCheckoutWithOtherSecrets(secretsFile: string): () => string {
   let dir: string | undefined;

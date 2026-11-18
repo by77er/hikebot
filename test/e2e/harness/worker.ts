@@ -187,9 +187,10 @@ interface ProbeSource {
 /**
  * Writes the Worker config at `configPath` with the probe entry point as
  * `main` to `dir`, and returns the new file's path. The static assets
- * directory is made absolute, so the probe serves the checkout's `public/`. The probe runs from a
- * file rather than an inline config because only a file-based worker takes
- * the harness's `secrets`; an inline config's vars lose to `.dev.vars`.
+ * directory is made absolute, so the probe serves the checkout's `public/`.
+ * The probe runs from a file rather than an inline config because only a
+ * file-based worker takes the harness's `secrets`; an inline config's vars
+ * lose to `.dev.vars`.
  */
 async function writeProbeConfig(
   configPath: string,
