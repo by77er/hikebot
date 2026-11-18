@@ -1,0 +1,22 @@
+{
+  "build": "20261118",
+  "basemapVersion": "4.15.2",
+  "schemaVersion": "4.15.2",
+  "source": "Protomaps basemap build 20261118, extracted with go-pmtiles 1.31.2",
+  "license": "OpenStreetMap data under the ODbL 1.0 (https://www.openstreetmap.org/copyright); Natural Earth (public domain) at low zooms",
+  "attribution": "© OpenStreetMap contributors",
+  "name": "Mount Si, Washington",
+  "bbox": [
+    -121.8,
+    47.45,
+    -121.65,
+    47.55
+  ],
+  "minzoom": 10,
+  "maxzoom": 14,
+  "bytes": 616540,
+  "point": {
+    "lon": -121.7232,
+    "lat": 47.4881
+  }
+}
