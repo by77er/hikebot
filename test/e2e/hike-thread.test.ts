@@ -46,7 +46,10 @@ function starter(threadId: string): FakeMessage {
 }
 
 async function retry(g: TestGuild, panel: FakeMessage): Promise<void> {
-  await g.owner.click(panel, idStarting(play.shown(panel), "hb:thread:create:"));
+  await g.owner.click(
+    panel,
+    idStarting(play.shown(panel), "hb:thread:create:"),
+  );
 }
 
 describe("the hike thread", () => {
@@ -77,9 +80,7 @@ describe("the hike thread", () => {
     expect(messageText(play.shown(panel))).toContain(
       `**Hike thread:** <#${thread?.id ?? ""}>`,
     );
-    expect(buttonLabels(play.shown(panel))).not.toContain(
-      "Create hike thread",
-    );
+    expect(buttonLabels(play.shown(panel))).not.toContain("Create hike thread");
   });
 
   it("is retried from the panel after Discord refused it, once the permission is back: one thread, one announcement", async () => {
@@ -106,7 +107,9 @@ describe("the hike thread", () => {
 
     // Refresh keeps the reason and the button.
     await g.owner.click(panel, ROUND_IDS.refresh);
-    expect(messageText(play.shown(panel))).toContain("**Hike thread:** not created.");
+    expect(messageText(play.shown(panel))).toContain(
+      "**Hike thread:** not created.",
+    );
     expect(buttonLabels(play.shown(panel))).toContain("Create hike thread");
 
     e2e.discord.clearChannelFailure(g.channels.forum);
@@ -203,10 +206,7 @@ describe("the hike thread", () => {
     e2e.discord.clearChannelFailure(g.channels.forum);
 
     const id = idStarting(play.shown(panel), "hb:thread:create:");
-    await Promise.all([
-      g.owner.click(panel, id),
-      g.owner.click(panel, id),
-    ]);
+    await Promise.all([g.owner.click(panel, id), g.owner.click(panel, id)]);
     await eventually(() => {
       expect(e2e.discord.threads(g.channels.forum)).toHaveLength(1);
     });
@@ -215,9 +215,7 @@ describe("the hike thread", () => {
     expect(messageText(play.shown(panel))).toContain(
       `**Hike thread:** <#${thread?.id ?? ""}>`,
     );
-    expect(buttonLabels(play.shown(panel))).not.toContain(
-      "Create hike thread",
-    );
+    expect(buttonLabels(play.shown(panel))).not.toContain("Create hike thread");
     expect(
       e2e.discord.requests.filter(
         (r) => r.method === "POST" && r.path.endsWith("/threads"),
@@ -238,16 +236,12 @@ describe("the hike thread", () => {
     expect(buttonLabels(stale)).toContain("Create hike thread");
 
     await play.startLocationVote(g, panel, "Summit Path");
-    expect(buttonLabels(play.shown(panel))).not.toContain(
-      "Create hike thread",
-    );
+    expect(buttonLabels(play.shown(panel))).not.toContain("Create hike thread");
     await retry(g, stale);
     expect(messageText(play.shown(stale))).toContain(
       "That hike is no longer the last one, so its thread is not created from here.",
     );
-    expect(buttonLabels(play.shown(stale))).not.toContain(
-      "Create hike thread",
-    );
+    expect(buttonLabels(play.shown(stale))).not.toContain("Create hike thread");
     expect(e2e.discord.threads(g.channels.forum)).toEqual([]);
   });
 
@@ -264,5 +258,4 @@ describe("the hike thread", () => {
     );
     expect(e2e.discord.threads(g.channels.forum)).toEqual([]);
   });
-});
 });
