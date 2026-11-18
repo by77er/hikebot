@@ -1,6 +1,15 @@
-import type { Router } from "../guild/router";
+import type { HandlerContext, Router } from "../guild/router";
 import { registerAdminPanel } from "./admin-panel";
 import { hikeCommand } from "./hike";
+import { LOCATION_POLL, registerLocationVote } from "./location-vote";
+import {
+  refreshPollMessages,
+  registerPollUi,
+  type PollWordings,
+} from "./poll-ui";
+
+/** The poll kinds the shared poll controls serve. */
+const POLL_KINDS: PollWordings = { location: LOCATION_POLL };
 
 /**
  * Registers every feature's handlers. A feature keeps its handlers in its own
@@ -16,5 +25,12 @@ import { hikeCommand } from "./hike";
 export function registerFeatures(router: Router): Router {
   router.command("hike", hikeCommand);
   registerAdminPanel(router);
+  registerPollUi(router, POLL_KINDS);
+  registerLocationVote(router);
   return router;
+}
+
+/** The guild object's alarm: refreshes the poll messages marked for it. */
+export function runAlarm(context: HandlerContext): Promise<void> {
+  return refreshPollMessages(context, POLL_KINDS);
 }

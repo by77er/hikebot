@@ -51,3 +51,13 @@ export function pickWinner(
     tieBroken: topOptionIds.length > 1,
   };
 }
+
+/**
+ * The options ordered for display: most votes first, ties in the order the
+ * options were added (lower id first). Does not change `options`.
+ */
+export function rankOptions<T extends { id: number; votes: number }>(
+  options: readonly T[],
+): T[] {
+  return [...options].sort((a, b) => b.votes - a.votes || a.id - b.id);
+}
