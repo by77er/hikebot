@@ -206,8 +206,9 @@ Run `npm test` for the whole suite before opening a pull request.
    pgrep -x workerd || echo "no workerd left"
    ```
 
-   If it prints a process id, stop it with `pkill -x workerd` and find the
-   test file whose `afterAll` did not run.
+   If it prints a process id, stop it with `pkill -x workerd`. A run that was
+   killed with `SIGKILL` leaves its `workerd` behind; otherwise find the test
+   file whose `afterAll` did not run.
 
 ## Write an end-to-end scenario
 
