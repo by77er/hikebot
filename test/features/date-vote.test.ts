@@ -281,6 +281,7 @@ function round(poll: PollView | null) {
     locationOptionId: 1,
     dateOptionId: null,
     threadId: null,
+    eventId: null,
     startedBy: OWNER,
     startedAt: 0,
     endedBy: null,
@@ -731,16 +732,23 @@ describe("closing the date vote", () => {
       await result.followUp?.();
     });
     const sent = requests(fetchSpy);
+    // Every stubbed answer has id 1: the thread, its first message and the
+    // event.
     expect(sent.map((r) => `${r.method} ${new URL(r.url).pathname}`)).toEqual([
       `PATCH /api/v10/channels/${TEXT}/messages/${POLL_MESSAGE}`,
       `POST /api/v10/channels/${FORUM}/threads`,
+      `POST /api/v10/guilds/${GUILD}/scheduled-events`,
+      "PATCH /api/v10/channels/1/messages/1",
       `POST /api/v10/channels/${NEWS}/messages`,
       "PATCH /api/v10/webhooks/100/interaction-token/messages/@original",
     ]);
-    const [edit, , announcement, panel] = sent.map((r) =>
+    const [edit, , , , announcement, panel] = sent.map((r) =>
       text(bodyOf(r).components),
     );
-    expect(announcement?.split("\n").at(-1)).toBe("**Hike thread:** <#1>");
+    expect(announcement?.split("\n").slice(-2)).toEqual([
+      "**Hike thread:** <#1>",
+      `**Hike event:** https://discord.com/events/${GUILD}/1`,
+    ]);
     expect(edit).toContain("🏆 **Sat, 15 Jun 2030 · 11:00** won with 1 vote.");
     expect(announcement).toContain("**Where:** Ridge Trail");
     // 11:00 in Los Angeles on 15 June 2030 is 18:00 UTC.
@@ -757,8 +765,8 @@ describe("closing the date vote", () => {
       "**Last hike:** **Ridge Trail** on **Sat, 15 Jun 2030 · 11:00**.",
     );
     expect(panel).toContain("**Hike thread:** <#1>");
-    expect(ids(bodyOf(sent[3]).components)).toContain("hb:location:start");
-    for (const r of sent) {
+    expect(ids(bodyOf(sent[5]).components)).toContain("hb:location:start");
+    for (const r of sent.filter((r) => !r.url.endsWith("/scheduled-events"))) {
       // A forum thread's message is nested in its body.
       expect(
         bodyOf(r).allowed_mentions ?? bodyOf(r).message?.allowed_mentions,
@@ -781,13 +789,19 @@ describe("closing the date vote", () => {
         new PollStore(state.storage, { random: sequence(1) }),
       ).followUp?.();
     });
-    const [, thread, announcement] = requests(fetchSpy).map((r) =>
-      text(bodyOf(r).components ?? bodyOf(r).message?.components),
+    const sent = requests(fetchSpy);
+    const [, thread, event, , announcement] = sent.map((r) =>
+      text(bodyOf(r).components ?? bodyOf(r).message?.components ?? []),
     );
+    expect(event).toBe("");
     // 11:00 in Berlin on 15 June 2030 is 09:00 UTC.
     const when = "**When:** Sat, 15 Jun 2030 · 11:00 (<t:1907744400:R>)";
     expect(announcement).toContain(when);
     expect(thread).toContain(when);
+    expect(JSON.parse(String(sent[2]?.body))).toMatchObject({
+      scheduled_start_time: "2030-06-15T09:00:00.000Z",
+      scheduled_end_time: "2030-06-15T13:00:00.000Z",
+    });
   });
 
   it("keeps the result and names each step Discord refused", async () => {

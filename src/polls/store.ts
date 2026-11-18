@@ -69,6 +69,8 @@ export interface RoundView {
   locationOptionId: number | null;
   dateOptionId: number | null;
   threadId: string | null;
+  /** The hike's Discord scheduled event, once created. */
+  eventId: string | null;
   startedBy: string;
   startedAt: number;
   endedBy: string | null;
@@ -90,6 +92,7 @@ export interface HikeView {
   /** `value` is the normalized `YYYY-MM-DD[ HH:MM]`; `label` as shown. */
   date: { value: string; label: string };
   threadId: string | null;
+  eventId: string | null;
   /** When the date vote closed and the round completed. */
   completedAt: number;
   locationPoll: MessageLocation;
@@ -138,6 +141,7 @@ type RoundRow = {
   location_option_id: number | null;
   date_option_id: number | null;
   thread_id: string | null;
+  event_id: string | null;
   started_by: string;
   started_at: number;
   ended_by: string | null;
@@ -174,6 +178,7 @@ type OptionRow = {
 type HikeRow = {
   id: number;
   thread_id: string | null;
+  event_id: string | null;
   ended_at: number;
   location_label: string;
   location_details: string | null;
@@ -583,7 +588,7 @@ export class PollStore {
   listHikes(page: { limit: number; offset: number }): HikeView[] {
     return this.sql
       .exec<HikeRow>(
-        `SELECT r.id, r.thread_id, r.ended_at,
+        `SELECT r.id, r.thread_id, r.event_id, r.ended_at,
            lo.label AS location_label, lo.details AS location_details,
            lo.proposed_by AS location_proposed_by,
            dt.date_value, dt.label AS date_label,
@@ -605,6 +610,7 @@ export class PollStore {
         },
         date: { value: row.date_value, label: row.date_label },
         threadId: row.thread_id,
+        eventId: row.event_id,
         completedAt: row.ended_at,
         locationPoll: {
           channelId: row.location_channel_id,
@@ -835,6 +841,15 @@ export class PollStore {
     );
   }
 
+  setRoundEvent(roundId: number, eventId: string): void {
+    this.roundRow(roundId);
+    this.sql.exec(
+      "UPDATE rounds SET event_id = ? WHERE id = ?",
+      eventId,
+      roundId,
+    );
+  }
+
   private insertId(query: string, ...bindings: unknown[]): number {
     return this.sql.exec<{ id: number }>(query, ...bindings).one().id;
   }
@@ -1005,6 +1020,7 @@ export class PollStore {
       locationOptionId: row.location_option_id,
       dateOptionId: row.date_option_id,
       threadId: row.thread_id,
+      eventId: row.event_id,
       startedBy: row.started_by,
       startedAt: row.started_at,
       endedBy: row.ended_by,

@@ -252,18 +252,22 @@ describe("renderHikeLog", () => {
     },
     date: { value: "2030-12-28 09:00", label: "Wed, 28 Dec 2030 · 09:00" },
     threadId: "60000000000000000000",
+    eventId: "70000000000000000000",
     completedAt: 1_900_000_000_000,
     locationPoll: { channelId: "300", messageId: "701" },
     datePoll: { channelId: "300", messageId: "702" },
   });
 
   it("stays within Discord's limits with ten hikes at the longest label and details", () => {
-    const components = renderHikeLog({
-      hikes: Array.from({ length: HIKES_PER_PAGE }, (_, i) => longest(i)),
-      page: 500,
-      pages: 1000,
-      total: 9999,
-    });
+    const components = renderHikeLog(
+      {
+        hikes: Array.from({ length: HIKES_PER_PAGE }, (_, i) => longest(i)),
+        page: 500,
+        pages: 1000,
+        total: 9999,
+      },
+      "2".repeat(20),
+    );
     const all = nodes(components);
     expect(all.length).toBeLessThanOrEqual(MAX_MESSAGE_COMPONENTS);
     const length = all.reduce((sum, c) => sum + (c.content?.length ?? 0), 0);

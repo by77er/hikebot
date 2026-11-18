@@ -864,6 +864,20 @@ describe("message and thread ids", () => {
       }, "round_not_found");
     });
   });
+
+  it("records the round's scheduled event, which a new round starts without", async () => {
+    await withStore((store) => {
+      const id = completeRound(store, "Ridge", "2030-06-15");
+      expect(store.getRound(id)?.eventId).toBeNull();
+      store.setRoundEvent(id, "e1");
+      expect(store.getRound(id)?.eventId).toBe("e1");
+      expect(store.getLastRound()?.eventId).toBe("e1");
+      expect(store.startRound("u-admin").eventId).toBeNull();
+      expectCode(() => {
+        store.setRoundEvent(999, "e");
+      }, "round_not_found");
+    });
+  });
 });
 
 describe("transactions", () => {
@@ -910,10 +924,11 @@ describe("transactions", () => {
 });
 
 describe("listHikes", () => {
-  it("returns only completed rounds, with their location, date, thread and polls", async () => {
+  it("returns only completed rounds, with their location, date, thread, event and polls", async () => {
     const { hikes, total, rounds } = await withStore((store, storage) => {
       const id = completeRound(store, "Ridge", "2030-06-15 09:00", "Steep");
       store.setRoundThread(id, "600000000000000001");
+      store.setRoundEvent(id, "700000000000000001");
       const round = store.getRound(id);
       store.setPollMessage(round?.locationPoll?.id ?? 0, "300", "701");
       store.setPollMessage(round?.datePoll?.id ?? 0, "300", "702");
@@ -938,6 +953,7 @@ describe("listHikes", () => {
         },
         date: { value: "2030-06-15 09:00", label: "Sat, 15 Jun 2030 · 09:00" },
         threadId: "600000000000000001",
+        eventId: "700000000000000001",
         completedAt: expect.any(Number) as number,
         locationPoll: { channelId: "300", messageId: "701" },
         datePoll: { channelId: "300", messageId: "702" },
@@ -959,6 +975,7 @@ describe("listHikes", () => {
     expect(hike?.completedAt).toBe(round?.endedAt);
     expect(hike?.completedAt).toBe(round?.datePoll?.closedAt);
     expect(hike?.threadId).toBeNull();
+    expect(hike?.eventId).toBeNull();
     expect(hike?.location.details).toBeNull();
     expect(hike?.locationPoll).toEqual({ channelId: null, messageId: null });
     expect(hike?.datePoll).toEqual({ channelId: null, messageId: null });

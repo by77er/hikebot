@@ -1,7 +1,8 @@
 /**
  * A fake Discord REST API on a local HTTP port. The Worker under test reaches
  * it through DISCORD_API_BASE. It implements the routes the bot uses, keeps
- * guilds, channels, messages, threads and interaction responses in memory so
+ * guilds, channels, messages, threads, scheduled events and interaction
+ * responses in memory so
  * tests can assert on what Discord would now show, and refuses what Discord
  * refuses: a missing bot token (401) and any payload that breaks a rule in
  * `validate.ts` (400 naming the rule).
@@ -14,10 +15,13 @@ import {
 import type { AddressInfo } from "node:net";
 import { ChannelType, MessageFlags } from "discord-api-types/v10";
 import {
+  RULES,
   describeViolations,
   validateCommands,
   validateForumThread,
   validateMessage,
+  validateScheduledEvent,
+  type Rule,
   type Violation,
 } from "./validate";
 
@@ -50,6 +54,27 @@ export interface FakeChannel {
   name: string;
   parent_id?: string;
 }
+
+/** A guild scheduled event as the fake stores and returns it. */
+export interface FakeScheduledEvent {
+  id: string;
+  guild_id: string;
+  channel_id: string | null;
+  creator_id: string;
+  name: string;
+  description: string | null;
+  scheduled_start_time: string;
+  scheduled_end_time: string | null;
+  privacy_level: number;
+  /** 1, SCHEDULED. */
+  status: number;
+  entity_type: number;
+  entity_id: string | null;
+  entity_metadata: { location?: string } | null;
+}
+
+/** Discord allows this many SCHEDULED or ACTIVE events per guild. */
+export const MAX_SCHEDULED_EVENTS = 100;
 
 /** A message as the fake stores it, with the fields tests read. */
 export interface FakeMessage {
@@ -122,6 +147,9 @@ export class FakeDiscord {
   private readonly guilds = new Map<string, FakeGuild>();
   private readonly channels = new Map<string, FakeChannel>();
   private readonly messages = new Map<string, FakeMessage>();
+  private readonly events = new Map<string, FakeScheduledEvent[]>();
+  /** Guilds where the bot lacks Create Events. */
+  private readonly withoutCreateEvents = new Set<string>();
   private readonly interactions = new Map<string, InteractionRecord>();
   /** Interactions on their way to the Worker, by token; see `sendingInteraction`. */
   private readonly sending = new Map<string, () => void>();
@@ -202,6 +230,39 @@ export class FakeDiscord {
 
   clearChannelFailure(channelId: string): void {
     this.failures.delete(channelId);
+  }
+
+  /**
+   * Takes the Create Events permission from the bot in the guild, so
+   * creating a scheduled event fails with 403 Missing Permissions.
+   */
+  revokeCreateEvents(guildId: string): void {
+    this.withoutCreateEvents.add(guildId);
+  }
+
+  grantCreateEvents(guildId: string): void {
+    this.withoutCreateEvents.delete(guildId);
+  }
+
+  /**
+   * Adds `count` scheduled events to the guild as if members had made
+   * them, for example to reach Discord's limit of 100.
+   */
+  seedScheduledEvents(guildId: string, count: number): void {
+    const events = this.events.get(guildId) ?? [];
+    for (let i = 0; i < count; i++) {
+      events.push(
+        scheduledEvent(guildId, "400000000000000999", {
+          name: `Event ${String(events.length + 1)}`,
+          privacy_level: 2,
+          scheduled_start_time: "2030-01-01T10:00:00.000Z",
+          scheduled_end_time: "2030-01-01T12:00:00.000Z",
+          entity_type: 3,
+          entity_metadata: { location: "Somewhere" },
+        }),
+      );
+    }
+    this.events.set(guildId, events);
   }
 
   /**
@@ -350,6 +411,11 @@ export class FakeDiscord {
 
   message(id: string): FakeMessage | undefined {
     return this.messages.get(id);
+  }
+
+  /** The guild's scheduled events, oldest first. */
+  scheduledEvents(guildId: string): FakeScheduledEvent[] {
+    return [...(this.events.get(guildId) ?? [])];
   }
 
   /** Threads started in a forum channel, oldest first. */
@@ -571,6 +637,10 @@ export class FakeDiscord {
     if (match && method === "POST") {
       return this.startForumThread(match[1] ?? "", body);
     }
+    match = /^\/guilds\/([^/]+)\/scheduled-events$/.exec(path);
+    if (match && method === "POST") {
+      return this.createScheduledEvent(match[1] ?? "", body);
+    }
     match = /^\/guilds\/([^/]+)$/.exec(path);
     if (match && method === "GET") {
       const guild = this.guilds.get(match[1] ?? "");
@@ -663,6 +733,39 @@ export class FakeDiscord {
     };
   }
 
+  private createScheduledEvent(guildId: string, body: unknown): Reply {
+    if (!this.guilds.has(guildId)) {
+      return discordError(404, 10004, "Unknown Guild");
+    }
+    if (this.withoutCreateEvents.has(guildId)) {
+      return refusal(
+        403,
+        50013,
+        "Missing Permissions",
+        RULES.createEventsPermission,
+      );
+    }
+    const violations = validateScheduledEvent(body);
+    if (violations.length > 0) return invalid(violations);
+    const events = this.events.get(guildId) ?? [];
+    if (events.length >= MAX_SCHEDULED_EVENTS) {
+      return refusal(
+        400,
+        30038,
+        "Maximum number of uncompleted guild scheduled events reached (100)",
+        RULES.maxScheduledEvents,
+      );
+    }
+    const event = scheduledEvent(
+      guildId,
+      this.applicationId,
+      body as Record<string, unknown>,
+    );
+    events.push(event);
+    this.events.set(guildId, events);
+    return { status: 200, body: event };
+  }
+
   private editOriginal(
     applicationId: string,
     token: string,
@@ -750,6 +853,45 @@ interface Reply {
 
 function discordError(status: number, code: number, message: string): Reply {
   return { status, body: { message, code } };
+}
+
+/**
+ * A refusal Discord makes in a state a scenario sets up on purpose, such as
+ * a missing permission; it names the rule but is not counted as unexpected.
+ */
+function refusal(
+  status: number,
+  code: number,
+  message: string,
+  rule: Rule,
+): Reply {
+  return { status, body: { message, code, rule: rule.id, docs: rule.docs } };
+}
+
+function scheduledEvent(
+  guildId: string,
+  creatorId: string,
+  body: Record<string, unknown>,
+): FakeScheduledEvent {
+  const metadata = body.entity_metadata as { location?: string } | undefined;
+  return {
+    id: snowflake(),
+    guild_id: guildId,
+    channel_id: typeof body.channel_id === "string" ? body.channel_id : null,
+    creator_id: creatorId,
+    name: String(body.name),
+    description: typeof body.description === "string" ? body.description : null,
+    scheduled_start_time: String(body.scheduled_start_time),
+    scheduled_end_time:
+      typeof body.scheduled_end_time === "string"
+        ? body.scheduled_end_time
+        : null,
+    privacy_level: Number(body.privacy_level),
+    status: 1,
+    entity_type: Number(body.entity_type),
+    entity_id: null,
+    entity_metadata: metadata ?? null,
+  };
 }
 
 function notFound(detail: string): Reply {

@@ -14,6 +14,7 @@ import {
   textDisplay,
   update,
 } from "../discord/components";
+import { eventUrl } from "../discord/api";
 import type { CommandHandler, ComponentHandler, Router } from "../guild/router";
 import { PollStore, type HikeView } from "../polls/store";
 import { shorten } from "./poll-ui";
@@ -23,10 +24,10 @@ export const HIKES_PER_PAGE = 10;
 
 /**
  * The longest a hike's details are shown in the log. With ten hikes at the
- * longest label and details, the page stays well within Discord's 4000
- * characters.
+ * longest label and details, each with a thread and an event, the page
+ * stays within Discord's 4000 characters.
  */
-export const LOG_DETAILS_CAP = 200;
+export const LOG_DETAILS_CAP = 140;
 
 export const NO_HIKES_MESSAGE =
   "No hikes yet. The first one appears here when a date vote closes.";
@@ -70,10 +71,14 @@ export function loadHikeLog(
 
 /**
  * The log message: the heading and count, then one entry per hike, newest
- * first (date, location, shortened details, thread), and while there is
- * more than one page, Newer and Older buttons.
+ * first (date, location, shortened details, thread and the link to the
+ * event in `guildId`), and while there is more than one page, Newer and
+ * Older buttons.
  */
-export function renderHikeLog(log: HikeLogPage): APIMessageTopLevelComponent[] {
+export function renderHikeLog(
+  log: HikeLogPage,
+  guildId: string,
+): APIMessageTopLevelComponent[] {
   const count = log.total === 1 ? "1 hike" : `${String(log.total)} hikes`;
   const head = [
     "## Hike log",
@@ -84,7 +89,9 @@ export function renderHikeLog(log: HikeLogPage): APIMessageTopLevelComponent[] {
   const body: APIComponentInContainer[] = [textDisplay(head.join("\n"))];
   body.push(separator());
   if (log.hikes.length === 0) body.push(textDisplay(NO_HIKES_MESSAGE));
-  for (const hike of log.hikes) body.push(textDisplay(hikeEntry(hike)));
+  for (const hike of log.hikes) {
+    body.push(textDisplay(hikeEntry(hike, guildId)));
+  }
   if (log.pages > 1) {
     body.push(separator());
     body.push(
@@ -107,25 +114,38 @@ export function renderHikeLog(log: HikeLogPage): APIMessageTopLevelComponent[] {
   return [container(body)];
 }
 
-function hikeEntry(hike: HikeView): string {
+function hikeEntry(hike: HikeView, guildId: string): string {
   const lines = [`${hike.date.label} · **${hike.location.label}**`];
   if (hike.location.details !== null) {
     lines.push(shorten(hike.location.details, LOG_DETAILS_CAP));
   }
-  if (hike.threadId !== null) lines.push(`Thread: <#${hike.threadId}>`);
+  const links = [
+    ...(hike.threadId === null ? [] : [`Thread: <#${hike.threadId}>`]),
+    ...(hike.eventId === null
+      ? []
+      : [`[Event](${eventUrl(guildId, hike.eventId)})`]),
+  ];
+  if (links.length > 0) lines.push(links.join(" · "));
   return lines.join("\n");
 }
 
 /** `/hike log`: the first page of the log, to any member, ephemeral. */
-export const showHikeLog: CommandHandler = (_interaction, context) => ({
-  response: ephemeralReply(renderHikeLog(loadHikeLog(context.storage, 1))),
+export const showHikeLog: CommandHandler = (interaction, context) => ({
+  response: ephemeralReply(
+    renderHikeLog(loadHikeLog(context.storage, 1), interaction.guild_id ?? ""),
+  ),
 });
 
 /** Newer and Older: redraws the log message at the page in the custom_id. */
 const turnPage: ComponentHandler = (interaction, context) => {
   const page = Number(parseCustomId(interaction.data.custom_id)?.arg);
   return {
-    response: update(renderHikeLog(loadHikeLog(context.storage, page))),
+    response: update(
+      renderHikeLog(
+        loadHikeLog(context.storage, page),
+        interaction.guild_id ?? "",
+      ),
+    ),
   };
 };
 

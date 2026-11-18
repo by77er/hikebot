@@ -88,6 +88,11 @@ export const migrations: readonly Migration[] = [
     name: "0003_guild_timezone",
     sql: "ALTER TABLE guild_settings ADD COLUMN timezone TEXT",
   },
+  {
+    // The Discord scheduled event of a completed round's hike, if created.
+    name: "0004_round_event",
+    sql: "ALTER TABLE rounds ADD COLUMN event_id TEXT",
+  },
 ];
 
 /**

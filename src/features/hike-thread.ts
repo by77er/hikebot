@@ -10,7 +10,7 @@ import type {
   APIMessageComponentInteraction,
   APIMessageTopLevelComponent,
 } from "discord-api-types/v10";
-import { discordApi } from "../discord/api";
+import { discordApi, eventUrl } from "../discord/api";
 import {
   container,
   messageBody,
@@ -118,7 +118,8 @@ function resultLine(
 /**
  * The thread's first message: the location and its details, who proposed
  * it (a mention that pings no one), the date with its start in the guild's
- * time zone as a relative timestamp, and the result of both votes
+ * time zone as a relative timestamp, the link to the hike's scheduled
+ * event once it exists, and the result of both votes
  * with links to their messages. Location labels (80) and details (300) are
  * bounded, so it stays far within 40 components and 4000 characters.
  */
@@ -133,6 +134,9 @@ export function renderThreadMessage(
   if (location?.details) head.push(location.details);
   if (location) head.push(`Proposed by <@${location.proposedBy}>`);
   head.push(whenLine(date, timeZone));
+  if (round.eventId !== null) {
+    head.push(`**Hike event:** ${eventUrl(guildId, round.eventId)}`);
+  }
   return [
     container([
       textDisplay(head.join("\n")),
