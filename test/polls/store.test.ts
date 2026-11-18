@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { MAX_OPTIONS, type PollStore } from "../../src/polls/store";
-import { count, expectCode, locations, sequence, withStore } from "./helpers";
+import {
+  clock,
+  completeRound,
+  count,
+  expectCode,
+  locations,
+  sequence,
+  withStore,
+} from "./helpers";
 
 /** A round whose location poll is closed with `Ridge` as the winner. */
 function decidedRound(store: PollStore) {
@@ -651,5 +659,116 @@ describe("transactions", () => {
       storage.sql.exec("DROP TRIGGER fail_vote");
       expect(store.getPoll(pollId, "u1")?.viewerVotes).toEqual([a]);
     });
+  });
+});
+
+describe("listHikes", () => {
+  it("returns only completed rounds, with their location, date, thread and polls", async () => {
+    const { hikes, total, rounds } = await withStore((store, storage) => {
+      const id = completeRound(store, "Ridge", "2030-06-15 09:00", "Steep");
+      store.setRoundThread(id, "600000000000000001");
+      const round = store.getRound(id);
+      store.setPollMessage(round?.locationPoll?.id ?? 0, "300", "701");
+      store.setPollMessage(round?.datePoll?.id ?? 0, "300", "702");
+      const cancelled = store.startRound("u-admin", locations("Lake"));
+      store.cancelRound(cancelled.id, "u-admin");
+      store.startRound("u-admin", locations("Active"));
+      return {
+        hikes: store.listHikes({ limit: 10, offset: 0 }),
+        total: store.countHikes(),
+        rounds: count(storage, "rounds"),
+      };
+    });
+    expect(rounds).toBe(3);
+    expect(total).toBe(1);
+    expect(hikes).toEqual([
+      {
+        roundId: 1,
+        location: {
+          label: "Ridge",
+          details: "Steep",
+          proposedBy: "u-proposer",
+        },
+        date: { value: "2030-06-15 09:00", label: "Sat, 15 Jun 2030 · 09:00" },
+        threadId: "600000000000000001",
+        completedAt: expect.any(Number) as number,
+        locationPoll: { channelId: "300", messageId: "701" },
+        datePoll: { channelId: "300", messageId: "702" },
+      },
+    ]);
+  });
+
+  it("records when the round completed and leaves unposted polls null", async () => {
+    const { hike, round } = await withStore(
+      (store) => {
+        const id = completeRound(store, "Ridge", "2030-06-15");
+        return {
+          hike: store.listHikes({ limit: 1, offset: 0 })[0],
+          round: store.getRound(id),
+        };
+      },
+      { now: clock(1_900_000_000_000, 1000) },
+    );
+    expect(hike?.completedAt).toBe(round?.endedAt);
+    expect(hike?.completedAt).toBe(round?.datePoll?.closedAt);
+    expect(hike?.threadId).toBeNull();
+    expect(hike?.location.details).toBeNull();
+    expect(hike?.locationPoll).toEqual({ channelId: null, messageId: null });
+    expect(hike?.datePoll).toEqual({ channelId: null, messageId: null });
+  });
+
+  it("orders by the decided date, newest first, not by when rounds completed", async () => {
+    const labels = await withStore((store) => {
+      completeRound(store, "June", "2030-06-15");
+      completeRound(store, "March", "2030-03-01");
+      completeRound(store, "June evening", "2030-06-15 18:00");
+      completeRound(store, "December", "2030-12-05");
+      completeRound(store, "June again", "2030-06-15");
+      return store
+        .listHikes({ limit: 10, offset: 0 })
+        .map((hike) => hike.location.label);
+    });
+    expect(labels).toEqual([
+      "December",
+      "June evening",
+      "June again",
+      "June",
+      "March",
+    ]);
+  });
+
+  it("pages with limit and offset", async () => {
+    const { pages, total } = await withStore((store) => {
+      for (let day = 1; day <= 5; day++) {
+        completeRound(store, `Day ${String(day)}`, `2030-01-0${String(day)}`);
+      }
+      const page = (limit: number, offset: number) =>
+        store.listHikes({ limit, offset }).map((hike) => hike.location.label);
+      return {
+        pages: [page(2, 0), page(2, 2), page(2, 4), page(2, 6), page(0, 0)],
+        total: store.countHikes(),
+      };
+    });
+    expect(pages).toEqual([
+      ["Day 5", "Day 4"],
+      ["Day 3", "Day 2"],
+      ["Day 1"],
+      [],
+      [],
+    ]);
+    expect(total).toBe(5);
+  });
+
+  it("is empty without completed rounds", async () => {
+    const { hikes, total } = await withStore((store) => {
+      const round = store.startRound("u-admin", locations("Ridge"));
+      store.cancelRound(round.id, "u-admin");
+      return {
+        hikes: store.listHikes({ limit: 10, offset: 0 }),
+        total: store.countHikes(),
+      };
+    });
+    expect(hikes).toEqual([]);
+    expect(total).toBe(0);
   });
 });

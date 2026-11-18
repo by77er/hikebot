@@ -70,6 +70,25 @@ export interface RoundView {
   datePoll: PollView | null;
 }
 
+/** Where a poll's Discord message is; null until it was posted. */
+export interface MessageLocation {
+  channelId: string | null;
+  messageId: string | null;
+}
+
+/** A hike: a completed round with the location and date it decided. */
+export interface HikeView {
+  roundId: number;
+  location: { label: string; details: string | null; proposedBy: string };
+  /** `value` is the normalized `YYYY-MM-DD[ HH:MM]`; `label` as shown. */
+  date: { value: string; label: string };
+  threadId: string | null;
+  /** When the date vote closed and the round completed. */
+  completedAt: number;
+  locationPoll: MessageLocation;
+  datePoll: MessageLocation;
+}
+
 export interface PollStoreOptions {
   /** Milliseconds since the epoch. Defaults to `Date.now`. */
   now?: () => number;
@@ -116,7 +135,30 @@ type OptionRow = {
   votes: number;
 };
 
+type HikeRow = {
+  id: number;
+  thread_id: string | null;
+  ended_at: number;
+  location_label: string;
+  location_details: string | null;
+  location_proposed_by: string;
+  date_value: string;
+  date_label: string;
+  location_channel_id: string | null;
+  location_message_id: string | null;
+  date_channel_id: string | null;
+  date_message_id: string | null;
+};
+
 const ACTIVE = "status NOT IN ('complete', 'cancelled')";
+
+/** Completed rounds joined to their decided options and those options' polls. */
+const HIKES = `FROM rounds r
+  JOIN poll_options lo ON lo.id = r.location_option_id
+  JOIN polls lp ON lp.id = lo.poll_id
+  JOIN poll_options dt ON dt.id = r.date_option_id
+  JOIN polls dp ON dp.id = dt.poll_id
+  WHERE r.status = 'complete'`;
 
 /** Case-insensitive, whitespace-collapsed key that makes labels unique. */
 export function labelKey(label: string): string {
@@ -317,6 +359,54 @@ export class PollStore {
       .exec<RoundRow>("SELECT * FROM rounds ORDER BY id DESC LIMIT 1")
       .toArray()[0];
     return row ? this.roundView(row, viewerId) : null;
+  }
+
+  /**
+   * The hikes (completed rounds), newest date first: by the decided date's
+   * `date_value`, then by round id, both descending. Skips `offset` hikes
+   * and returns at most `limit`; both are non-negative integers.
+   */
+  listHikes(page: { limit: number; offset: number }): HikeView[] {
+    return this.sql
+      .exec<HikeRow>(
+        `SELECT r.id, r.thread_id, r.ended_at,
+           lo.label AS location_label, lo.details AS location_details,
+           lo.proposed_by AS location_proposed_by,
+           dt.date_value, dt.label AS date_label,
+           lp.channel_id AS location_channel_id,
+           lp.message_id AS location_message_id,
+           dp.channel_id AS date_channel_id, dp.message_id AS date_message_id
+         ${HIKES}
+         ORDER BY dt.date_value DESC, r.id DESC LIMIT ? OFFSET ?`,
+        Math.max(0, Math.trunc(page.limit)),
+        Math.max(0, Math.trunc(page.offset)),
+      )
+      .toArray()
+      .map((row) => ({
+        roundId: row.id,
+        location: {
+          label: row.location_label,
+          details: row.location_details,
+          proposedBy: row.location_proposed_by,
+        },
+        date: { value: row.date_value, label: row.date_label },
+        threadId: row.thread_id,
+        completedAt: row.ended_at,
+        locationPoll: {
+          channelId: row.location_channel_id,
+          messageId: row.location_message_id,
+        },
+        datePoll: {
+          channelId: row.date_channel_id,
+          messageId: row.date_message_id,
+        },
+      }));
+  }
+
+  /** How many hikes `listHikes` can return in all. */
+  countHikes(): number {
+    return this.sql.exec<{ n: number }>(`SELECT count(*) AS n ${HIKES}`).one()
+      .n;
   }
 
   /**
