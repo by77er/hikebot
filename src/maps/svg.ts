@@ -81,8 +81,8 @@ const FILL_ORDER: FillRole[] = [
   "bareRock",
   "ice",
   "park",
-  "water",
   "protectedArea",
+  "water",
   "building",
 ];
 
@@ -179,12 +179,11 @@ export function buildSvg(scene: Scene): string {
           `${stroke("water", px(WIDTHS.stream))}${round}`,
         );
       }
-    }
-    if (role === "protectedArea") {
-      const width = px(WIDTHS.protectedAreaOutline);
+      // Protected areas are tinted under the water and outlined over it.
+      const outline = px(WIDTHS.protectedAreaOutline);
       each(
         (paths) => paths.lines.get("protectedAreaOutline"),
-        ` fill="none"${stroke("protectedAreaOutline", width)}${dash(DASHES.protectedAreaOutline, width)}`,
+        ` fill="none"${stroke("protectedAreaOutline", outline)}${dash(DASHES.protectedAreaOutline, outline)}`,
       );
     }
   }
