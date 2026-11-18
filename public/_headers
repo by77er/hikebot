@@ -1,0 +1,6 @@
+# Browsers may reuse an asset for five minutes, so a deploy that changes one
+# reaches every browser within five minutes; after that they revalidate with
+# the ETag.
+/assets/*
+  Cache-Control: public, max-age=300
+  X-Content-Type-Options: nosniff

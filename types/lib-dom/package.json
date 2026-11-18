@@ -1,0 +1,7 @@
+{
+  "name": "@typescript/lib-dom",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Stands in for TypeScript's DOM library, which Preact's JSX types reference but the Worker does not run in.",
+  "types": "index.d.ts"
+}
