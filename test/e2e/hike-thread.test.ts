@@ -66,7 +66,8 @@ describe("the hike thread", () => {
     expect(messageText(first).split("\n")).toEqual([
       "## Lake Loop",
       `Proposed by <@${g.owner.actor.userId}>`,
-      "**When:** Sat, 15 Jun 2030 · 09:00",
+      // 09:00 in Los Angeles, the default zone, is 16:00 UTC in June.
+      "**When:** Sat, 15 Jun 2030 · 09:00 (<t:1907769600:R>)",
       `**Location vote:** **Lake Loop** won with 1 vote; 1 member voted. [See the location vote](https://discord.com/channels/${g.guildId}/${g.channels.text}/${where.id})`,
       `**Date vote:** **Sat, 15 Jun 2030 · 09:00** won with 1 vote; 1 member voted. [See the date vote](https://discord.com/channels/${g.guildId}/${g.channels.text}/${when.id})`,
     ]);
