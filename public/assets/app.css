@@ -26,7 +26,3 @@ body {
 .skip-link:focus {
   position: static;
 }
-
-body {
-  background: #f4efe6;
-}
