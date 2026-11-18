@@ -874,6 +874,44 @@ describe("scheduled events", () => {
     expect(discord.scheduledEvents(guild)).toHaveLength(1);
   });
 
+  it("edits the description of an event the bot created, within Discord's limits", async () => {
+    const guild = "220000000000000005";
+    discord.addGuild({ id: guild, ownerId: "420000000000000001" });
+    const { id } = (await call("POST", path(guild), hike)).body as {
+      id: string;
+    };
+    const edited = await call("PATCH", `${path(guild)}/${id}`, {
+      description: x(1000),
+    });
+    expect(edited).toMatchObject({ status: 200, body: { id } });
+    expect(discord.scheduledEvents(guild)[0]?.description).toBe(x(1000));
+    expect(
+      await call("PATCH", `${path(guild)}/${id}`, { description: null }),
+    ).toMatchObject({ status: 200 });
+    expect(discord.scheduledEvents(guild)[0]?.description).toBeNull();
+    expectRefused(
+      await call("PATCH", `${path(guild)}/${id}`, { description: x(1001) }),
+      RULES.eventDescription,
+    );
+    expectStateRefusal(
+      await call("PATCH", `${path(guild)}/220000000000000999`, {
+        description: "x",
+      }),
+      404,
+      10070,
+      RULES.unknownScheduledEvent,
+    );
+    discord.revokeCreateEvents(guild);
+    expectStateRefusal(
+      await call("PATCH", `${path(guild)}/${id}`, { description: "x" }),
+      403,
+      50013,
+      RULES.editEventsPermission,
+    );
+    discord.grantCreateEvents(guild);
+    expect(discord.scheduledEvents(guild)[0]?.description).toBeNull();
+  });
+
   it("answers Unknown Guild for a guild it does not hold", async () => {
     expect(await call("POST", path("229999999999999999"), hike)).toMatchObject({
       status: 404,

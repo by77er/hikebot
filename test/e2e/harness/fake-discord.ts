@@ -23,6 +23,7 @@ import {
   validateForumThread,
   validateMessage,
   validateScheduledEvent,
+  validateScheduledEventEdit,
   type Rule,
   type Violation,
 } from "./validate";
@@ -708,6 +709,10 @@ export class FakeDiscord {
     if (match && method === "GET") {
       return this.getGuildChannels(match[1] ?? "");
     }
+    match = /^\/guilds\/([^/]+)\/scheduled-events\/([^/]+)$/.exec(path);
+    if (match && method === "PATCH") {
+      return this.editScheduledEvent(match[1] ?? "", match[2] ?? "", body);
+    }
     match = /^\/guilds\/([^/]+)$/.exec(path);
     if (match && method === "GET") {
       const guild = this.guilds.get(match[1] ?? "");
@@ -872,6 +877,55 @@ export class FakeDiscord {
         (c) => c.guild_id === guildId && c.parent_id === undefined,
       ),
     };
+  }
+
+  /**
+   * Modify Guild Scheduled Event: changes the fields the body holds; null
+   * clears the description. The bot may edit the events it created while
+   * it has Create Events.
+   */
+  private editScheduledEvent(
+    guildId: string,
+    eventId: string,
+    body: unknown,
+  ): Reply {
+    if (!this.guilds.has(guildId)) {
+      return discordError(404, 10004, "Unknown Guild");
+    }
+    const event = (this.events.get(guildId) ?? []).find(
+      (e) => e.id === eventId,
+    );
+    if (!event) {
+      return refusal(
+        404,
+        10070,
+        "Unknown Guild Scheduled Event",
+        RULES.unknownScheduledEvent,
+      );
+    }
+    if (
+      this.withoutCreateEvents.has(guildId) ||
+      event.creator_id !== this.applicationId
+    ) {
+      return refusal(
+        403,
+        50013,
+        "Missing Permissions",
+        RULES.editEventsPermission,
+      );
+    }
+    const violations = validateScheduledEventEdit(body);
+    if (violations.length > 0) return invalid(violations);
+    const o = body as Record<string, unknown>;
+    if (typeof o.name === "string") event.name = o.name;
+    if (o.description !== undefined) {
+      event.description =
+        typeof o.description === "string" ? o.description : null;
+    }
+    if (o.entity_metadata !== undefined) {
+      event.entity_metadata = o.entity_metadata ?? null;
+    }
+    return { status: 200, body: event };
   }
 
   private editOriginal(
