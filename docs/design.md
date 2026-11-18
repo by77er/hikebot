@@ -29,7 +29,10 @@ The var `DISCORD_OAUTH_AUTHORIZE_URL` (default
 `https://discord.com/oauth2/authorize`) is where web sign-in sends the
 browser; tests point it at the fake Discord API. Request logs keep no query
 string (`observability.redact_query_string`), since the sign-in callback's
-query holds a one-time code. One
+query holds a one-time code.
+The var `NOMINATIM_BASE` (default `https://nominatim.openstreetmap.org`) is
+where place lookups go (see "Locating hikes"); tests point it at a stand-in.
+One
 `GuildHike` Durable Object per Discord guild (binding `GUILD_HIKE`,
 `idFromName(guild_id)`) holds all of that guild's state in its SQLite storage
 and makes every state change, so votes and poll closes never race. One
@@ -538,7 +541,8 @@ overlap period with two keys.
   Wrangler's `createTestHarness`, with fresh in-memory Durable Object
   storage, a signing key pair generated for the file as
   `DISCORD_PUBLIC_KEY`, a dummy bot token and application id, and
-  `DISCORD_API_BASE` pointing at a fake Discord API on a free local port.
+  `DISCORD_API_BASE` pointing at a fake Discord API on a free local port
+  and `NOMINATIM_BASE` at a fake geocoder on another.
   Tests reach the Worker only over HTTP, as Discord does with signed
   `POST /interactions` requests and as a browser does for the web pages,
   and import nothing from `src/` (ESLint enforces this). The Worker serves
@@ -549,7 +553,7 @@ overlap period with two keys.
   git in temporary repositories: the before/after table and the pull
   request description check.
 
-The e2e harness (`test/e2e/harness/`) has five parts:
+The e2e harness (`test/e2e/harness/`) has six parts:
 
 - An interaction client that builds realistic slash command, button,
   string/role/channel select and modal submit (fields inside Labels)
@@ -561,8 +565,8 @@ The e2e harness (`test/e2e/harness/`) has five parts:
   or deferred response cannot set, or data that breaks the rules below.
 - A fake Discord API on `node:http` with the routes the bot uses: create and
   edit message, start forum thread, get guild, get guild member, get guild
-  channels, create guild scheduled event, edit original interaction
-  response, create follow-up and bulk overwrite global commands. It also
+  channels, create and modify guild scheduled event, edit original
+  interaction response, create follow-up and bulk overwrite global commands. It also
   plays Discord's OAuth2 provider (`fake-discord-oauth.ts`): the authorize
   page, which redirects back with a code for the user the browser is signed
   in as, or with `error=access_denied`; the token URL, which checks the
@@ -606,6 +610,13 @@ The e2e harness (`test/e2e/harness/`) has five parts:
   timeout. `RoundPlayer` (`test/e2e/harness/rounds.ts`) plays the steps of a
   round with them: a guild with its channels, the panel set up, starting,
   voting in, closing and cancelling the location and date votes.
+- A fake Nominatim (`test/e2e/harness/fake-nominatim.ts`) that answers
+  `GET /search` as Nominatim's jsonv2 search does for the places a test
+  adds (`[]` for others), can answer an error status or hold its answers
+  until released, records each request with the time it arrived, and
+  refuses a malformed search (400) or a request without an identifying
+  User-Agent (403). Each behaviour quotes Nominatim's documentation or its
+  usage policy, or says that Nominatim's own pages do not state it.
 - A page client (`test/e2e/harness/web.ts`) that requests a path the way a
   browser does and returns the status, headers and body as they came: it
   does not follow redirects, and it keeps the cookies the Worker sets and
@@ -679,7 +690,8 @@ nothing is decided.
 
 Each guild's settings are one row of `guild_settings` in its `GuildHike`
 database (migration `0002_guild_settings`, with `timezone` added by
-`0003_guild_timezone`; read and written by `GuildConfig` in
+`0003_guild_timezone` and the home area by `0006_places`; read and written
+by `GuildConfig` in
 `src/guild/config.ts`):
 
 | Column                | Meaning                                                      |
@@ -692,6 +704,10 @@ database (migration `0002_guild_settings`, with `timezone` added by
 | `owner_id`            | The guild owner's user id, as `getGuild` last returned it    |
 | `owner_fetched_at`    | When `owner_id` was fetched, in milliseconds since the epoch |
 | `timezone`            | IANA time zone the group plans hikes in                      |
+| `home_area`           | The home area as an admin typed it (`Seattle, Washington`)   |
+| `home_name`           | The place name the geocoder found for it                     |
+| `home_lat`            | Latitude the geocoder found for it                           |
+| `home_lon`            | Longitude the geocoder found for it                          |
 
 Every column but `id` is null until it is set. Setup is complete when the
 three channels are set.
@@ -755,6 +771,12 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   a failed attempt, or "not confirmed" when a post was cut off) and, unless
   a post is under way, the panel offers **Post vote message**
   (`hb:poll:post:<poll id>`) before the Close button.
+  Once a round's location is
+  decided (the active round from `location_decided` on, or the last
+  completed one), the view shows its pin ("**Map pin:** Mount Si, King
+  County · [map](…)", "being looked up on OpenStreetMap", or "none") and
+  offers **Set map pin** (`hb:pin:set:<round id>`) after the Announce
+  buttons; see "Locating hikes".
 - **Confirmation view**: Close and Cancel round first replace the status view
   with a question and a confirm button (`hb:poll:close-confirm:<poll id>`,
   `hb:round:cancel-confirm:<round id>`) next to Back; only the confirm button
@@ -781,7 +803,12 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   is saved and the Settings view redrawn with "Time zone set to <zone>.";
   anything else (an unknown name, an offset such as `+05:00`, nothing)
   changes nothing and gets an ephemeral answer quoting what was typed, the
-  zone still in force and three examples. Back returns to the status view.
+  zone still in force and three examples. Under it, the home area
+  ("**Home area:** Seattle, Washington (found as Seattle, King County,
+  Washington)", or "not set (locations are looked up worldwide)") and **Set
+  home area** (`hb:admin:home-area`), whose modal takes up to 100
+  characters (`hb:admin:home-area-name`); see "Locating hikes". Back
+  returns to the status view.
 
 ## Polls
 
@@ -816,7 +843,12 @@ All tables live in the guild's `GuildHike` SQLite database.
   hold `YYYY-MM-DD`, read as 11:00). `label_key` (trimmed, whitespace
   collapsed, lower-cased) is unique per poll, so `Ridge  Trail` and
   `ridge trail` are the same option. At most 25 options per poll, Discord's
-  select limit.
+  select limit. A location option also has its place (migration
+  `0006_places`): `place_lat` / `place_lon`, `place_name` (the geocoder's
+  name, shortened), `place_status` (`pending`, `found`, `not_found`,
+  `failed`, `given` or `cleared`; null for date options and for options
+  from before the migration), `place_attempts` and `place_next_at` (when a
+  pending lookup is due). See "Locating hikes".
 - `poll_votes`: `(poll_id, option_id, user_id)` is unique, with `voted_at`. A
   member may vote for any number of options in a poll.
 
@@ -981,9 +1013,16 @@ hike <decided location>?". Then the number of members who have
 voted, and while open the buttons **Vote** (`hb:poll:vote:<poll id>`) and
 **Propose a location** (`hb:location:propose:<poll id>`) on the location
 vote or **Propose a date** (`hb:date:propose:<poll id>`) on the date vote. With no options it says so and invites a
-proposal. Details are shortened, all to the same cap with "…", so that the
-message's text stays within 4000 characters; with 25 options at the longest
-label (80) and details (300) it has 33 components and fits.
+proposal. A location option that has a point shows a line under its title,
+`📍 <place name> · [map](https://www.openstreetmap.org/?mlat=…&mlon=…)`
+(without the name when the proposer gave the coordinates), and the voter
+count is followed by `-# © OpenStreetMap contributors`; see "Locating
+hikes". To keep the text within 4000 characters, place names give way
+first (all cut to the same cap, or left out when that cap is under 8
+characters), then details (all to the same cap, with "…"), and only when
+even the map links do not fit are they dropped from the last option up;
+with 25 options at the longest label (80), details (300) and place name
+(80) it has 33 components and fits.
 
 Closed, the heading says "(closed)", the winner is marked with 🏆 and named
 under the heading with its votes, a tie broken at random adds "N options tied
@@ -1021,9 +1060,16 @@ confirmation and a fresh select. When there is nothing to suggest again,
 the button opens the modal directly.
 
 The modal (`hb:location:propose:<poll id>`) has Name (required, up to 80
-characters) and Details (optional paragraph, up to 300: a trail link,
-distance, notes). A valid submit adds the option through `addOption` and
-confirms ephemerally. A duplicate name ("**X** is already on the list."), a
+characters), Details (optional paragraph, up to 300: a trail link,
+distance, notes) and Map link or coordinates (optional, up to 1000;
+`hb:location:map`). A valid submit adds the option through `addOption` and
+confirms ephemerally. Coordinates found in the map field, the name or the
+details (in that order) are stored with the option as `given`; otherwise it
+waits for a lookup (see "Locating hikes"). A map field that holds no
+coordinates the bot can read (such as a short link, which is never opened)
+does not stop the proposal; the confirmation says the location will be
+looked up by its name. A location suggested again carries the place of the
+option it was copied from, so it is not looked up again. A duplicate name ("**X** is already on the list."), a
 full poll ("This vote already has 25 locations…"), a closed poll and a
 resting location (the cooldown message) each get their own ephemeral answer,
 whether typed or picked from a stale select (which is replaced by the
@@ -1367,7 +1413,8 @@ place to organise that hike.
   an over-long location is shortened with "…" (on a code point boundary)
   and the date is always kept whole (`threadTitle`).
 - **First message**, Components V2 in the thread's `message`, pinging no
-  one: the location as a heading, its details, "Proposed by" and the
+  one: the location as a heading, its details, its place line when it has
+  a pin (`📍 <place> · [OpenStreetMap](…) · [Google Maps](…)`), "Proposed by" and the
   proposer's mention, the "**When:**" line as in the announcement (the
   date's label and the relative timestamp of its start in the guild's time
   zone when the date vote closed, or now for **Create hike thread**), the
@@ -1375,8 +1422,10 @@ place to organise that hike.
   https://discord.com/events/<guild>/<event>"), then one line per vote: the
   winner, its votes and how many members voted, a note when the winner was
   drawn at random from a tie (with the number of tied options), and a link
-  to the poll message. Labels and details are bounded (80 and 300
-  characters), so it stays far within 40 components and 4000 characters.
+  to the poll message, and, under a pin, `-# © OpenStreetMap
+contributors`. Labels, details and place names are bounded (80, 300 and
+  80 characters), so it stays far within 40 components and 4000
+  characters. When the pin changes (Set map pin), the message is edited.
   The thread is created before the event, so the event step edits this
   message once the event exists (see "Hike event"); a thread created later
   by **Create hike thread** has the link from the start.
@@ -1426,15 +1475,19 @@ Interested and get Discord's reminder.
   guild's time zone when the date vote closed (or now, for **Create hike
   event**); **end** (`scheduled_end_time`): `HIKE_DURATION_HOURS` (4) later.
   Both are sent as ISO 8601 UTC instants.
-- **Description**: the location's details, then "Hike thread:" and the
+- **Description**: the location's details; when it has a pin, the place
+  name, "OpenStreetMap:" and "Google Maps:" with the two map links as plain
+  URLs, and "© OpenStreetMap contributors"; then "Hike thread:" and the
   thread's link (`https://discord.com/channels/<guild>/<thread>`) when the
-  thread exists; left out when there is neither.
+  thread exists; left out when there is none of them. When the pin changes
+  (Set map pin), the description is edited with `editGuildScheduledEvent`
+  (`PATCH /guilds/{guild.id}/scheduled-events/{event.id}`).
 
 Discord allows a name and a location of 1-100 characters and a description
 of up to 1000. A label is at most 80 characters and details at most 300, but
 `hikeEventRequest` shortens each with "…" (on a code point boundary) to fit
-anyway, keeping the thread link whole, so a request is never refused for its
-length.
+anyway, keeping the map links and the thread link whole, so a request is
+never refused for its length.
 
 The event's id is stored on the round with `setRoundEvent`. The step then
 edits the thread's first message (whose id is the thread's) to add the
@@ -1557,6 +1610,107 @@ so a second click while the first is running is told "The hike-day
 announcement is being posted." and posts nothing; the follow-up posts it
 and redraws the panel. The panel shows the hike-day announcement of the
 last round only while no round is active, like the thread and the event.
+
+## Locating hikes
+
+Each proposed location gets a point and, when the geocoder found it, a place
+name, so members can see on a map where a proposal is before the vote ends,
+and the decided hike links to the map wherever it is shown. The code is in
+`src/geo/` (pure parsing and links, the geocoder client) and
+`src/features/locate.ts`, `map-pin.ts` and `home-area.ts`.
+
+**Coordinates the proposer wrote win.** `parseCoordinates(text)`
+(`src/geo/coordinates.ts`) reads decimal `lat, lon` (two decimals or more
+each, so "Trail 3, 5 miles" is not a point), a `geo:` address, and the
+common map links: Google Maps `!3d<lat>!4d<lon>` (the place), `?q=` /
+`?query=` and `/@lat,lon` (the view); OpenStreetMap `mlat`/`mlon` (the
+marker) and `#map=z/lat/lon`; Apple Maps `ll=`. A latitude beyond ±90 or a
+longitude beyond ±180 is no point. It makes no request, so short links
+(`maps.app.goo.gl/…`) are not expanded. The modal's map field, then the
+name, then the details are read; a point found there is stored as `given`
+and nothing is looked up. Initial locations typed at the start of a round
+are read the same way.
+
+**Otherwise the name is looked up** on Nominatim, OpenStreetMap's geocoder
+(`src/geo/nominatim.ts`): `GET <NOMINATIM_BASE>/search?q=<name>&format=jsonv2&limit=1`,
+with the User-Agent `hikebot (+https://github.com/by77er/hikebot)` and a
+5-second timeout. The first result's `lat` and `lon` (strings in Nominatim's
+answer) are the point, and its `display_name` cut to its first parts within
+80 characters is the place name (`Mount Si, King County, Washington`). When
+the guild has a home area, the search adds `viewbox` (the box one degree
+each way around the home area's point; Nominatim reads it as
+`<lon>,<lat>,<lon>,<lat>`) and `bounded=0`, which Nominatim treats as a
+boost: matches near home come first, places elsewhere are still found.
+Without a home area the search is worldwide.
+
+**Lookups run in a scheduled job**, `geo:locate`, never while answering an
+interaction, so a slow, failing or empty lookup never delays or fails a
+proposal, a vote or a close. Adding a location stores it as `pending` with
+`place_next_at` set to now and schedules the job `LOOKUP_DELAY_MS` (2 s)
+later. Each run looks up one pending option, the one due longest, among the
+options of open polls and the decided locations of rounds (a lookup may
+still be pending when the vote closes); it records the answer
+(`recordPlaceLookup`, which leaves alone an option an admin pinned
+meanwhile), marks the poll message for the debounced refresh when the
+lookup ended, and schedules itself for the next pending option. Runs are at
+least `LOOKUP_SPACING_MS` (1.1 s) apart: the time of the guild's last
+request is kept in storage (`geo:last-lookup`), and a run that comes too
+early only schedules itself for its turn. A lookup that gets an error
+status, an unreadable answer or no answer in time is tried again after 30
+s and then 120 s; after the third attempt the option is `failed`. An empty
+answer is `not_found`, a result `found`. A failed or not-found location
+simply shows no map link, and an admin can pin it.
+
+**Nominatim's usage policy**
+(https://operations.osmfoundation.org/policies/nominatim/) allows "an
+absolute maximum of 1 request per second" for the whole application, asks
+for a User-Agent identifying the application ("stock User-Agents as set by
+http libraries will not do"), for results to be cached ("Clients sending
+repeatedly the same query may be classified as faulty and blocked"), for no
+autocomplete, and for attribution. The bot meets it this way: one request
+per lookup, made only for a new option and kept with it (a location
+suggested again carries its place, and the home area is looked up only when
+it changes); no lookup while a member types; "© OpenStreetMap contributors"
+wherever place data is shown. The 1-request-per-second limit is for the
+whole application, but each guild's object paces only its own requests: a
+Durable Object cannot see the others' without a shared coordinator, which
+would put a cross-object call in front of every lookup. With few servers,
+lookups only after proposals and at most one per 1.1 s per server, the
+application stays far below one request a second in practice; this holds
+while the bot is in few servers. If it grows, put the pacing in one shared
+Durable Object, or run a Nominatim of our own (`NOMINATIM_BASE`).
+
+**Home area.** An admin sets free text such as `Seattle, Washington` under
+Settings. The submit is answered with a deferred update; the follow-up waits
+for the guild's next free request slot, looks the text up worldwide, and
+stores the text, the place name and the point (`setHomeArea`), or changes
+nothing and says why: "**Atlantis** was not found on OpenStreetMap, so the
+home area is unchanged." or that the geocoder could not answer. The same
+text again is not looked up; an empty submit clears it.
+
+**Where it is shown.** On the location vote's message, each located option
+has `📍 <place name> · [map](<OpenStreetMap link>)` and the message ends
+with `-# © OpenStreetMap contributors` (see "Poll message" for how it stays
+within Discord's limits). For the decided location, the place line with
+both links (`📍 <place> · [OpenStreetMap](https://www.openstreetmap.org/?mlat=<lat>&mlon=<lon>#map=13/<lat>/<lon>) · [Google Maps](https://www.google.com/maps/search/?api=1&query=<lat>,<lon>)`)
+is in the location vote's announcement, the hike announcement (under
+"**Where:**"), the hike thread's first message and, as plain URLs, the
+event's description, each with the attribution. Neither map link needs a
+key. Coordinates are written with at most five decimals.
+
+**Set map pin** fixes a wrong or missing match for the decided location of
+the active round (once decided) or of the last completed one. Its modal
+(`hb:pin:set:<round id>`, field `hb:pin:point`) is prefilled with the
+current pin; it takes coordinates or a map link as above, and empty removes
+the pin. Input it cannot read is refused and changes nothing. The pin is
+stored before the answer (`given`, or `cleared` when removed, ending any
+pending lookup), then the follow-up runs the map pin hooks and redraws the
+panel with the result and a line for each hook that failed. `setMapPin`
+(`src/features/map-pin.ts`) is the one way to set a pin from other code: it
+stores the pin and runs the hooks it is given. The hooks are listed in
+`MAP_PIN_HOOKS` in `src/features/index.ts`: today the hike thread's first
+message and the event's description are edited when they exist; a feature
+that shows the pin (a map picture, a web page) adds its hook there.
 
 ## Map data
 
