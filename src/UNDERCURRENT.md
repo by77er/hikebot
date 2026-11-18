@@ -445,3 +445,103 @@ if ! awk -v polls="$polls" '
   exit 1
 fi
 ```
+
+## Every user-visible flow has an end-to-end scenario
+only: *.ts
+
+A change that adds or changes something a member sees or does, a slash
+command, a button, a select, a modal, or a message the bot posts or edits,
+adds or updates a scenario in `test/e2e/` in the same pull request. The
+scenario starts the real bundle with `useE2E()` (no `probe` option), drives
+the flow as a member through signed interactions (`Member.run`, `click`,
+`select`, `submitModal`), and asserts on what the fake Discord API stores or
+on the reply the member gets. Follow "Write an end-to-end scenario" in
+`test/AGENTS.md`. The tests in `test/<dir>/` do not replace it: they do not
+show that Discord accepts the payload, that the reply arrives in time, or that
+each control the bot renders has a handler. A change no member can see, such
+as a refactor, a comment, or store logic the tests in `test/polls/` already
+cover, needs no scenario.
+
+```diff good
+--- a/src/features/index.ts
++++ b/src/features/index.ts
+@@
+ export function registerFeatures(router: Router): Router {
+-  return router;
++  return router.command("hike", hikeCommand);
+ }
+--- a/test/e2e/hike.test.ts
++++ b/test/e2e/hike.test.ts
+@@
++const e2e = useE2E();
++
++it("answers /hike admin with the admin panel", async () => {
++  e2e.discord.addGuild({ id: admin.guildId ?? "", ownerId: admin.userId });
++  const member = new Member(e2e.client, admin);
++  await member.run("hike", [subcommand("admin")]);
++  expect(messageText(member.lastReply())).toContain("Hike admin");
++  expect(findComponent(member.lastReply().components, "hb:round:start")).toBeDefined();
++});
+```
+
+```diff good
+--- a/src/features/poll.ts
++++ b/src/features/poll.ts
+@@
+-      textDisplay(`Vote for a location (${String(options.length)} options)`),
++      textDisplay(`Vote for a location: ${String(options.length)} options, closes in 24 hours`),
+--- a/test/e2e/poll.test.ts
++++ b/test/e2e/poll.test.ts
+@@
+   const vote = await waitForMessage(e2e.discord, admin.channelId, (m) =>
+     messageText(m).includes("Vote for a location"),
+   );
+-  expect(messageText(vote)).toContain("(2 options)");
++  expect(messageText(vote)).toContain("2 options, closes in 24 hours");
+```
+
+```diff good
+--- a/src/polls/store.ts
++++ b/src/polls/store.ts
+@@
+-  private optionRows(pollId: number): OptionRow[] {
++  private readOptions(pollId: number): OptionRow[] {
+```
+
+```diff bad
+--- a/src/features/index.ts
++++ b/src/features/index.ts
+@@
+   router.command("hike", hikeCommand);
++  router.component("hb:poll:close", closePoll);
+   return router;
+--- a/test/guild/router.test.ts
++++ b/test/guild/router.test.ts
+@@
++  it("routes hb:poll:close to its handler", async () => {
++    const result = await router.handle(component("hb:poll:close:1"), context);
++    expect(result.response.type).toBe(InteractionResponseType.UpdateMessage);
++  });
+```
+
+```diff bad
+--- a/src/features/poll.ts
++++ b/src/features/poll.ts
+@@
+   return {
+-    response: modal(customId("poll", "propose"), "Propose a location", [
++    response: modal(customId("poll", "propose"), "Propose a location for the next hike", [
+       label("Location", textInput({ custom_id: customId("poll", "name") })),
+```
+
+```diff bad
+--- a/src/features/admin-panel.ts
++++ b/src/features/admin-panel.ts
+@@
++    await api.createMessage(announcementsChannelId, messageBody([resultContainer(result)]));
+--- a/test/e2e/admin-panel.test.ts
++++ b/test/e2e/admin-panel.test.ts
+@@
+-const e2e = useE2E();
++const e2e = useE2E({ probe: true });
+```

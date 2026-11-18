@@ -521,3 +521,26 @@ functional frontend for OpenTofu, following "Add infrastructure" in the root
 echo "$FILE is HCL. Declare Worker resources in wrangler.jsonc (wrangler deploy manages the Worker and its Durable Object), write any other infrastructure with by77er/inframe, and delete this file."
 exit 1
 ```
+
+## The deployed Worker never refers to the tests or the probe
+only: {src/**/*.ts,wrangler.jsonc}
+
+`wrangler deploy` bundles `src/` from `wrangler.jsonc`, and anything they
+reach ships to production. The probe Worker under `test/e2e/probe/` adds the
+`/e2e-probe` command for the harness self-tests, and only
+`useE2E({ probe: true })` in `test/e2e/harness/worker.ts` loads it. Remove the
+import, path or name: code under `src/` and `wrangler.jsonc` refer to nothing
+under `test/` and nothing named `e2e-probe`. To give the tests something the
+Worker needs, put it in `src/` and import it from the test; for the end-to-end
+suite, build it in `test/e2e/harness/` ("Write an end-to-end scenario" in
+`test/AGENTS.md`).
+
+```sh
+awk '
+  /(^|[^[:alnum:]_.-])test\/|e2e[-_\/]?probe/ {
+    print FILENAME ":" FNR ": refers to test/ or the e2e probe; the deployed Worker must not, so remove it and keep test code under test/ (\"Write an end-to-end scenario\" in test/AGENTS.md): " $0
+    bad = 1
+  }
+  END { exit bad }
+' "$FILE"
+```
