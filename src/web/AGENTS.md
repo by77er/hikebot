@@ -229,13 +229,15 @@ in `docs/design.md` says which POSTs are refused.
 2. Start the dev server as "Run the bot locally" in the root `AGENTS.md`
    says and request the file in its place in that procedure. It answers
    `200` with the file's type and `Cache-Control: public, max-age=300`, set
-   for everything under `/assets/` by `public/_headers`; under
-   `/assets/v/<any version>/` it answers with
-   `Cache-Control: public, max-age=31536000, immutable`:
+   for everything under `/assets/` by `public/_headers`. Under the running
+   version's path, which a rendered page links, it answers with
+   `Cache-Control: public, max-age=31536000, immutable` (a path naming any
+   other version keeps `max-age=300`):
 
    ```sh
    curl -fsS -D - -o /dev/null http://localhost:8787/assets/trail-map.svg
-   curl -fsS -D - -o /dev/null http://localhost:8787/assets/v/dev/trail-map.svg
+   V=$(curl -fsS http://localhost:8787/ | grep -o '/assets/v/[^/]*/' | head -1)
+   curl -fsS -D - -o /dev/null "http://localhost:8787${V}trail-map.svg"
    ```
 
 3. Add the file's path to the stylesheet test in `test/web/routes.test.ts`

@@ -133,8 +133,8 @@ so a name or title from Discord or a form cannot inject markup.
   (`src/web/layout.tsx`) is the document every page renders into (`lang`,
   the viewport meta, the `<title>`, the preloaded font and the stylesheet, a
   skip link to `<main id="main">`, and the header, main and footer
-  landmarks), and the components are in `src/web/components/`. `GET
-/styleguide` shows every token and component.
+  landmarks), and the components are in `src/web/components/`.
+  `GET /styleguide` shows every token and component.
 - **Static files.** `public/` is the Workers Static Assets directory
   declared under `assets` in `wrangler.jsonc`, so
   `public/assets/cairn/cairn.css` is served at `/assets/cairn/cairn.css`,
@@ -146,10 +146,11 @@ so a name or title from Discord or a form cannot inject markup.
   `/assets/v/<version>/`, where the version is the deployed Worker
   version's id from the `CF_VERSION_METADATA` binding. No static file has
   that path, so the Worker answers it (`src/web/assets.ts`) with the file
-  from `public/assets/` and `Cache-Control: public, max-age=31536000,
-immutable`. Each deploy changes the URLs, so browsers cache the files for
-  a year and still never keep an old one; the stylesheet's relative imports
-  and `url()`s stay under the same version. A path naming another version
+  from `public/assets/` and
+  `Cache-Control: public, max-age=31536000, immutable`. Each deploy
+  changes the URLs, so browsers cache the files for a year and still never
+  keep an old one; the stylesheet's relative imports and `url()`s stay
+  under the same version. A path naming another version
   (a page rendered by the other version during a gradual deploy) gets the
   same files with the five-minute caching instead.
 - **Screenshots and design review.** Every page has committed screenshots
