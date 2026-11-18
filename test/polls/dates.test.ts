@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_HIKE_TIME,
   DEFAULT_TIMEZONE,
+  addDays,
   clockIn,
+  defaultDateCandidates,
   hikeStart,
   normalizeTimeZone,
   parseDateOption,
@@ -178,5 +180,82 @@ describe("normalizeTimeZone", () => {
     "Los Angeles",
   ])("refuses %j", (input) => {
     expect(normalizeTimeZone(input)).toBeNull();
+  });
+});
+
+describe("addDays", () => {
+  it.each([
+    ["2026-11-18", 0, "2026-11-18"],
+    ["2026-11-18", 31, "2026-12-19"],
+    ["2026-11-18", -1, "2026-11-17"],
+    ["2026-12-31", 1, "2027-01-01"],
+    ["2028-02-28", 1, "2028-02-29"],
+    ["2027-02-28", 1, "2027-03-01"],
+    ["2026-01-31", 31, "2026-03-03"],
+  ])("%s plus %i days is %s", (day, days, expected) => {
+    expect(addDays(day, days)).toBe(expected);
+  });
+});
+
+describe("defaultDateCandidates", () => {
+  it("offers the next two weekends after a Wednesday at the default time", () => {
+    expect(defaultDateCandidates("2026-11-18")).toEqual([
+      "2026-11-21 11:00",
+      "2026-11-22 11:00",
+      "2026-11-28 11:00",
+      "2026-11-29 11:00",
+    ]);
+  });
+
+  it.each([
+    ["Sun", "2026-11-15", "2026-11-21"],
+    ["Mon", "2026-11-16", "2026-11-21"],
+    ["Tue", "2026-11-17", "2026-11-21"],
+    ["Wed", "2026-11-18", "2026-11-21"],
+    ["Thu", "2026-11-19", "2026-11-21"],
+    ["Fri", "2026-11-20", "2026-11-21"],
+    // A weekend in progress is not offered.
+    ["Sat", "2026-11-21", "2026-11-28"],
+    ["Sun", "2026-11-22", "2026-11-28"],
+  ])("on a %s (%s) starts on Saturday %s", (_weekday, today, saturday) => {
+    const candidates = defaultDateCandidates(today);
+    expect(candidates).toHaveLength(4);
+    expect(candidates[0]).toBe(`${saturday} ${DEFAULT_HIKE_TIME}`);
+    expect(candidates[2]).toBe(`${addDays(saturday, 7)} ${DEFAULT_HIKE_TIME}`);
+    expect(
+      candidates.map((c) => parseDateOption(c)?.label.slice(0, 3)),
+    ).toEqual(["Sat", "Sun", "Sat", "Sun"]);
+  });
+
+  it("crosses a month end and a year end", () => {
+    expect(defaultDateCandidates("2026-11-25")).toEqual([
+      "2026-11-28 11:00",
+      "2026-11-29 11:00",
+      "2026-12-05 11:00",
+      "2026-12-06 11:00",
+    ]);
+    expect(defaultDateCandidates("2026-12-30")).toEqual([
+      "2027-01-02 11:00",
+      "2027-01-03 11:00",
+      "2027-01-09 11:00",
+      "2027-01-10 11:00",
+    ]);
+    expect(defaultDateCandidates("2027-12-27")).toEqual([
+      "2028-01-01 11:00",
+      "2028-01-02 11:00",
+      "2028-01-08 11:00",
+      "2028-01-09 11:00",
+    ]);
+  });
+
+  it("follows today in the guild's zone, not in UTC", () => {
+    // 03:00 UTC on Sat 21 Nov 2026 is still Friday evening in Los Angeles.
+    const now = Date.UTC(2026, 10, 21, 3);
+    expect(defaultDateCandidates(todayIn("UTC", now))[0]).toBe(
+      "2026-11-28 11:00",
+    );
+    expect(defaultDateCandidates(todayIn("America/Los_Angeles", now))[0]).toBe(
+      "2026-11-21 11:00",
+    );
   });
 });

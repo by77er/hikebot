@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { addDays } from "../../src/polls/dates";
 import { isPollError } from "../../src/polls/errors";
 import {
   COOLDOWN_HIKES,
@@ -480,6 +481,153 @@ describe("startDatePoll", () => {
         "round_not_found",
       );
     });
+  });
+});
+
+describe("proposeDate", () => {
+  /** 05:00 UTC on Thu 19 Nov 2026: still Wed 18 Nov in Los Angeles. */
+  const NOW = Date.UTC(2026, 10, 19, 5);
+  const LA = "America/Los_Angeles";
+  /** 18:00 on Thu 19 Nov 2026 in Auckland. */
+  const AUCKLAND = "Pacific/Auckland";
+
+  function openDatePoll(store: PollStore) {
+    const round = decidedRound(store);
+    return store.startDatePoll(round.id, "u-admin", [
+      "2026-11-28",
+      "2026-12-12",
+    ]);
+  }
+
+  it.each([
+    [LA, "2026-11-17", "2026-11-18", "2026-12-19", "2026-12-20"],
+    [AUCKLAND, "2026-11-18", "2026-11-19", "2026-12-20", "2026-12-21"],
+  ])(
+    "in %s refuses %s, accepts today %s and %s (31 days ahead), and refuses %s",
+    async (zone, yesterday, today, last, after) => {
+      await withStore(
+        (store) => {
+          const poll = openDatePoll(store);
+          const propose = (line: string) =>
+            store.proposeDate(poll.id, "u-member", line, zone);
+          expectCode(() => propose(yesterday), "date_in_past");
+          expectCode(() => propose(after), "date_too_far");
+          expect(store.getPoll(poll.id)?.options.length).toBe(2);
+          expect(propose(today)).toMatchObject({
+            dateValue: `${today} 11:00`,
+            proposedBy: "u-member",
+            votes: 0,
+          });
+          expect(propose(`${last} 23:59`).dateValue).toBe(`${last} 23:59`);
+        },
+        { now: () => NOW },
+      );
+    },
+  );
+
+  it("says which days it takes when it refuses", async () => {
+    await withStore(
+      (store) => {
+        const poll = openDatePoll(store);
+        const message = (line: string) => {
+          try {
+            store.proposeDate(poll.id, "u-member", line, LA);
+          } catch (error) {
+            return isPollError(error) ? error.message : "";
+          }
+          return "accepted";
+        };
+        expect(message("2026-11-17")).toBe(
+          "Tue, 17 Nov 2026 · 11:00 is in the past: today is 2026-11-18 in America/Los_Angeles. Propose a day from 2026-11-18 to 2026-12-19.",
+        );
+        expect(message("2026-12-20")).toBe(
+          "Sun, 20 Dec 2026 · 11:00 is more than 31 days away. Propose a day from 2026-11-18 to 2026-12-19, or ask an admin to plan further ahead.",
+        );
+      },
+      { now: () => NOW },
+    );
+  });
+
+  it("refuses a date that is not one, the same date and time, and a full poll, changing nothing", async () => {
+    await withStore(
+      (store) => {
+        const poll = openDatePoll(store);
+        const propose = (line: string) =>
+          store.proposeDate(poll.id, "u-member", line, LA);
+        expectCode(() => propose("next Saturday"), "invalid_date");
+        expectCode(() => propose("2026-11-31"), "invalid_date");
+        expectCode(() => propose("2026-11-28"), "duplicate_option");
+        expectCode(() => propose("2026-11-28 11:00"), "duplicate_option");
+        expect(store.getPoll(poll.id)?.options.length).toBe(2);
+        // The same day at another time is another option.
+        expect(propose("2026-11-28 08:30").label).toBe(
+          "Sat, 28 Nov 2026 · 08:30",
+        );
+        for (let i = 0; i < 22; i++) {
+          propose(`${addDays("2026-11-20", i)} 07:00`);
+        }
+        expect(store.getPoll(poll.id)?.options.length).toBe(MAX_OPTIONS);
+        expectCode(() => propose("2026-12-19"), "too_many_options");
+        expect(store.getPoll(poll.id)?.options.length).toBe(MAX_OPTIONS);
+      },
+      { now: () => NOW },
+    );
+  });
+
+  it("refuses a closed poll, a location poll and an unknown poll", async () => {
+    await withStore(
+      (store) => {
+        const poll = openDatePoll(store);
+        store.closePoll(poll.id, "u-admin");
+        expectCode(
+          () => store.proposeDate(poll.id, "u-member", "2026-11-29", LA),
+          "poll_closed",
+        );
+        expect(store.getPoll(poll.id)?.options.length).toBe(2);
+        const round = store.startRound("u-admin", locations("A"));
+        expectCode(
+          () =>
+            store.proposeDate(
+              round.locationPoll?.id ?? 0,
+              "u-member",
+              "2026-11-29",
+              LA,
+            ),
+          "invalid_state",
+        );
+        expectCode(
+          () => store.proposeDate(999, "u-member", "2026-11-29", LA),
+          "poll_not_found",
+        );
+      },
+      { now: () => NOW },
+    );
+  });
+
+  it("keeps the votes cast before and lists the options by date", async () => {
+    await withStore(
+      (store) => {
+        const poll = openDatePoll(store);
+        const [first, second] = poll.options;
+        store.setVotes(poll.id, "u1", [first?.id ?? 0, second?.id ?? 0]);
+        store.setVotes(poll.id, "u2", [second?.id ?? 0]);
+        const added = store.proposeDate(poll.id, "u-member", "2026-12-05", LA);
+        expect(added).toMatchObject({
+          label: "Sat, 5 Dec 2026 · 11:00",
+          proposedBy: "u-member",
+          votes: 0,
+        });
+        const after = store.getPoll(poll.id, "u1");
+        expect(after?.options.map((o) => [o.label, o.votes])).toEqual([
+          ["Sat, 28 Nov 2026 · 11:00", 1],
+          ["Sat, 5 Dec 2026 · 11:00", 0],
+          ["Sat, 12 Dec 2026 · 11:00", 2],
+        ]);
+        expect(after?.viewerVotes).toEqual([first?.id, second?.id]);
+        expect(after?.voterCount).toBe(2);
+      },
+      { now: () => NOW },
+    );
   });
 });
 
