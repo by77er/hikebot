@@ -3,8 +3,10 @@
 ## Add a poll kind to the shared poll UI
 
 The example adds a kind named `route` in `src/features/route-vote.ts`; use
-your kind's name and file. The kind must also be a `PollKind` in
-`src/polls/store.ts`, with polls of that kind in the database. The location
+your kind's name and file. A new kind needs the poll core changed first:
+`PollKind` in `src/polls/store.ts` and the `kind` check of the `polls`
+table, through a migration as "Add a column or table for polls" in
+`src/polls/AGENTS.md` says. The location
 vote (`src/features/location-vote.ts`) and the date vote
 (`src/features/date-vote.ts`) are complete examples.
 
