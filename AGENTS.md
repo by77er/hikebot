@@ -18,7 +18,7 @@ src/guild/guild-hike.ts   GuildHike Durable Object: handleInteraction, runFollow
 src/guild/router.ts       handler registry (commands by name, components/modals by custom_id prefix)
 src/guild/schema.ts       SQLite migrations, applied once each and tracked in _migrations
 src/features/             one file per feature; register its handlers in src/features/index.ts
-src/polls/                poll logic (later)
+src/polls/                rounds, polls, options, votes, tally; see src/polls/AGENTS.md
 scripts/                  one-off scripts such as command registration (later)
 test/                     mirrors src/; test/helpers.ts signs requests and builds interactions
 ```

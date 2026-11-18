@@ -22,6 +22,8 @@ function stubFor(name: string) {
   return env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(name));
 }
 
+const shipped = migrations.map((migration) => migration.name);
+
 function appliedNames(storage: DurableObjectStorage): string[] {
   return storage.sql
     .exec<{ name: string }>("SELECT name FROM _migrations ORDER BY id")
@@ -50,6 +52,7 @@ describe("migrations", () => {
       applyMigrations(state.storage, sample);
       applyMigrations(state.storage, sample);
       expect(appliedNames(state.storage)).toEqual([
+        ...shipped,
         "0001_create_notes",
         "0002_seed_note",
       ]);
@@ -61,6 +64,7 @@ describe("migrations", () => {
     await runInDurableObject(stub, (_instance, state) => {
       applyMigrations(state.storage, sample);
       expect(appliedNames(state.storage)).toEqual([
+        ...shipped,
         "0001_create_notes",
         "0002_seed_note",
       ]);
@@ -98,9 +102,69 @@ describe("migrations", () => {
         applyMigrations(state.storage, [...sample, broken]);
       }).toThrow();
       expect(appliedNames(state.storage)).toEqual([
+        ...shipped,
         "0001_create_notes",
         "0002_seed_note",
       ]);
     });
+  });
+
+  it("create the poll tables on a fresh object and keep them across restarts", async () => {
+    const stub = stubFor("schema-polls");
+    const tables = (storage: DurableObjectStorage) =>
+      storage.sql
+        .exec<{ name: string }>(
+          `SELECT name FROM sqlite_master
+           WHERE type = 'table' AND name IN
+             ('rounds', 'polls', 'poll_options', 'poll_votes')
+           ORDER BY name`,
+        )
+        .toArray()
+        .map((row) => row.name);
+    const roundCount = (storage: DurableObjectStorage) =>
+      storage.sql.exec<{ n: number }>("SELECT count(*) AS n FROM rounds").one()
+        .n;
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(tables(state.storage)).toEqual([
+        "poll_options",
+        "poll_votes",
+        "polls",
+        "rounds",
+      ]);
+      state.storage.sql.exec(
+        `INSERT INTO rounds (status, started_by, started_at)
+         VALUES ('location_voting', 'u1', 1)`,
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(appliedNames(state.storage)).toEqual(shipped);
+      expect(roundCount(state.storage)).toBe(1);
+    });
+  });
+
+  it("allow only one active round", async () => {
+    await runInDurableObject(
+      stubFor("schema-one-active"),
+      (_instance, state) => {
+        const insert = (status: string) => {
+          state.storage.sql.exec(
+            `INSERT INTO rounds (status, started_by, started_at)
+           VALUES (?, 'u1', 1)`,
+            status,
+          );
+        };
+        insert("cancelled");
+        insert("complete");
+        insert("location_voting");
+        insert("cancelled");
+        expect(() => {
+          insert("date_voting");
+        }).toThrow();
+      },
+    );
   });
 });
