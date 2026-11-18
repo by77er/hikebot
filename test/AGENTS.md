@@ -573,6 +573,11 @@ Run `npm test` for the whole suite before opening a pull request.
    and take the refused thread with `e2e.discord.takeRejections()`,
    asserting on it.
 
+   To play a hike dated today that has not started, set the guild's time
+   zone with `play.setTimezone` to a fixed-offset zone whose clock reads
+   about noon (`Etc/GMT-<hours ahead of UTC>`), and offer `<today> 23:00`
+   in that zone, as `noonZone` in `test/e2e/hike-day.test.ts` does.
+
    To make creating the hike's scheduled event fail as Discord does when
    the bot lacks Create Events, call
    `e2e.discord.revokeCreateEvents(g.guildId)` before `closeVote` and lift

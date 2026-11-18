@@ -278,6 +278,30 @@ now)` that says `"unconfirmed"` for a claim older than a minute (its run
    npx vitest run --project e2e test/e2e/hike-thread.test.ts
    ```
 
+## Add a section to the hike-day announcement
+
+1. In `src/features/hike-day.ts`, add a function to `HIKE_DAY_SECTIONS`
+   where its lines should appear. It gets the `HikeDay` and returns its
+   lines; returning `[]` leaves the section out:
+
+   ```ts
+   ({ location }) =>
+     location.details === null ? [] : [`**Notes:** ${location.details}`],
+   ```
+
+   If it needs something `HikeDay` lacks, add a field to `HikeDay` and fill
+   it in `hikeDayOf`, passing in anything that needs a request from
+   `postHikeDay`, as the calendar address is.
+
+2. Add its line to the expected lines of "names the location, the start in
+   both forms, …" in `test/features/hike-day.test.ts` and of the scenario
+   in `test/e2e/hike-day.test.ts`, then run them:
+
+   ```sh
+   npx vitest run test/features/hike-day.test.ts
+   npx vitest run --project e2e test/e2e/hike-day.test.ts
+   ```
+
 ## Refresh a poll message after a change
 
 1. After the change is stored, mark the poll for the debounced refresh, with
