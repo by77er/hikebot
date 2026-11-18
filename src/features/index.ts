@@ -1,4 +1,6 @@
 import type { Router } from "../guild/router";
+import { registerAdminPanel } from "./admin-panel";
+import { hikeCommand } from "./hike";
 
 /**
  * Registers every feature's handlers. A feature keeps its handlers in its own
@@ -9,5 +11,7 @@ import type { Router } from "../guild/router";
  *   router.modal("hb:location:propose", saveProposal);
  */
 export function registerFeatures(router: Router): Router {
+  router.command("hike", hikeCommand);
+  registerAdminPanel(router);
   return router;
 }
