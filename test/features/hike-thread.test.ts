@@ -566,6 +566,54 @@ describe("closing the date vote", () => {
   });
 });
 
+describe("the thread's When line", () => {
+  it("is timed in the zone the close step is given", async () => {
+    const guild = "hike-thread-step-zone";
+    const view = await dateVoting(guild);
+    discord(guild, forbidden);
+    await closeDateVote(guild, view);
+    vi.restoreAllMocks();
+    const spy = discord(guild, created);
+    await runInDurableObject(stub(guild), async (_i, state) => {
+      const store = new PollStore(state.storage);
+      await createHikeThreadStep.run(
+        {
+          poll: view,
+          round: store.getLastRound(),
+          guildId: GUILD,
+          timeZone: "Asia/Kolkata",
+        },
+        { env, storage: state.storage },
+      );
+    });
+    const [thread] = sent(spy).filter((r) => r.route.endsWith("/threads"));
+    // 09:00 in Kolkata on 15 June 2030 is 03:30 UTC.
+    expect(text(thread?.body.message?.components ?? [])).toContain(
+      "**When:** Sat, 15 Jun 2030 · 09:00 (<t:1907724600:R>)",
+    );
+  });
+
+  it("is timed in the guild's zone at the time of a retry", async () => {
+    const guild = "200000000000000309";
+    const view = await dateVoting(guild);
+    discord(guild, forbidden);
+    await closeDateVote(guild, view);
+    vi.restoreAllMocks();
+    await runInDurableObject(stub(guild), (_i, state) => {
+      new GuildConfig(state.storage).setTimezone("Europe/Berlin");
+    });
+    const spy = discord(guild, created);
+    const ctx = createExecutionContext();
+    await send(click(HIKE_THREAD_IDS.create(1), guild), ctx);
+    await waitOnExecutionContext(ctx);
+    const [thread] = sent(spy).filter((r) => r.route.endsWith("/threads"));
+    // 09:00 in Berlin on 15 June 2030 is 07:00 UTC.
+    expect(text(thread?.body.message?.components ?? [])).toContain(
+      "**When:** Sat, 15 Jun 2030 · 09:00 (<t:1907737200:R>)",
+    );
+  });
+});
+
 describe("Create hike thread", () => {
   it("retries after a failure: stores the thread, posts no announcement, and the button is gone", async () => {
     const guild = "200000000000000301";

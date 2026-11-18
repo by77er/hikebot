@@ -158,12 +158,11 @@ type Created = { ok: true; threadId: string } | { ok: false; reason: string };
 async function createHikeThread(
   round: RoundView,
   guildId: string,
+  timeZone: string,
   context: HandlerContext,
 ): Promise<Created> {
   const store = new PollStore(context.storage);
-  const { forumChannelId: forumId, timezone } = new GuildConfig(
-    context.storage,
-  ).get();
+  const forumId = new GuildConfig(context.storage).get().forumChannelId;
   if (forumId === null) {
     const reason =
       "No hike threads channel is set. Pick one under Settings, then click Create hike thread.";
@@ -176,7 +175,7 @@ async function createHikeThread(
         winnerOf(round.locationPoll)?.label ?? "Hike",
         winnerOf(round.datePoll)?.label ?? "?",
       ),
-      message: messageBody(renderThreadMessage(round, guildId, timezone)),
+      message: messageBody(renderThreadMessage(round, guildId, timeZone)),
     });
     store.setRoundThread(round.id, thread.id);
     clearHikeThreadAttempt(context.storage, round.id);
@@ -195,7 +194,7 @@ async function createHikeThread(
  */
 export const createHikeThreadStep: CloseStep = {
   name: "create the hike thread",
-  run: async ({ round, guildId }, context) => {
+  run: async ({ round, guildId, timeZone }, context) => {
     const store = new PollStore(context.storage);
     if (
       round === null ||
@@ -203,7 +202,7 @@ export const createHikeThreadStep: CloseStep = {
     ) {
       return {};
     }
-    const created = await createHikeThread(round, guildId, context);
+    const created = await createHikeThread(round, guildId, timeZone, context);
     return created.ok
       ? { announce: [`**Hike thread:** <#${created.threadId}>`] }
       : {};
@@ -246,6 +245,7 @@ const retryHikeThread: ComponentHandler = adminOnly(
         const created = await createHikeThread(
           round,
           interaction.guild_id ?? "",
+          new GuildConfig(context.storage).get().timezone,
           context,
         );
         await finishPanel(

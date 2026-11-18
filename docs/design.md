@@ -498,8 +498,8 @@ library, and take the current time as a parameter:
 - `clockIn(timeZone, now)`: the weekday and time there, `Wed 11:42`.
 - `normalizeTimeZone(input)`: the zone's stored name, or null (see "Admin
   panel").
-- `HIKE_DURATION_HOURS` (4): how long a hike is taken to last, for events
-  and calendars.
+- `HIKE_DURATION_HOURS` (4): how long a hike is taken to last, from its
+  start.
 
 ## Round lifecycle
 
@@ -743,7 +743,7 @@ place to organise that hike.
   one: the location as a heading, its details, "Proposed by" and the
   proposer's mention, the "**When:**" line as in the announcement (the
   date's label and the relative timestamp of its start in the guild's time
-  zone when the thread is created), then one line per vote: the
+  zone when the date vote closed, or now for **Create hike thread**), then one line per vote: the
   winner, its votes and how many members voted, a note when the winner was
   drawn at random from a tie (with the number of tied options), and a link
   to the poll message. Labels and details are bounded (80 and 300
