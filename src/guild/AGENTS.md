@@ -94,7 +94,14 @@ The examples use a feature named `trail`; replace it with your feature's name
 
 ## Add a modal and its submit handler
 
-1. Open the modal from a command or component handler. Each field is a
+1. Pick an action name and check that no `registerFeatures` line or test
+   already registers `hb:trail:<action>` as a modal:
+
+   ```sh
+   grep -rn 'modal("hb:' src/features test/guild
+   ```
+
+2. Open the modal from a command or component handler. Each field is a
    `label` around an input whose `custom_id` comes from `customId`:
 
    ```ts
@@ -105,7 +112,7 @@ The examples use a feature named `trail`; replace it with your feature's name
    };
    ```
 
-2. In `src/features/trail.ts`, export the submit handler. Read each field
+3. In `src/features/trail.ts`, export the submit handler. Read each field
    with `textInputValue(interaction.data, id)` (or `selectValues` for a
    select), using the same `customId` call as the field:
 
@@ -126,13 +133,13 @@ The examples use a feature named `trail`; replace it with your feature's name
    };
    ```
 
-3. Register it under the modal's `custom_id`, in `registerFeatures`:
+4. Register it under the modal's `custom_id`, in `registerFeatures`:
 
    ```ts
    router.modal("hb:trail:propose", saveTrail);
    ```
 
-4. Test it through the Worker with a modal interaction that carries the
+5. Test it through the Worker with a modal interaction that carries the
    field values (see "Write a test that sends a signed interaction" in
    `test/AGENTS.md`), then run `npx vitest run test/features/trail.test.ts`.
 
