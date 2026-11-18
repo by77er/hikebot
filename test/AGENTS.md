@@ -393,6 +393,68 @@ Run `npm test` for the whole suite before opening a pull request.
    pgrep -x workerd || echo "no workerd left"
    ```
 
+## Play a hike round in an end-to-end scenario
+
+1. Create a `RoundPlayer` for the file next to `useE2E()`, and a guild per
+   test with its own number (0-99), which adds the guild, its owner, 12
+   members and a text, an announcement and a forum channel to the fake:
+
+   ```ts
+   import { Member, messageText, waitForMessage } from "./harness/helpers";
+   import { RoundPlayer } from "./harness/rounds";
+   import { useE2E } from "./harness/worker";
+
+   const e2e = useE2E();
+   const play = new RoundPlayer(e2e);
+
+   it("announces the hike", async () => {
+     const g = play.guild(1);
+     const [ana] = g.members as [Member];
+   ```
+
+2. Set up the panel, then take the round's steps. Each start returns the
+   poll message as the fake stores it and waits until the panel says the
+   vote is open; `closeVote` and `cancelRound` confirm and wait for the
+   panel's answer:
+
+   ```ts
+     const panel = await play.setUpPanel(g);
+     const where = await play.startLocationVote(g, panel, "Ridge
+   ```
+
+Lake");
+await play.vote(ana, where, ["Lake"]);
+await play.closeVote(g.owner, panel, "location vote");
+const when = await play.startDateVote(g, panel, "2030-06-08
+2030-06-15");
+await play.vote(ana, when, ["Sat, 15 Jun 2030"]);
+await play.closeVote(g.owner, panel, "date vote");
+
+````
+
+Use dates years ahead: the Worker checks them against the real clock.
+To test refused input, call `play.submitDates(g, panel, text)` and read
+the reply with `expectEphemeral(g.owner, "<text>")`.
+
+3. Read what members see with `play.shown(message)` (the message as stored
+now), `buttonLabels(message)` and `e2e.discord.channelMessages(id)`, and
+wait for background edits with `eventually` or `waitForMessage`:
+
+```ts
+  const announcement = await waitForMessage(e2e.discord, g.channels.news, (m) =>
+    messageText(m).includes("Hike planned"),
+  );
+  expect(messageText(announcement)).toContain("**When:** Sat, 15 Jun 2030");
+});
+````
+
+4. Run the file and check that no `workerd` process is left:
+
+   ```sh
+   npx vitest run --project e2e test/e2e/<feature>.test.ts
+   pgrep -x workerd || echo "no workerd left"
+   ```
+
 ## Teach the fake Discord API a new route or limit
 
 1. For a new route, add the REST method to `DiscordApi` first, then add the
