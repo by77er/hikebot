@@ -456,11 +456,11 @@ scenario starts the real bundle with `useE2E()` (no `probe` option), drives
 the flow as a member through signed interactions (`Member.run`, `click`,
 `select`, `submitModal`), and asserts on what the fake Discord API stores or
 on the reply the member gets. Follow "Write an end-to-end scenario" in
-`test/AGENTS.md`. Unit tests under `test/<dir>/` do not replace it: they do
-not show that Discord accepts the payload, that the reply arrives in
-time, or that each control the bot renders has a handler. A change no
-member can see, such as a refactor, a comment, or store logic whose unit
-tests cover it, needs no scenario.
+`test/AGENTS.md`. The tests in `test/<dir>/` do not replace it: they do not
+show that Discord accepts the payload, that the reply arrives in time, or that
+each control the bot renders has a handler. A change no member can see, such
+as a refactor, a comment, or store logic the tests in `test/polls/` already
+cover, needs no scenario.
 
 ```diff good
 --- a/src/features/index.ts
