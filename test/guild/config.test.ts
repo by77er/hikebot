@@ -84,18 +84,33 @@ describe("GuildConfig", () => {
         weekday: 3,
         time: "09:00",
         dateVoteDays: 2,
+        onSince: null,
       });
-      expect(config.setCadence({ enabled: true, weekday: 6 })).toEqual({
+      expect(
+        config.setCadence({
+          enabled: true,
+          weekday: 6,
+          onSince: 1_893_000_000_000,
+        }),
+      ).toEqual({
         ...empty,
-        cadence: { enabled: true, weekday: 6, time: "09:00", dateVoteDays: 2 },
+        cadence: {
+          enabled: true,
+          weekday: 6,
+          time: "09:00",
+          dateVoteDays: 2,
+          onSince: 1_893_000_000_000,
+        },
       });
       config.setCadence({ time: "18:30", dateVoteDays: 3 });
-      config.setCadence({ enabled: false });
+      expect(config.get().cadence.onSince).toBe(1_893_000_000_000);
+      config.setCadence({ enabled: false, onSince: null });
       expect(config.get().cadence).toEqual({
         enabled: false,
         weekday: 6,
         time: "18:30",
         dateVoteDays: 3,
+        onSince: null,
       });
     });
   });

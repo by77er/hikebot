@@ -1488,7 +1488,10 @@ describe("the admin panel", () => {
       expect(text(view.data.components)).toContain(
         "**Schedule:** on · Wednesdays at 09:00 (America/Los_Angeles) · date vote 2 days\n**Next:** Opens a location vote <t:1893603600:F>",
       );
-      expect((await settingsOf(guild)).cadence.enabled).toBe(true);
+      expect((await settingsOf(guild)).cadence).toMatchObject({
+        enabled: true,
+        onSince: MONDAY,
+      });
       // Wednesday 2 January 2030, 09:00 in Los Angeles.
       expect(await cadenceRun(guild)).toBe(Date.UTC(2030, 0, 2, 17));
 
@@ -1505,6 +1508,10 @@ describe("the admin panel", () => {
       );
       expect(text(view.data.components)).toContain("**Schedule:** off");
       expect(await cadenceRun(guild)).toBeUndefined();
+      expect((await settingsOf(guild)).cadence).toMatchObject({
+        enabled: false,
+        onSince: null,
+      });
     });
 
     it("saves the weekday, the date vote's length and the time, moving the next run", async () => {
@@ -1545,6 +1552,8 @@ describe("the admin panel", () => {
         weekday: 5,
         time: "07:30",
         dateVoteDays: 3,
+        // Turned on at the faked Monday noon.
+        onSince: MONDAY,
       });
 
       for (const typed of ["25:00", "7.30", ""]) {

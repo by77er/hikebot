@@ -68,6 +68,7 @@ import {
 } from "./announcement-state";
 import {
   cadenceSnapshot,
+  changeCadence as changeSchedule,
   discordTime,
   nextCadenceAction,
   rescheduleCadence,
@@ -719,12 +720,18 @@ export function homeAreaLine(settings: GuildSettings): string {
  * `**Schedule:** on · Wednesdays at 09:00 (America/Los_Angeles)`, then
  * what it does next with a Discord timestamp; `**Schedule:** off`.
  */
-function scheduleLines({ settings, nextScheduled }: AdminPanelState): string[] {
+function scheduleLines({
+  settings,
+  round,
+  nextScheduled,
+}: AdminPanelState): string[] {
   const { cadence } = settings;
   if (!cadence.enabled) return ["**Schedule:** off"];
   const next =
     nextScheduled === null || nextScheduled === undefined
-      ? "**Next:** nothing in the coming weeks."
+      ? round?.status === "date_voting"
+        ? "**Next:** nothing until an admin closes the date vote, which was started before the schedule was turned on."
+        : "**Next:** nothing in the coming weeks."
       : `**Next:** ${nextScheduled.what} ${discordTime(nextScheduled.at)} (${discordTime(nextScheduled.at, "R")}).`;
   return [
     `**Schedule:** on · ${WEEKDAY_NAMES[cadence.weekday] ?? "?"}s at ${cadence.time} (${settings.timezone}) · date vote ${dayCount(cadence.dateVoteDays)}`,
@@ -1140,19 +1147,17 @@ export function parseTimeOfDay(text: string): string | null {
 }
 
 /** Stores the schedule change and reschedules the job from it. */
-async function changeCadence(
+function changeCadence(
   interaction: APIMessageComponentInteraction | APIModalSubmitInteraction,
   context: HandlerContext,
-  change: Partial<CadenceSettings>,
+  change: Partial<Omit<CadenceSettings, "onSince">>,
 ): Promise<GuildSettings> {
-  const settings = new GuildConfig(context.storage).setCadence(change);
-  await rescheduleCadence(
+  return changeSchedule(
     context.storage,
     new PollStore(context.storage),
-    settings,
+    change,
     interaction.guild_id ?? "",
   );
-  return settings;
 }
 
 /** The one value picked in a string select, as a whole number in range. */

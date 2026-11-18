@@ -126,7 +126,7 @@ export const migrations: readonly Migration[] = [
   },
   {
     // The weekly schedule: off by default, Wednesday (3) at 09:00, and a
-    // date vote of 2 days.
+    // date vote of 2 days; and when it was turned on, null while off.
     name: "0007_guild_cadence",
     sql: `
       ALTER TABLE guild_settings
@@ -137,6 +137,7 @@ export const migrations: readonly Migration[] = [
         ADD COLUMN cadence_time TEXT NOT NULL DEFAULT '09:00';
       ALTER TABLE guild_settings
         ADD COLUMN cadence_date_vote_days INTEGER NOT NULL DEFAULT 2;
+      ALTER TABLE guild_settings ADD COLUMN cadence_on_since INTEGER;
     `,
   },
 ];

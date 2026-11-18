@@ -64,8 +64,9 @@ const notice = (g: TestGuild, text: string) =>
   );
 
 describe("the weekly schedule's job", () => {
-  // The Worker's clock cannot be moved, so the votes are aged in storage and
-  // the schedule is set to a minute or two from now; the test waits for the
+  // The Worker's clock cannot be moved, so the votes (and when the schedule
+  // was turned on, before they opened) are aged in storage, and the
+  // schedule is set to a minute or two from now; the test waits for the
   // object's real alarm, through what the bot posts.
   it("holds a quiet location vote, holds a quiet date vote, and cancels a round nobody voted a date for", async () => {
     const today = inLosAngeles(Date.now()).day;
@@ -73,12 +74,14 @@ describe("the weekly schedule's job", () => {
     // A location vote open a week with an option and no votes.
     const quietWhere = play.guild(1);
     const wherePanel = await play.setUpPanel(quietWhere);
+    await play.turnScheduleOn(quietWhere, wherePanel);
     await play.startLocationVote(quietWhere, wherePanel, "Ridge Trail");
     await play.backdateVotes(quietWhere, 7);
 
     // A date vote open three days with no votes, its dates days ahead.
     const quietWhen = play.guild(2);
     const whenPanel = await decided(quietWhen);
+    await play.turnScheduleOn(quietWhen, whenPanel);
     await play.startDateVote(
       quietWhen,
       whenPanel,
@@ -90,6 +93,7 @@ describe("the weekly schedule's job", () => {
     // a day away.
     const tooLate = play.guild(3);
     const latePanel = await decided(tooLate);
+    await play.turnScheduleOn(tooLate, latePanel);
     const soon = inLosAngeles(Date.now() + 12 * 3_600_000);
     await play.startDateVote(
       tooLate,
@@ -106,7 +110,7 @@ describe("the weekly schedule's job", () => {
       [quietWhen, whenPanel],
       [tooLate, latePanel],
     ] as const) {
-      await play.turnScheduleOn(g, panel, weekday, time);
+      await play.setScheduleTime(g, panel, weekday, time);
     }
 
     const [where, when, cancelled] = await Promise.all([
@@ -123,7 +127,7 @@ describe("the weekly schedule's job", () => {
       Math.abs(Number(again?.[1]) - (at / 1000 + 7 * 86_400)),
     ).toBeLessThanOrEqual(3_600);
     expect(messageText(when)).toBe(
-      `**The date vote stays open.**\nNobody has voted on a date yet, so hikebot did not close it. Vote in <#${quietWhen.channels.text}>: hikebot closes it at ${time} (America/Los_Angeles) on the first day someone has voted, and cancels the round if nobody has voted by the day before the earliest date.`,
+      `**The date vote stays open.**\nNobody has voted on a date yet, so hikebot did not close it. Vote in <#${quietWhen.channels.text}>: hikebot closes it at ${time} (America/Los_Angeles) on the first day someone has voted, and cancels the round if nobody has voted once the earliest date is less than a day away.`,
     );
     expect(messageText(cancelled)).toMatch(
       /^\*\*This round is cancelled\.\*\*\nNobody voted on a date for \*\*Ridge Trail\*\*, so hikebot cancelled the round\. A new location vote opens <t:\d+:F>\.$/,

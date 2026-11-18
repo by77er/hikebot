@@ -38,6 +38,7 @@ import {
   addDays,
   parseDateOption,
   todayIn,
+  windowFrom,
 } from "../polls/dates";
 import { isPollError, type PollError } from "../polls/errors";
 import {
@@ -268,10 +269,10 @@ export function proposeModal(
   today: string,
   window?: { first: string; last: string },
 ): APIInteractionResponse {
-  // A window that started before today takes days from today on.
-  const first =
-    window === undefined || window.first < today ? today : window.first;
-  const last = window?.last ?? addDays(today, MAX_PROPOSAL_DAYS_AHEAD);
+  const { first, last } =
+    window === undefined
+      ? { first: today, last: addDays(today, MAX_PROPOSAL_DAYS_AHEAD) }
+      : windowFrom(window, today);
   return modal(DATE_IDS.propose(pollId), "Propose a date", [
     label(
       "Date",

@@ -712,10 +712,11 @@ columns by `0007_guild_cadence`; read and written by `GuildConfig` in
 | `cadence_weekday`        | The schedule's day, 0 (Sunday) to 6 (default 3, Wednesday)        |
 | `cadence_time`           | The schedule's time of day, `HH:MM` (default `09:00`)             |
 | `cadence_date_vote_days` | Days the date vote stays open on the schedule, 1 to 3 (default 2) |
+| `cadence_on_since`       | When the schedule was last turned on; null while it is off        |
 
 Every column but `id` and the schedule's is null until it is set; the
-schedule's have their defaults (`DEFAULT_CADENCE`), and `GuildConfig.get()`
-returns them as `cadence`. Setup is complete when the three channels are
+schedule's have their defaults (`DEFAULT_CADENCE`; `cadence_on_since` is
+null), and `GuildConfig.get()` returns them as `cadence`. Setup is complete when the three channels are
 set.
 
 The time zone is the group's own: dates are wall-clock times there, "today"
@@ -1399,18 +1400,21 @@ The steps call the round actions (see "Round actions") with the
 application's id as the actor, so the `*_by` columns hold it and messages
 say hikebot where they would name an admin; a refused action is logged.
 
-**Dates.** A date vote in a server with the cadence on closes at the
-cadence time, the configured number of days after the calendar day it
-opened (`cadenceDateVoteClose`), whether the job or an admin opened it. Its
-default dates are every Saturday and Sunday at the default hike time in the
-14 days after that closing day (`cadenceDateCandidates`), so every
-candidate is still ahead when the vote closes, whatever weekday is set; a
-date a member adds must be inside the same 14 days (`cadenceWindow`),
-weekdays included. These functions are in `src/polls/dates.ts`, beside the
-time zone helpers, with `nextCadenceInstant`, `previousCadenceInstant` and
-`nextDailyInstant`: all of them compute in the server's time zone through
-`hikeStart`, so 09:00 local stays 09:00 local across daylight-saving
-changes.
+**Dates.** A date vote opened while the cadence is on, by the job or by an
+admin, closes at the cadence time, the configured number of days after the
+calendar day it opened (`cadenceDateVoteClose`). One opened before the
+cadence was last turned on (`cadence_on_since`, set when an admin turns it
+on and cleared when they turn it off) is left to the admins: the job does
+not close or hold it, and its members keep the usual month. The default
+dates of a cadence date vote are every Saturday and Sunday at the default
+hike time in the 14 days after its closing day (`cadenceDateCandidates`),
+so every candidate is still ahead when the vote closes, whatever weekday is
+set; a date a member adds must be inside the same 14 days (`cadenceWindow`),
+weekdays included, and not before today (`windowFrom`). These functions are
+in `src/polls/dates.ts`, beside the time zone helpers, with
+`nextCadenceInstant`, `previousCadenceInstant` and `nextDailyInstant`: all
+of them compute in the server's time zone through `hikeStart`, so 09:00
+local stays 09:00 local across daylight-saving changes.
 
 **Admins stay in control.** Every manual action still works while the
 cadence is on; the job only looks at the state it finds. An admin who

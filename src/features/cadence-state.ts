@@ -5,7 +5,11 @@
  * here reads the round as it is stored: the job is driven by state, so an
  * admin's manual action between two runs is simply what the next run finds.
  */
-import type { CadenceSettings, GuildSettings } from "../guild/config";
+import {
+  GuildConfig,
+  type CadenceSettings,
+  type GuildSettings,
+} from "../guild/config";
 import { schedule, unschedule } from "../guild/schedule";
 import {
   HIKE_DURATION_HOURS,
@@ -65,6 +69,11 @@ export function writeCadenceState(
 export interface CadenceSnapshot {
   /** The active round, if any. */
   round: RoundView | null;
+  /**
+   * The active round's open date vote, if it was opened while the schedule
+   * was on, so the schedule closes it; null for one opened before.
+   */
+  dateVote: PollView | null;
   /** When the newest planned hike ends, null when there is none. */
   hikeEnd: number | null;
 }
@@ -74,8 +83,14 @@ export function cadenceSnapshot(
   settings: GuildSettings,
 ): CadenceSnapshot {
   const [hike] = store.listHikes({ limit: 1, offset: 0 });
+  const round = store.getActiveRound();
+  const dateVote = openDateVote(round);
   return {
-    round: store.getActiveRound(),
+    round,
+    dateVote:
+      dateVote !== null && isScheduledDateVote(dateVote, settings)
+        ? dateVote
+        : null,
     hikeEnd:
       hike === undefined
         ? null
@@ -90,6 +105,15 @@ export function openDateVote(round: RoundView | null): PollView | null {
   return round?.status === "date_voting" && poll?.status === "open"
     ? poll
     : null;
+}
+
+/**
+ * Whether the schedule closes the date vote `poll`: it opened while the
+ * schedule was on. One opened before is the admins' to close.
+ */
+function isScheduledDateVote(poll: PollView, settings: GuildSettings): boolean {
+  const since = settings.cadence.onSince;
+  return settings.cadence.enabled && since !== null && poll.openedAt >= since;
 }
 
 /** When the date vote `poll` is due to close on the guild's schedule. */
@@ -127,14 +151,15 @@ export function previousInstant(settings: GuildSettings, now: number): number {
 }
 
 /**
- * The days members may propose for the date vote `poll` while the schedule
- * is on (`cadenceWindow` after its planned close); null while it is off.
+ * The days members may propose for the date vote `poll` when the schedule
+ * closes it (`cadenceWindow` after its planned close); null while the
+ * schedule is off or for a vote opened before it was turned on.
  */
 export function cadenceDateWindow(
   poll: PollView,
   settings: GuildSettings,
 ): { first: string; last: string } | null {
-  if (!settings.cadence.enabled) return null;
+  if (!isScheduledDateVote(poll, settings)) return null;
   return cadenceWindow(plannedDateVoteClose(poll, settings), settings.timezone);
 }
 
@@ -145,7 +170,7 @@ export function nextCadenceRun(
   now: number,
 ): number {
   const instant = nextCadenceInstant(settings.cadence, settings.timezone, now);
-  const poll = openDateVote(snapshot.round);
+  const poll = snapshot.dateVote;
   return poll === null
     ? instant
     : Math.min(instant, nextDateVoteAttempt(poll, settings, now));
@@ -164,8 +189,9 @@ export type CadenceStep =
 
 /**
  * The step the job takes at `now`, `onInstant` when a cadence instant not
- * yet handled has come. A date vote past its planned close is handled on
- * any run: closed when anyone voted, cancelled with its round when nobody
+ * yet handled has come. A date vote opened while the schedule was on and
+ * past its planned close is handled on any run (one opened before is left
+ * to the admins): closed when anyone voted, cancelled with its round when nobody
  * did and its earliest candidate is less than a day away, held otherwise.
  * On a cadence instant: a location vote open for at least
  * `LOCATION_VOTE_MIN_OPEN_MS` is closed, or held when it has no options or
@@ -178,8 +204,7 @@ export function cadenceStep(
   now: number,
   onInstant: boolean,
 ): CadenceStep {
-  const { round } = snapshot;
-  const dateVote = openDateVote(round);
+  const { round, dateVote } = snapshot;
   if (round !== null && dateVote !== null) {
     if (plannedDateVoteClose(dateVote, settings) > now) return { kind: "none" };
     if (dateVote.voterCount > 0) {
@@ -245,7 +270,7 @@ export function nextCadenceAction(
   snapshot: CadenceSnapshot,
   now: number,
 ): CadenceAction | null {
-  const poll = openDateVote(snapshot.round);
+  const poll = snapshot.dateVote;
   if (poll !== null) {
     const at = nextDateVoteAttempt(poll, settings, now);
     const step = cadenceStep(settings, snapshot, at, false);
@@ -317,6 +342,28 @@ export async function replaceCadenceRun(
 ): Promise<void> {
   await unschedule(storage, CADENCE_JOB);
   await scheduleCadence(storage, store, settings, now);
+}
+
+/**
+ * Stores an admin's change to the schedule, `change`, which the caller has
+ * checked, and reschedules the job from it. Turning the schedule on records
+ * the store's time as `onSince`; turning it off clears it.
+ */
+export async function changeCadence(
+  storage: DurableObjectStorage,
+  store: PollStore,
+  change: Partial<Omit<CadenceSettings, "onSince">>,
+  guildId: string,
+): Promise<GuildSettings> {
+  const config = new GuildConfig(storage);
+  const turnedOn = change.enabled === true && !config.get().cadence.enabled;
+  const settings = config.setCadence({
+    ...change,
+    ...(turnedOn ? { onSince: store.now() } : {}),
+    ...(change.enabled === false ? { onSince: null } : {}),
+  });
+  await rescheduleCadence(storage, store, settings, guildId);
+  return settings;
 }
 
 /**

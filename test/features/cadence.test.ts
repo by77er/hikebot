@@ -13,8 +13,9 @@ import {
 } from "../../src/features/admin-panel";
 import {
   CADENCE_JOB,
+  cadenceDateWindow,
+  changeCadence,
   readCadenceState,
-  rescheduleCadence,
   scheduleCadence,
 } from "../../src/features/cadence-state";
 import {
@@ -158,7 +159,7 @@ function inGuild<T>(
  */
 async function turnOn(
   name: string,
-  change: Partial<CadenceSettings> = {},
+  change: Partial<Omit<CadenceSettings, "onSince">> = {},
   zone = LA,
 ): Promise<void> {
   await inGuild(name, async ({ storage }, store) => {
@@ -175,10 +176,9 @@ async function changeSchedule(
   storage: DurableObjectStorage,
   store: PollStore,
   name: string,
-  change: Partial<CadenceSettings>,
+  change: Partial<Omit<CadenceSettings, "onSince">>,
 ): Promise<void> {
-  const settings = new GuildConfig(storage).setCadence(change);
-  await rescheduleCadence(storage, store, settings, name);
+  await changeCadence(storage, store, change, name);
 }
 
 /** Moves the clock to `iso` (UTC) and runs the object's alarm. */
@@ -263,7 +263,7 @@ function dateValues(round: RoundView | null): (string | null)[] {
 /** A location vote opened by the job at `WED[0]`, after turning it on. */
 async function locationVoteOpen(
   name: string,
-  change: Partial<CadenceSettings> = {},
+  change: Partial<Omit<CadenceSettings, "onSince">> = {},
 ): Promise<void> {
   vi.setSystemTime(utc(MONDAY_BEFORE));
   await turnOn(name, change);
@@ -273,7 +273,7 @@ async function locationVoteOpen(
 /** A date vote opened by the job at `WED[1]` after a location was voted. */
 async function dateVoteOpen(
   name: string,
-  change: Partial<CadenceSettings> = {},
+  change: Partial<Omit<CadenceSettings, "onSince">> = {},
 ): Promise<void> {
   await locationVoteOpen(name, change);
   await proposeAndVote(name, ["Ridge Trail"], { [ANA]: "Ridge Trail" });
@@ -469,7 +469,7 @@ describe("quiet weeks", () => {
     await runAt(name, "2030-01-10T17:00");
     expect((await lastRound(name))?.status).toBe("date_voting");
     expect(discord.posts(NEWS)).toEqual([
-      `**The date vote stays open.**\nNobody has voted on a date yet, so hikebot did not close it. Vote in <#${TEXT}>: hikebot closes it at 09:00 (America/Los_Angeles) on the first day someone has voted, and cancels the round if nobody has voted by the day before the earliest date.`,
+      `**The date vote stays open.**\nNobody has voted on a date yet, so hikebot did not close it. Vote in <#${TEXT}>: hikebot closes it at 09:00 (America/Los_Angeles) on the first day someone has voted, and cancels the round if nobody has voted once the earliest date is less than a day away.`,
     ]);
     expect(await nextRun(name)).toBe(at("2030-01-11T17:00"));
 
@@ -650,6 +650,61 @@ describe("manual actions between runs", () => {
       endedBy: OWNER,
     });
     expect(await nextRun(name)).toBe(at(WED[2]));
+  });
+
+  it("leaves a date vote opened before the schedule was turned on to the admins", async () => {
+    const discord = fakeDiscord();
+    const name = "cadence-manual-before-on";
+    // Monday 7 January, the schedule off: the admin decides the location and
+    // starts a date vote on 12 and 19 January by hand.
+    vi.setSystemTime(utc("2030-01-07T20:00"));
+    await inGuild(name, async (context, store) => {
+      const config = new GuildConfig(context.storage);
+      config.set("voteChannelId", TEXT);
+      config.set("announceChannelId", NEWS);
+      config.set("forumChannelId", FORUM);
+      config.setTimezone(LA);
+      await byHand(
+        startLocationVote(context, OWNER, { labels: ["Ridge Trail"] }),
+      );
+      const pollId = store.getActiveRound()?.locationPoll?.id ?? 0;
+      voteFor(store, pollId, { [ANA]: "Ridge Trail" });
+      await byHand(closeVote(context, OWNER, { pollId }));
+      await byHand(
+        startDateVote(context, OWNER, {
+          dates: ["2030-01-12 11:00", "2030-01-19 11:00"],
+        }),
+      );
+    });
+    // Friday 11 January: the schedule is turned on.
+    vi.setSystemTime(utc("2030-01-11T20:00"));
+    await inGuild(name, ({ storage }, store) =>
+      changeSchedule(storage, store, name, { enabled: true }),
+    );
+    // Not the next morning, as for a vote it opened: the next Wednesday.
+    expect(await nextRun(name)).toBe(at(WED[2]));
+    expect(
+      await inGuild(name, ({ storage }) =>
+        text(renderAdminPanel(loadAdminPanelState(storage))),
+      ),
+    ).toContain(
+      "**Next:** nothing until an admin closes the date vote, which was started before the schedule was turned on.",
+    );
+    const poll = (await lastRound(name))?.datePoll;
+    expect(
+      await inGuild(name, ({ storage }) =>
+        poll ? cadenceDateWindow(poll, new GuildConfig(storage).get()) : "none",
+      ),
+    ).toBeNull();
+    discord.clear();
+
+    await runAt(name, WED[2]);
+    // Nothing on Discord; the alarm also ran the location lookup job.
+    expect(discord.sent.filter((s) => s.path.includes("/channels/"))).toEqual(
+      [],
+    );
+    expect((await lastRound(name))?.status).toBe("date_voting");
+    expect(await nextRun(name)).toBe(at(WED[3]));
   });
 
   it("waits six days before closing a location vote an admin started by hand", async () => {

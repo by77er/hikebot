@@ -52,6 +52,12 @@ export interface CadenceSettings {
   time: string;
   /** How many days after it opens the date vote closes. */
   dateVoteDays: number;
+  /**
+   * When the schedule was last turned on, in milliseconds since the epoch;
+   * null while it is off. A date vote opened before then is left to the
+   * admins.
+   */
+  onSince: number | null;
 }
 
 /** The schedule of a guild that has not changed it: off, Wednesday 09:00. */
@@ -60,6 +66,7 @@ export const DEFAULT_CADENCE: CadenceSettings = {
   weekday: 3,
   time: "09:00",
   dateVoteDays: 2,
+  onSince: null,
 };
 
 /** The fewest and most days a cadence date vote may stay open. */
@@ -93,6 +100,7 @@ interface Row extends Record<string, SqlStorageValue> {
   cadence_weekday: number;
   cadence_time: string;
   cadence_date_vote_days: number;
+  cadence_on_since: number | null;
 }
 
 /**
@@ -118,7 +126,7 @@ export class GuildConfig {
            forum_channel_id, owner_id, owner_fetched_at, timezone,
            home_area, home_name, home_lat, home_lon,
            cadence_enabled, cadence_weekday, cadence_time,
-           cadence_date_vote_days
+           cadence_date_vote_days, cadence_on_since
          FROM guild_settings WHERE id = 1`,
       )
       .one();
@@ -144,6 +152,7 @@ export class GuildConfig {
         weekday: row.cadence_weekday,
         time: row.cadence_time,
         dateVoteDays: row.cadence_date_vote_days,
+        onSince: row.cadence_on_since,
       },
     };
   }
@@ -188,20 +197,21 @@ export class GuildConfig {
 
   /**
    * Changes the schedule settings given in `change`, which the caller has
-   * checked: a weekday 0 to 6, a time `HH:MM`, and a date vote length from
-   * `MIN_DATE_VOTE_DAYS` to `MAX_DATE_VOTE_DAYS`. Returns the settings after
-   * the change.
+   * checked: a weekday 0 to 6, a time `HH:MM`, a date vote length from
+   * `MIN_DATE_VOTE_DAYS` to `MAX_DATE_VOTE_DAYS`, and when it was turned on.
+   * Returns the settings after the change.
    */
   setCadence(change: Partial<CadenceSettings>): GuildSettings {
     const cadence = { ...this.get().cadence, ...change };
     this.storage.sql.exec(
       `UPDATE guild_settings SET cadence_enabled = ?, cadence_weekday = ?,
-         cadence_time = ?, cadence_date_vote_days = ?
+         cadence_time = ?, cadence_date_vote_days = ?, cadence_on_since = ?
        WHERE id = 1`,
       cadence.enabled ? 1 : 0,
       cadence.weekday,
       cadence.time,
       cadence.dateVoteDays,
+      cadence.onSince,
     );
     return this.get();
   }

@@ -140,7 +140,7 @@ async function holdDateVote(
     context,
     [
       "**The date vote stays open.**",
-      `Nobody has voted on a date yet, so hikebot did not close it. Vote in ${channelOf(poll, settings)}: hikebot closes it at ${settings.cadence.time} (${settings.timezone}) on the first day someone has voted, and cancels the round if nobody has voted by the day before the earliest date.`,
+      `Nobody has voted on a date yet, so hikebot did not close it. Vote in ${channelOf(poll, settings)}: hikebot closes it at ${settings.cadence.time} (${settings.timezone}) on the first day someone has voted, and cancels the round if nobody has voted once the earliest date is less than a day away.`,
     ].join("\n"),
   );
 }

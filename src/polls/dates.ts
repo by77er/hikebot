@@ -380,6 +380,21 @@ export function cadenceWindow(
 }
 
 /**
+ * The days of `window` (`YYYY-MM-DD`, both included) still open on `today`:
+ * a window that began before today starts today. `first` is after `last`
+ * once the whole window has passed.
+ */
+export function windowFrom(
+  window: { first: string; last: string },
+  today: string,
+): { first: string; last: string } {
+  return {
+    first: window.first < today ? today : window.first,
+    last: window.last,
+  };
+}
+
+/**
  * A cadence round's default candidates: every Saturday and Sunday in its
  * window (`cadenceWindow`), at `DEFAULT_HIKE_TIME`, as `YYYY-MM-DD HH:MM`.
  */

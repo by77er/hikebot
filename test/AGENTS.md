@@ -311,9 +311,10 @@ or two from now. The example is the weekly schedule's job in
 1. Set up the state through the panel as a member would, then move its
    times back through the harness's access to the object's SQLite storage,
    as `RoundPlayer.backdateVotes(g, days)` in `test/e2e/harness/rounds.ts`
-   does:
+   does for the polls and for when the schedule was turned on:
 
    ```ts
+   await play.turnScheduleOn(g, panel);
    await play.startLocationVote(g, panel, "Ridge Trail");
    await play.backdateVotes(g, 7);
    ```

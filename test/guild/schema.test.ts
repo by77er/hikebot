@@ -38,6 +38,7 @@ function undoCadence(storage: DurableObjectStorage): void {
     "cadence_weekday",
     "cadence_time",
     "cadence_date_vote_days",
+    "cadence_on_since",
   ]) {
     storage.sql.exec(`ALTER TABLE guild_settings DROP COLUMN ${column}`);
   }
@@ -208,6 +209,7 @@ describe("migrations", () => {
           cadence_weekday: 3,
           cadence_time: "09:00",
           cadence_date_vote_days: 2,
+          cadence_on_since: null,
         },
       ]);
       state.storage.sql.exec(
@@ -462,6 +464,7 @@ describe("migrations", () => {
           cadence_weekday: 3,
           cadence_time: "09:00",
           cadence_date_vote_days: 2,
+          cadence_on_since: null,
         },
       ]);
       state.storage.sql.exec(

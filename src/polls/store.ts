@@ -4,6 +4,7 @@ import {
   addDays,
   parseDateOption,
   todayIn,
+  windowFrom,
 } from "./dates";
 import { PollError } from "./errors";
 import { defaultRandom, pickWinner, type RandomSource } from "./tally";
@@ -502,10 +503,10 @@ export class PollStore {
       const valid = validateDate(line, userId);
       const day = (valid.dateValue ?? "").slice(0, 10);
       const today = todayIn(timeZone, this.now());
-      // A window that started before today takes days from today on.
-      const first =
-        window === undefined || window.first < today ? today : window.first;
-      const last = window?.last ?? addDays(today, MAX_PROPOSAL_DAYS_AHEAD);
+      const { first, last } =
+        window === undefined
+          ? { first: today, last: addDays(today, MAX_PROPOSAL_DAYS_AHEAD) }
+          : windowFrom(window, today);
       if (day < today) {
         throw new PollError(
           "date_in_past",

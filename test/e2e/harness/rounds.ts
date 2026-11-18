@@ -366,26 +366,37 @@ export class RoundPlayer {
   }
 
   /**
-   * Moves the opening time of every poll of the guild `days` days back, as
-   * if its votes had been open that long: the Worker's clock cannot be moved,
-   * so this ages what the schedule's job reads instead. Writes through the
-   * harness's access to the object's SQLite storage.
+   * Moves the guild `days` days back in time as the weekly schedule's job
+   * sees it: every poll's opening time, and when the schedule was turned
+   * on. The Worker's clock cannot be moved, so this ages what the job reads
+   * instead. Writes through the harness's access to the object's SQLite
+   * storage.
    */
   async backdateVotes(g: TestGuild, days: number): Promise<void> {
     const sql = await this.e2e.harness
       .getWorker()
       .getDurableObjectStorage("GUILD_HIKE", { name: g.guildId });
+    const ms = days * 86_400_000;
+    await sql.exec("UPDATE polls SET opened_at = opened_at - ?", ms);
     await sql.exec(
-      "UPDATE polls SET opened_at = opened_at - ?",
-      days * 86_400_000,
+      "UPDATE guild_settings SET cadence_on_since = cadence_on_since - ?",
+      ms,
     );
+  }
+
+  /** Turns the weekly schedule on from Settings, then goes back. */
+  async turnScheduleOn(g: TestGuild, panel: FakeMessage): Promise<void> {
+    await g.owner.click(panel, ROUND_IDS.settings);
+    await g.owner.click(panel, ROUND_IDS.cadence);
+    expect(messageText(this.shown(panel))).toContain("The schedule is on.");
+    await g.owner.click(panel, ROUND_IDS.back);
   }
 
   /**
    * Sets the weekly schedule to `weekday` (0 is Sunday) at `time` (`HH:MM`)
-   * from Settings and turns it on, then goes back to the status view.
+   * from Settings, then goes back to the status view.
    */
-  async turnScheduleOn(
+  async setScheduleTime(
     g: TestGuild,
     panel: FakeMessage,
     weekday: number,
@@ -399,8 +410,9 @@ export class RoundPlayer {
       { [ROUND_IDS.cadenceTimeValue]: time },
       panel,
     );
-    await g.owner.click(panel, ROUND_IDS.cadence);
-    expect(messageText(this.shown(panel))).toContain("The schedule is on.");
+    expect(messageText(this.shown(panel))).toContain(
+      `The schedule's time is ${time}`,
+    );
     await g.owner.click(panel, ROUND_IDS.back);
   }
 

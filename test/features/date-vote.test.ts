@@ -1040,7 +1040,11 @@ describe("the start modal's default dates", () => {
     const guild = "date-start-cadence-run";
     await decided(guild);
     await runInDurableObject(stub(guild), (_i, state) => {
-      new GuildConfig(state.storage).setCadence({ enabled: true });
+      // Turned on the day before.
+      new GuildConfig(state.storage).setCadence({
+        enabled: true,
+        onSince: Date.UTC(2030, 0, 2),
+      });
     });
     discord(guild, () =>
       Response.json({ id: "900000000000000004", channel_id: TEXT }),
@@ -1231,7 +1235,11 @@ describe("proposing a date", () => {
     // 20th, so members may propose from Saturday 21 November to 4 December.
     const pollId = await openDatePoll(guild);
     await runInDurableObject(stub(guild), (_i, state) => {
-      new GuildConfig(state.storage).setCadence({ enabled: true });
+      // Turned on before the vote opened.
+      new GuildConfig(state.storage).setCadence({
+        enabled: true,
+        onSince: PROPOSE_NOW - 86_400_000,
+      });
     });
     const modal = await send(proposeClick(guild, pollId));
     expect(modal.data.components).toMatchObject([
@@ -1263,7 +1271,10 @@ describe("proposing a date", () => {
     // Opened a week earlier, on Wednesday 11 November: it was to close on
     // the 13th, so its window is 14 to 27 November, and today is the 18th.
     await runInDurableObject(stub(guild), (_i, state) => {
-      new GuildConfig(state.storage).setCadence({ enabled: true });
+      new GuildConfig(state.storage).setCadence({
+        enabled: true,
+        onSince: PROPOSE_NOW - 8 * 86_400_000,
+      });
       state.storage.sql.exec(
         "UPDATE polls SET opened_at = opened_at - ? WHERE id = ?",
         7 * 86_400_000,
@@ -1282,6 +1293,26 @@ describe("proposing a date", () => {
       "Mon, 16 Nov 2026 · 11:00 is in the past: today is 2026-11-18 in America/Los_Angeles. Propose a day from 2026-11-18 to 2026-11-27: the 14 days after the date vote closes.",
     );
     expect(await options(guild, pollId)).toHaveLength(2);
+  });
+
+  it("keeps the usual month for a vote opened before the weekly schedule was turned on", async () => {
+    const guild = "date-propose-cadence-before";
+    const pollId = await openDatePoll(guild);
+    await runInDurableObject(stub(guild), (_i, state) => {
+      new GuildConfig(state.storage).setCadence({
+        enabled: true,
+        onSince: PROPOSE_NOW + 60_000,
+      });
+    });
+    const modal = await send(proposeClick(guild, pollId));
+    expect(modal.data.components).toMatchObject([
+      {
+        description:
+          "2026-11-18 to 2026-12-19, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time defaults to 11:00.",
+      },
+    ]);
+    const reply = await send(proposeSubmit(guild, pollId, "2026-11-19"));
+    expect(text(reply.data.components)).toMatch(/^Added \*\*/);
   });
 
   it("judges today in the guild's zone", async () => {
