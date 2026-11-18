@@ -117,6 +117,44 @@ step's name and work.
    npx vitest run --project e2e test/e2e/full-round.test.ts
    ```
 
+## Let an admin retry a close step from the panel
+
+The example retries a step that pins the announcement; use your step's name
+and work. `src/features/hike-thread.ts` (with `hike-thread-state.ts`) is the
+model.
+
+1. Keep where the step stands per round in the object's synchronous
+   key-value storage, under a key of its own such as `pin:<round id>`: when
+   an attempt started, or why it failed. Write a `claimPin(storage, round,
+now)` that returns false when the step's result is already on the round
+   or a claim younger than a minute exists, and otherwise stores
+   `{ creatingSince: now }` and returns true. Read and write it with
+   `storage.kv`, never `await storage.get`, so no other interaction runs
+   between the check and the write. Take `now` from `store.now()`.
+2. In the step and in the button's handler, claim before calling Discord.
+   On success store the result on the round and delete the key; on failure
+   store `{ error: reason }`. The step returns no `note` for a failure the
+   panel shows by itself.
+3. Add the state to `AdminPanelState` in `loadAdminPanelState`, show the
+   reason under the last hike, and return the button from `actionButtons`
+   only while the round has no result and no fresh claim, as "Add an action
+   to the admin panel" in `src/guild/AGENTS.md` says.
+4. In the handler (through `adminOnly`), check that the round in the
+   `custom_id` is still `store.getLastRound()` and still lacks the result,
+   claim, then answer `deferPanel(interaction)` and do the Discord call in
+   the `followUp`, ending with `finishPanel`. A refused claim answers
+   `adminPanelUpdate(context, "<it is being done>")`.
+5. Test a double click by holding the stubbed Discord call until both
+   clicks are answered, as "creates one thread when the button is clicked
+   twice quickly" in `test/features/hike-thread.test.ts` does, and in an
+   end-to-end scenario with two `owner.click` calls in one `Promise.all`.
+   Run them:
+
+   ```sh
+   npx vitest run test/features/hike-thread.test.ts
+   npx vitest run --project e2e test/e2e/hike-thread.test.ts
+   ```
+
 ## Refresh a poll message after a change
 
 1. After the change is stored, mark the poll for the debounced refresh, with
