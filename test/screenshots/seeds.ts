@@ -406,6 +406,87 @@ const scheduleOn: ServerSteps = async (_play, g, e2e) => {
     Date.UTC(2030, 0, 1),
   );
 };
+/**
+ * The places of the map seeds, inside the committed sample map data
+ * (`maps/sample/sample.json`): the sample point, where the stored picture
+ * `trailhead-z12.png` is drawn, and named places round it.
+ */
+const SAMPLE_POINT = { lat: 47.4881, lon: -121.7232 };
+const SAMPLE_PICTURE = "public/assets/maps/samples/trailhead-z12.png";
+
+/** The round complete for Mount Si, pinned, with its stored map picture. */
+const hikeOnTheMap: ServerSteps = (play, g) =>
+  play.seedRound(g, {
+    status: "complete",
+    startedAt: STARTED,
+    locations: [
+      { label: "Mount Si", point: SAMPLE_POINT, voters: voters(g, 0, 1) },
+    ],
+    location: "Mount Si",
+    dates: dates(g),
+    date: "2030-06-15 11:00",
+    threadId: "320000000000000101",
+    eventId: "330000000000000101",
+    mapPicture: SAMPLE_PICTURE,
+  });
+
+/**
+ * The round complete for Snow Lake, pinned where the map data has nothing,
+ * so no picture was drawn.
+ */
+const hikeOffTheMap: ServerSteps = (play, g) =>
+  play.seedRound(g, {
+    status: "complete",
+    startedAt: STARTED,
+    locations: [
+      {
+        label: "Snow Lake",
+        details: SNOW_LAKE_DETAILS,
+        point: { lat: 47.4555, lon: -121.4507 },
+        voters: voters(g, 0, 1),
+      },
+    ],
+    location: "Snow Lake",
+    dates: dates(g),
+    date: "2030-06-15 11:00",
+    threadId: "320000000000000101",
+    eventId: "330000000000000101",
+  });
+
+/** An open location vote on six places, five of them found on the map. */
+const locationVoteOnTheMap: ServerSteps = (play, g) =>
+  play.seedRound(g, {
+    status: "location_voting",
+    startedAt: STARTED,
+    locations: [
+      {
+        label: "Mount Si",
+        point: { lat: 47.5069, lon: -121.739 },
+        voters: voters(g, 0, 1, 2, 4),
+      },
+      {
+        label: "Little Si",
+        point: { lat: 47.4987, lon: -121.756 },
+        voters: voters(g, 0, 3, 5),
+      },
+      { label: "Lake Serene", voters: voters(g, 2) },
+      {
+        label: "Crater Lake Peak",
+        point: { lat: 47.5184, lon: -121.7294 },
+        voters: voters(g, 4),
+      },
+      {
+        label: "Three Forks Park",
+        point: { lat: 47.521, lon: -121.7749 },
+        voters: [],
+      },
+      {
+        label: "Tanner",
+        point: { lat: 47.461, lon: -121.7378 },
+        voters: [],
+      },
+    ],
+  });
 
 const LOG_HIKES = [
   "Mailbox Peak",
@@ -526,6 +607,9 @@ export const SEEDS: Record<string, Seed> = {
   "server-map-pin": server(hikeForecast, "admin"),
   "server-location-vote-located": server(locationVoteLocated),
   "server-schedule": server(scheduleOn),
+  "server-hike-map": server(hikeOnTheMap),
+  "server-hike-no-map": server(hikeOffTheMap),
+  "server-location-vote-map": server(locationVoteOnTheMap),
   "server-hike-log": server(hikeLog),
   "server-not-member": server(locationVote(), "stranger"),
 };

@@ -13,6 +13,10 @@
  * libraries is deleted first. Fontconfig is given only the fonts the
  * package unpacks (Open Sans), so pages render the same whichever fonts the
  * machine has installed.
+ *
+ * The package turns WebGL off; the interactive map needs it, so it is
+ * turned back on, drawn in software by SwiftShader, which the package
+ * ships, so no GPU of the machine's is involved.
  */
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -51,7 +55,11 @@ export async function launchBrowser(): Promise<Browser> {
     // --single-process makes Chromium exit when a second browser context
     // opens a page, and each screenshot gets a context of its own.
     args: [
-      ...chromium.args.filter((arg) => arg !== "--single-process"),
+      ...chromium.args.filter(
+        (arg) => arg !== "--single-process" && arg !== "--disable-webgl",
+      ),
+      "--use-angle=swiftshader",
+      "--enable-unsafe-swiftshader",
       "--hide-scrollbars",
       "--lang=en-US",
     ],

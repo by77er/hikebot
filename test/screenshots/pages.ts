@@ -39,6 +39,11 @@ export interface ScreenshotPage {
     action: string;
     fields?: Record<string, string | string[]>;
   };
+  /**
+   * `false` opens the page with JavaScript off, as a browser without it
+   * shows the page. Defaults to on.
+   */
+  javascript?: boolean;
 }
 
 export interface ExcludedRoute {

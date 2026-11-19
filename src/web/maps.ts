@@ -11,8 +11,8 @@
  *   a year, since a new build gets new addresses; any other for five
  *   minutes.
  * - `GET /maps/style.json` answers the map's style (`browserStyle` in
- *   `src/maps/browser-style.ts`), pointing at those tiles and at the glyphs
- *   under `/assets/`, or 404 without map data.
+ *   `src/maps/browser-style.ts`), pointing at those tiles, or 404 without
+ *   map data.
  *
  * "Map data" in docs/design.md describes both.
  */
@@ -20,10 +20,7 @@ import { Compression } from "pmtiles";
 import { systemNow } from "../clock";
 import { browserStyle } from "../maps/browser-style";
 import { MapReader, tileBytes } from "../maps/reader";
-import { assetPath, IMMUTABLE_CACHE_CONTROL } from "./assets";
-
-/** The glyph ranges' path under `public/assets/`, as MapLibre fills it in. */
-export const GLYPHS = "maps/glyphs/{fontstack}/{range}.pbf";
+import { IMMUTABLE_CACHE_CONTROL } from "./assets";
 
 export const TILE_CONTENT_TYPE = "application/vnd.mapbox-vector-tile";
 
@@ -85,7 +82,6 @@ export async function styleRoute(
   const { origin } = new URL(request.url);
   const style = browserStyle({
     tiles: `${origin}/tiles/{z}/{x}/{y}.mvt?build=${encodeURIComponent(coverage.build)}`,
-    glyphs: `${origin}${assetPath(GLYPHS)}`,
     attribution: coverage.attribution,
     bounds: coverage.bounds,
     minzoom: coverage.minzoom,

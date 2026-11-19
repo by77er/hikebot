@@ -3,8 +3,11 @@
  * same style data as the map picture (`./style.ts`) and the same reading of
  * the Protomaps basemap schema (`./svg.ts`), so the map on the web pages and
  * the picture in Discord look alike. `GET /maps/style.json` serves it; the
- * browser draws the tiles of `GET /tiles/<z>/<x>/<y>.mvt` with it, and sets
- * labels from the glyph ranges under `public/assets/maps/glyphs/`.
+ * browser draws the tiles of `GET /tiles/<z>/<x>/<y>.mvt` with it.
+ *
+ * The style names no glyph ranges, so MapLibre draws every label in the
+ * browser with the page's own typeface, Public Sans from Cairn's
+ * stylesheet, and nothing more is downloaded for text.
  *
  * Only the roles are read from `./style.ts`: no colour, width or size is
  * written here.
@@ -18,6 +21,7 @@ import type { BBox } from "./manifest";
 import {
   COLOURS,
   DASHES,
+  FURNITURE,
   LABEL_COLOURS,
   LABEL_FONTS,
   LABEL_PRIORITY,
@@ -46,21 +50,21 @@ export const SOURCE = "hikebot";
 export const PEAK_IMAGE = "peak";
 
 /**
- * The glyph font stacks, by weight and style, as the files under
- * `public/assets/maps/glyphs/<stack>/` are named. Each range holds Public
- * Sans, with Noto Sans for the characters Public Sans lacks.
+ * The labels' font stacks, by weight and style. MapLibre draws a label with
+ * the CSS families of its stack, in the weight or style it reads from the
+ * first name, so each stack starts with that word and then names the
+ * page's typeface, "Public Sans Variable" from `cairn.css`; characters
+ * Public Sans lacks come from the browser's sans-serif.
  */
 export const FONT_STACKS = {
-  regular: "Public Sans Regular",
-  semibold: "Public Sans SemiBold",
-  italic: "Public Sans Italic",
+  regular: ["Regular", "Public Sans Variable"],
+  semibold: ["SemiBold", "Public Sans Variable"],
+  italic: ["Italic", "Public Sans Variable"],
 } as const;
 
 export interface BrowserStyleOptions {
   /** The tile URL template, `{z}`, `{x}` and `{y}` included. */
   tiles: string;
-  /** The glyph URL template, with `{fontstack}` and `{range}`. */
-  glyphs: string;
   /** `MapReader.attribution()`. */
   attribution: string;
   /** Where the archives have tiles: their boxes together, and zooms. */
@@ -74,7 +78,15 @@ export function browserStyle(options: BrowserStyleOptions): StyleSpecification {
   return {
     version: 8,
     name: "Cairn map",
-    glyphs: options.glyphs,
+    metadata: {
+      // The browser's map script draws the peaks' triangle from these.
+      "hikebot:peak": {
+        image: PEAK_IMAGE,
+        size: FURNITURE.peakSize,
+        fill: COLOURS.peak,
+        halo: COLOURS.labelHalo,
+      },
+    },
     sources: {
       [SOURCE]: {
         type: "vector",
@@ -445,11 +457,11 @@ function text(role: LabelRole) {
   return {
     "text-field": ["get", "name"] as ExpressionSpecification,
     "text-font": [
-      font.italic
+      ...(font.italic
         ? FONT_STACKS.italic
         : font.weight === 600
           ? FONT_STACKS.semibold
-          : FONT_STACKS.regular,
+          : FONT_STACKS.regular),
     ],
     "text-size": stops(LABEL_SIZES[role]),
     "text-padding": 2,

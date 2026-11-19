@@ -14,7 +14,9 @@
  * and language are fixed, animations and transitions are off, the device
  * scale factor is 1, fonts come from the browser package, never from the
  * machine, and the shot waits for the page's fonts and CSS images (such as
- * the header's contour-line mask) to be ready.
+ * the header's contour-line mask) to be ready, and for every interactive
+ * map to have drawn everything it shows (MapLibre's `idle`). A page entry
+ * with `"javascript": false` is opened with JavaScript off.
  *
  * With `--check` it then prints the SHA-256 of each PNG, to compare with
  * another machine's without copying the files, and fails if any file in
@@ -206,6 +208,7 @@ async function capture(
       failures.push(`page error: ${String(error)}`);
     });
 
+    if (entry.javascript === false) await page.setJavaScriptEnabled(false);
     const size = VIEWPORTS[viewport];
     await page.setViewport({ ...size, deviceScaleFactor: 1 });
     await page.emulateMediaFeatures([
@@ -228,6 +231,11 @@ async function capture(
     await stopMotion(session);
     await page.evaluate("document.fonts.ready.then(() => undefined)");
     await page.evaluate(CSS_IMAGES_READY);
+    if (entry.javascript !== false) {
+      await page.waitForFunction(MAPS_SETTLED, { timeout: 60_000 });
+      const failed = Number(await page.evaluate(MAPS_FAILED));
+      if (failed > 0) failures.push(`${String(failed)} map(s) failed to draw`);
+    }
     if (failures.length > 0) {
       throw new Error(
         `${entry.name} (${entry.path}) at ${viewport} ${scheme}:\n${failures.join("\n")}`,
@@ -363,6 +371,16 @@ const CSS_IMAGES_READY = `(async () => {
   }));
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 })()`;
+
+/**
+ * True once every map view on the page has drawn (`data-map-state` set to
+ * `idle` by `public/assets/maps/map-view.mjs`) or given up (`failed`).
+ */
+const MAPS_SETTLED = `[...document.querySelectorAll("figure[data-map]")].every((figure) =>
+  figure.dataset.mapState === "idle" || figure.dataset.mapState === "failed")`;
+
+/** How many map views gave up. */
+const MAPS_FAILED = `document.querySelectorAll('figure[data-map][data-map-state="failed"]').length`;
 
 main().catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : error);

@@ -23,6 +23,7 @@ import { ProposeDate } from "./propose-date";
 import { ProposeLocation } from "./propose-location";
 import { ScheduleLine } from "./schedule-line";
 import { ServerHeading } from "./server-heading";
+import { VoteMap } from "./vote-map";
 
 export function ServerPage({
   user,
@@ -51,6 +52,7 @@ export function ServerPage({
         <AdminNoticeBanner view={view} notice={notice} csrf={user.csrf} />
         <ActionNotice view={view} forms={forms} flash={flash} />
         <CurrentStep view={view} forms={forms} />
+        <VoteMap view={view} />
         <AdminControls view={view} notice={notice} csrf={user.csrf} />
         <ProposeLocation view={view} forms={forms} />
         <ProposeDate view={view} forms={forms} />
