@@ -31,9 +31,9 @@ export async function readGuild(
 
 /**
  * Runs an admin's round control `request` on guild `guildId` as user
- * `userId`. The guild object checks with Discord that the user is a member
- * and an admin at this moment before it acts; ids that cannot be Discord's
- * are `not_member` without waking an object.
+ * `userId`, through the object's `adminAction`, which checks with Discord
+ * that the user is a member and an admin at this moment before it acts.
+ * Ids that cannot be Discord's are `not_member`, without waking an object.
  */
 export async function actOnGuild(
   env: Env,
