@@ -94,9 +94,14 @@ export class RoundPlayer {
   /**
    * A guild with an owner, 12 members (also members on the fake Discord
    * API, without roles), and a text, an announcement and a forum channel.
-   * `n` (0-99) keeps each test's ids apart.
+   * `n` (0-99) keeps each test's ids apart. `options` give the guild's name
+   * and icon hash, and another owner's user id, such as a user who signs in
+   * to the web pages as an admin.
    */
-  guild(n: number): TestGuild {
+  guild(
+    n: number,
+    options: { name?: string; icon?: string; ownerId?: string } = {},
+  ): TestGuild {
     const pad = String(n).padStart(2, "0");
     const guildId = `2200000000000001${pad}`;
     const id = (prefix: string, i: number) =>
@@ -108,7 +113,13 @@ export class RoundPlayer {
       userId,
     });
     const { discord } = this.e2e;
-    discord.addGuild({ id: guildId, ownerId: id("4", 0) });
+    const ownerId = options.ownerId ?? id("4", 0);
+    discord.addGuild({
+      id: guildId,
+      ownerId,
+      name: options.name,
+      icon: options.icon,
+    });
     discord.addChannel({ id: channels.text, guildId });
     discord.addChannel({
       id: channels.news,
@@ -125,7 +136,7 @@ export class RoundPlayer {
     return {
       guildId,
       channels,
-      owner: new Member(this.e2e.client, actor(id("4", 0))),
+      owner: new Member(this.e2e.client, actor(ownerId)),
       members: members.map(
         (userId) => new Member(this.e2e.client, actor(userId)),
       ),
@@ -240,6 +251,27 @@ export class RoundPlayer {
       poll,
     );
     return { form, response };
+  }
+
+  /**
+   * Clicks Propose a location on the location `poll` and submits `name`
+   * with `details`; returns the answer to the submit.
+   */
+  async proposeLocation(
+    member: Member,
+    poll: FakeMessage,
+    name: string,
+    details = "",
+  ) {
+    const form = await member.click(
+      poll,
+      idStarting(this.shown(poll), "hb:location:propose:"),
+    );
+    return member.submitModal(
+      form,
+      { "hb:location:name": name, "hb:location:details": details },
+      poll,
+    );
   }
 
   /** Clicks Vote, picks `labels` and returns the select message. */
@@ -386,6 +418,31 @@ export class RoundPlayer {
     await sql.exec(
       "UPDATE guild_settings SET cadence_on_since = cadence_on_since - ?",
       ms,
+    );
+  }
+
+  /**
+   * Moves every date option of the guild from the year `from` to the year
+   * `to`, in its value and its label, so hikes played years ahead become
+   * past hikes. Give two years with the same calendar (2030 and 2019), so
+   * every weekday in the labels stays right. The Worker's clock cannot be
+   * moved, and the date vote takes only dates ahead, so this rewrites what
+   * the log reads instead, through the harness's access to the object's
+   * SQLite storage.
+   */
+  async moveHikeYears(g: TestGuild, from: string, to: string): Promise<void> {
+    const sql = await this.e2e.harness
+      .getWorker()
+      .getDurableObjectStorage("GUILD_HIKE", { name: g.guildId });
+    await sql.exec(
+      `UPDATE poll_options
+       SET date_value = replace(date_value, ? || '-', ? || '-'),
+           label = replace(label, ' ' || ? || ' · ', ' ' || ? || ' · ')
+       WHERE date_value IS NOT NULL`,
+      from,
+      to,
+      from,
+      to,
     );
   }
 
