@@ -6,7 +6,7 @@
  */
 import { channelUrl } from "../discord/api";
 import type { WebViewSource } from "../guild/web-view";
-import type { PollKind, PollView } from "../polls/store";
+import type { PlacePoint, PollKind, PollView } from "../polls/store";
 import { rankOptions } from "../polls/tally";
 import { DATE_POLL, decidedLocation } from "./date-vote";
 import { LOCATION_POLL } from "./location-vote";
@@ -26,6 +26,11 @@ export interface WebVoteOption {
   proposedBy: string;
   votes: number;
   viewerVoted: boolean;
+  /**
+   * Where a location option is, once its place is found or given, for the
+   * map; null for a date, and for a location without a place.
+   */
+  point: PlacePoint | null;
 }
 
 export interface WebOpenVote {
@@ -106,6 +111,10 @@ function openVote(poll: PollView, guildId: string): WebOpenVote {
       proposedBy: option.proposedBy,
       votes: option.votes,
       viewerVoted: poll.viewerVotes.includes(option.id),
+      point:
+        option.place?.point == null
+          ? null
+          : { lat: option.place.point.lat, lon: option.place.point.lon },
     })),
     voterCount: poll.voterCount,
     // Votes close only when an admin closes them.

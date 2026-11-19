@@ -64,6 +64,7 @@ export function openVote(
     votes: number;
     viewerVoted?: boolean;
     details?: string;
+    point?: { lat: number; lon: number };
   }[],
   messageUrl:
     | string
@@ -80,6 +81,7 @@ export function openVote(
       proposedBy: VIEWER,
       votes: option.votes,
       viewerVoted: option.viewerVoted ?? false,
+      point: option.point ?? null,
     })),
     voterCount: Math.max(0, ...options.map((option) => option.votes)),
     closesAt: null,
@@ -125,6 +127,7 @@ export function plannedHike(
     eventId: "300000000000007011",
     eventUrl: `https://discord.com/events/${GUILD}/300000000000007011`,
     mapPictureKey: null,
+    point: null,
     ...overrides,
   };
 }

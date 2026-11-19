@@ -6,10 +6,13 @@
  * (`src/web/admin/routes.tsx`). Each page starts with `requireServer`
  * (`src/web/server-guard.tsx`), which signs the user in, checks the
  * session's list and reads the server as its member sees it.
+ * `/g/<guild id>/map.png` is the planned hike's map picture, the one its
+ * thread and event show, which the server's page shows without JavaScript.
  */
 import { HIKES_PER_PAGE } from "../features/hike-log";
 import { takeNotice } from "./admin/notice";
 import { ADMIN_ACTIONS, ADMIN_PAGES } from "./admin/routes";
+import { NotFoundPage } from "./pages/errors";
 import { HikeLogPage } from "./pages/server/hike-log-page";
 import { PREVIEW_HIKES } from "./pages/server/log-preview";
 import { ServerPage } from "./pages/server/page";
@@ -28,6 +31,7 @@ type ServerPageHandler = (
 const SERVER_PAGES = new Map<string, ServerPageHandler>([
   ["", serverPage],
   ["/log", hikeLogPage],
+  ["/map.png", mapPicture],
 ]);
 
 async function serverPage(request: Request, env: Env, guildId: string) {
@@ -56,6 +60,32 @@ async function hikeLogPage(request: Request, env: Env, guildId: string) {
   });
   if (server instanceof Response) return server;
   return htmlResponse(<HikeLogPage user={server.user} view={server.view} />);
+}
+
+/**
+ * The planned hike's map picture from the `MAPS` bucket, for members only;
+ * the 404 page while there is none. Browsers check it again on every use
+ * (`no-cache` and the object's ETag), since a moved pin keeps the address.
+ */
+async function mapPicture(request: Request, env: Env, guildId: string) {
+  const server = await requireServer(request, env, guildId, { pageSize: 1 });
+  if (server instanceof Response) return server;
+  const key = server.view.plannedHike?.mapPictureKey ?? null;
+  const picture = key === null ? null : await env.MAPS.get(key);
+  if (picture === null) {
+    return htmlResponse(<NotFoundPage />, { status: 404 });
+  }
+  const headers = {
+    "Content-Type": "image/png",
+    "Cache-Control": "private, no-cache",
+    "X-Content-Type-Options": "nosniff",
+    ETag: picture.httpEtag,
+  };
+  if (request.headers.get("If-None-Match") === picture.httpEtag) {
+    await picture.body.cancel();
+    return new Response(null, { status: 304, headers });
+  }
+  return new Response(picture.body, { headers });
 }
 
 /** `/g/<guild id><rest>` split, or null for a path of no server. */
