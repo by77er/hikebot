@@ -138,6 +138,14 @@ so a name or title from Discord or a form cannot inject markup.
   `default-src 'none'; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self'; img-src 'self' data: https://cdn.discordapp.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'`.
   Pages therefore carry no inline script or style, and load nothing from
   another host except images from Discord's CDN (avatars, server icons).
+  The one script any page loads is the interactive map's, a module under
+  `/assets/` (see "Interactive map" under "Map data"); every page works
+  without it. The map needs nothing added to the policy: MapLibre GL JS
+  starts its worker from its own file on this origin as a module worker
+  (`worker-src` falls back to `script-src 'self'`), fetches the style and
+  the tiles from this origin (`connect-src 'self'`), draws labels with the
+  page's own font, and loads no images, sprites or glyph files;
+  `test/e2e/map-browser.test.ts` records no policy violation in Chromium.
 - **Page shell and design system.** Every page is built from Cairn, the
   design system described in `docs/design-system.md`: `Layout`
   (`src/web/layout.tsx`) is the document every page renders into (`lang`,
@@ -175,8 +183,14 @@ so a name or title from Discord or a form cannot inject markup.
   is downloaded at run time. The browser's clock, time zone and language are
   fixed, animations are off, the device scale factor is 1, fonts come
   from the package, never from the machine, and each shot waits for the
-  page's fonts and CSS images (such as the header's contour mask), so a run
-  gives the same bytes on every machine. The page list (`test/screenshots/pages.json`) names
+  page's fonts and CSS images (such as the header's contour mask), and for
+  every interactive map to be drawn (MapLibre's `idle`), so a run gives the
+  same bytes on every machine. Pages with a map (`"map": true` in the list)
+  are taken in a second browser with WebGL on, drawn in software by the
+  package's SwiftShader; the others in one with WebGL off, as before, since
+  WebGL changes how every page is composited. A page entry with
+  `"javascript": false` is taken as a browser without JavaScript shows it:
+  every script it loads is answered empty. The page list (`test/screenshots/pages.json`) names
   each page with its path, expected status, seed and signed-in member; a
   unit test fails when a `GET` route of the web router is neither on it nor
   excluded with a reason. On a pull request, CI regenerates the screenshots
@@ -233,7 +247,8 @@ permission", with the roles from their membership.
   `date_vote_open`), the decided location, and while a vote is open: its
   poll id and kind; its options in the poll message's order (locations by
   votes, dates by date), each with label, details, date, proposer, vote
-  count and whether the viewer voted for it; the number of voters;
+  count, whether the viewer voted for it, and for a location the `point`
+  its place was found or given at (null without one); the number of voters;
   `closesAt` (null: a vote closes when an admin closes it); and a link to
   the poll's message (null until posted).
 - `plannedHike` (`plannedHikeSection`,
@@ -243,7 +258,9 @@ permission", with the roles from their membership.
   and time in the guild's time zone, which it names, with the date's label;
   links to its thread and its Discord event (null when there is none); and
   `mapPictureKey`, the `MAPS` bucket key of the map picture its thread and
-  event show (null while they show none), for a page to serve.
+  event show (null while they show none), for a page to serve; and
+  `point`, the pin of its location (latitude and longitude, null when the
+  location has none), where the page's map centres.
 - `log` (`hikeLogSection`, `src/features/hike-log.ts`): one page of the
   hike log as "Hike log" defines it, newest first: entries (location, date,
   thread and event links, when it completed), `page` (clamped to
@@ -298,12 +315,23 @@ path under a server is the 404 page.
   named for dates, and Vote in Discord linking to the poll's message; a
   decided location waiting for its date vote; with no round and no planned
   hike an empty state, telling an admin to start a vote from `/hike admin`
-  in Discord); for an admin, the Admin card (below); the planned hike as a full hike card (location, details,
-  date and time in the server's time zone with the zone named, links to the
-  thread and the event); the hike log's five latest hikes, with a link to
+  in Discord); while a location vote is open, its options that have a
+  place on one map (`vote-map.tsx`), numbered in the vote's order and
+  fitted to them, with the numbered list of their names and coordinates
+  under it; for an admin, the Admin card (below); the planned hike as a
+  full hike card (location, details, date and time in the server's time
+  zone with the zone named, the map of its pin when it has a pin and a
+  stored map picture (`hike-map.tsx`), and links to the thread and the
+  event); the hike log's five latest hikes, with a link to
   the whole log when it has more; and the calendar address in a read-only
   field, with the bot's sentence on it and Subscribe, the address as a
   `webcal:` link. The read asks for a log page of five.
+- `GET /g/<guild id>/map.png`: the planned hike's map picture, the PNG its
+  thread and event show, read from `MAPS` at `mapPictureKey`, for members
+  only (the guard below answers everyone else); the 404 page while there is
+  none. `Cache-Control: private, no-cache` with the object's ETag, as a
+  moved pin keeps the address. The server's page shows it where JavaScript
+  does not draw the map.
 - `GET /g/<guild id>/log?page=<n>`: the hike log, newest first, ten a page
   (`HIKES_PER_PAGE`), as compact hike cards with Newer and Older; a page
   that is not a number is the first, and the read clamps one past either
@@ -2342,12 +2370,60 @@ an injected clock; one per isolate keeps what it has read:
   directories in memory, so a tile after the first costs one read.
 - `zoomsAt(lon, lat)` lists the zooms some archive covers at a point.
 - `attribution()` returns the text to print with the map.
+- `storedTile(z, x, y)` returns the tile as its archive stores it (gzip)
+  with its compression, `"empty"` when an archive covers the tile (its
+  zooms include `z` and its box overlaps the tile) but holds nothing there,
+  or undefined outside every archive; an archive that cannot be read
+  counts as not covering it.
+- `coverage()` returns the archives' boxes joined into one, their zooms
+  joined, the build and the attribution, for the browser's map.
 
 No manifest, an unreadable manifest, a missing or corrupt archive, a zoom
 above an archive's own and a tile outside every archive are all "no data"
 (undefined or an empty list), never an exception. A failed manifest read is
 not kept: the reader keeps the last manifest it had and reads again on the
 next call.
+
+**Serving tiles.** The Worker serves the tiles to browsers itself, from
+the reader, with no session (the data is public), in `src/web/maps.ts`:
+
+- `GET /tiles/<z>/<x>/<y>.mvt`: the tile, `Content-Type:
+application/vnd.mapbox-vector-tile`. To a browser that accepts gzip the
+  stored bytes go out as they are, with `Content-Encoding: gzip`, and the
+  Worker decompresses nothing; to any other client the decompressed tile.
+  `204` for an empty tile, `404` outside the archives, without map data, or
+  for a path that names no tile (not three whole numbers, a zoom over 30,
+  `x` or `y` outside the zoom's grid). The style asks for tiles as
+  `?build=<build>`: a request naming the current build is cacheable for a
+  year (`public, max-age=31536000, immutable`), as a new build changes the
+  addresses; any other for five minutes. `Vary: Accept-Encoding`, and an
+  ETag of the build (with `-gzip` for the stored bytes) for `304`s.
+- `GET /maps/style.json`: the map's style for MapLibre GL JS
+  (`browserStyle` in `src/maps/browser-style.ts`), with the tiles' address
+  and the coverage: one vector source whose `bounds`, `minzoom` and
+  `maxzoom` are the archives' together, so the browser asks for no tile
+  outside them, and the attribution. It names no glyphs or sprite. Cached
+  for five minutes; `404` without map data.
+
+**Interactive map.** On the web pages the map is drawn in the browser by
+MapLibre GL JS 6.19.0 (ES modules, copied unchanged into
+`public/assets/maps/maplibre/` from the pinned `maplibre-gl` package, with
+its licence; its worker file is the sibling `maplibre-gl-worker.mjs`, which
+it starts from its own address as a module worker, so no `blob:` worker is
+needed). `public/assets/maps/map-view.mjs`, loaded as a module by every
+map on a page and so run once, starts each map view: it fetches the
+style, keeps the places inside the style's bounds (none inside: the map
+gives up, and keeps its picture or hides), and draws the map over the
+stored picture, removing the picture when MapLibre is `idle`. Labels are
+drawn by MapLibre in the browser with the page's own Public Sans (a style
+without `glyphs` makes it draw every glyph locally; each font stack names
+the weight or style first, then "Public Sans Variable"), so no glyph files
+exist. Peaks' triangles are drawn by the script from the colours and size
+in the style's metadata. Rotation and pitch are off; under
+`prefers-reduced-motion` the zoom buttons and labels do not animate, and
+MapLibre skips its own animations. `data-map-state` (`loading`, `idle`,
+`failed`) and `data-map-zoom` on the figure let the screenshots and the
+browser test wait for the map and read its zoom.
 
 **Tests.** `maps/sample/sample.pmtiles` is a small extract of the sample
 area (Mount Si, Washington) from a real build, with `maps/sample/sample.json`

@@ -167,9 +167,11 @@
    git status --short public/assets/maps/samples
    ```
 
-7. Run the map tests, take the screenshots of `/styleguide/map` as "Take the
-   screenshots" in `src/web/AGENTS.md` says, and commit the style, the
-   tokens, the fonts and the samples together:
+7. Run the map tests, take the screenshots of `/styleguide/map` and
+   `/styleguide/map-view` (the map drawn in the browser, from the same
+   style through `src/maps/browser-style.ts`) as "Take the screenshots" in
+   `src/web/AGENTS.md` says, and commit the style, the tokens, the fonts
+   and the samples together:
 
    ```sh
    npx vitest run test/maps test/web
