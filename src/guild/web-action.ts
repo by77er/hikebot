@@ -58,7 +58,12 @@ export async function runWebAction(
     { guildId, userId, roleIds },
     now,
   );
-  if (!decision.ok) return { kind: "unavailable" };
+  if (!decision.ok) {
+    console.error(
+      `admin action on guild ${guildId}: ${decision.error instanceof Error ? decision.error.message : String(decision.error)}`,
+    );
+    return { kind: "unavailable" };
+  }
   if (!decision.isAdmin) return { kind: "forbidden" };
   return runWebAdminAction(
     { ...context, guildId, store },

@@ -221,8 +221,12 @@ export async function runWebAdminAction(
       resolve(null);
     }, waitMs);
   });
-  const notes = await Promise.race([work, late]);
-  if (timer !== undefined) clearTimeout(timer);
+  let notes: string[] | null;
+  try {
+    notes = await Promise.race([work, late]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
   if (notes === null) {
     work.catch((error: unknown) => {
       console.error(
