@@ -83,7 +83,11 @@ async function start(figure) {
   const peak = style.metadata?.["hikebot:peak"];
   if (peak) map.once("style.load", () => addPeakImage(map, peak));
 
-  for (const marker of markers) addMarker(map, marker, single !== null);
+  // The hike's pin has no number; a vote's places do, even when only one
+  // of them lies inside the map data.
+  for (const marker of markers) {
+    addMarker(map, marker, marker.number === undefined);
+  }
 
   for (const button of zoom.querySelectorAll("button")) {
     button.addEventListener("click", () => {
