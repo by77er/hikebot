@@ -1,18 +1,42 @@
-import { expect, it } from "vitest";
+import { beforeAll, expect, it } from "vitest";
 import { type Member } from "./harness/helpers";
-import { RoundPlayer } from "./harness/rounds";
+import { RoundPlayer, type TestGuild } from "./harness/rounds";
 import { PageClient } from "./harness/web";
 import { useE2E } from "./harness/worker";
 
 const e2e = useE2E();
 const play = new RoundPlayer(e2e);
 
+/**
+ * The file's guilds, by number. The Worker remembers which guilds the bot
+ * is in for a minute after a sign-in reads them, so every guild is added
+ * before the first sign-in.
+ */
+const guilds = new Map<number, TestGuild>();
+
+beforeAll(() => {
+  for (const n of [1, 2, 3, 5]) {
+    guilds.set(n, play.guild(n, { name: "Ridge Walkers" }));
+  }
+});
+
+function guild(n: number): TestGuild {
+  const g = guilds.get(n);
+  if (!g) throw new Error(`guild ${String(n)} was not added`);
+  return g;
+}
+
 /** Signs `userId` in as a Discord user in `guilds`, and returns the client. */
 async function signIn(
   userId: string,
   guilds: { id: string; name: string }[],
 ): Promise<PageClient> {
-  e2e.discord.addUser({ id: userId, username: "ana", globalName: "Ana", guilds });
+  e2e.discord.addUser({
+    id: userId,
+    username: "ana",
+    globalName: "Ana",
+    guilds,
+  });
   const client = new PageClient(e2e.url);
   const back = await client.signIn({ id: userId });
   expect(back.status).toBe(303);
@@ -28,7 +52,7 @@ function textOf(html: string): string {
 }
 
 it("shows a member the location vote's tally as members voted in Discord", async () => {
-  const g = play.guild(1, { name: "Ridge Walkers" });
+  const g = guild(1);
   const viewer = "400000000000009001";
   e2e.discord.addMember(g.guildId, viewer);
   const [ana, ben, cy] = g.members as [Member, Member, Member];
@@ -42,7 +66,9 @@ it("shows a member the location vote's tally as members voted in Discord", async
   await play.vote(ben, poll, ["Lake"]);
   await play.vote(cy, poll, ["Lake", "Canyon"]);
 
-  const client = await signIn(viewer, [{ id: g.guildId, name: "Ridge Walkers" }]);
+  const client = await signIn(viewer, [
+    { id: g.guildId, name: "Ridge Walkers" },
+  ]);
   const page = await client.get(`/g/${g.guildId}`);
   expect(page.status).toBe(200);
   const text = textOf(page.body);
@@ -51,7 +77,9 @@ it("shows a member the location vote's tally as members voted in Discord", async
   expect(text).toContain("Lake 3 votes");
   expect(text).toContain("Ridge 1 vote");
   expect(text).toContain("Canyon 1 vote");
-  expect(text.indexOf("Lake 3 votes")).toBeLessThan(text.indexOf("Ridge 1 vote"));
+  expect(text.indexOf("Lake 3 votes")).toBeLessThan(
+    text.indexOf("Ridge 1 vote"),
+  );
   expect(text).toContain("You have not voted yet.");
   expect(page.body).toContain(
     `href="https://discord.com/channels/${g.guildId}/${g.channels.text}/${poll.id}"`,
@@ -59,10 +87,12 @@ it("shows a member the location vote's tally as members voted in Discord", async
 });
 
 it("refuses a signed-in user who is no longer a member", async () => {
-  const g = play.guild(2, { name: "Ridge Walkers" });
+  const g = guild(2);
   const leaver = "400000000000009002";
   e2e.discord.addMember(g.guildId, leaver);
-  const client = await signIn(leaver, [{ id: g.guildId, name: "Ridge Walkers" }]);
+  const client = await signIn(leaver, [
+    { id: g.guildId, name: "Ridge Walkers" },
+  ]);
   e2e.discord.removeMember(g.guildId, leaver);
 
   const page = await client.get(`/g/${g.guildId}`);
@@ -75,7 +105,7 @@ it("refuses a signed-in user who is no longer a member", async () => {
 });
 
 it("answers a server outside the session's list as not found", async () => {
-  const g = play.guild(3, { name: "Ridge Walkers" });
+  const g = guild(3);
   const member = "400000000000009003";
   e2e.discord.addMember(g.guildId, member);
   const client = await signIn(member, []);
@@ -88,7 +118,9 @@ it("answers a server outside the session's list as not found", async () => {
 });
 
 it("sends someone signed out to sign in and back to the server", async () => {
-  const page = await new PageClient(e2e.url).get("/g/220000000000000104/log?page=2");
+  const page = await new PageClient(e2e.url).get(
+    "/g/220000000000000104/log?page=2",
+  );
   expect(page.status).toBe(303);
   expect(page.location?.pathname).toBe("/login");
   expect(page.location?.searchParams.get("next")).toBe(
@@ -97,7 +129,7 @@ it("sends someone signed out to sign in and back to the server", async () => {
 });
 
 it("pages the hike log ten at a time, the older hikes on the second page", async () => {
-  const g = play.guild(5, { name: "Ridge Walkers" });
+  const g = guild(5);
   const member = "400000000000009005";
   e2e.discord.addMember(g.guildId, member);
   const panel = await play.setUpPanel(g);
@@ -111,7 +143,9 @@ it("pages the hike log ten at a time, the older hikes on the second page", async
       date: `${weekdays[(day - 1) % 7] ?? ""}, ${String(day)} Jan 2031 · 11:00`,
     });
   }
-  const client = await signIn(member, [{ id: g.guildId, name: "Ridge Walkers" }]);
+  const client = await signIn(member, [
+    { id: g.guildId, name: "Ridge Walkers" },
+  ]);
 
   const server = textOf((await client.get(`/g/${g.guildId}`)).body);
   expect(server).toContain("11 hikes");
