@@ -172,6 +172,41 @@ const dateVote: ServerSteps = (play, g) =>
     dates: dates(g),
   });
 
+/**
+ * The date vote open, with the weekly schedule on: members may propose the
+ * round's days, fixed by the seeded vote, so the page's Propose a date does
+ * not change with today's date.
+ */
+const scheduledDateVote: ServerSteps = async (play, g) => {
+  await dateVote(play, g);
+  await play.seedSchedule(g, STARTED - 86_400_000);
+};
+
+/**
+ * Two hikes of 2019, Mount Si then Wallace Falls, from votes with other
+ * locations, then the open location vote: Poo Poo Point, Heather Lake and
+ * Twin Falls can be suggested again; Wallace Falls rests two more hikes
+ * and Mount Si one.
+ */
+const suggestAgain: ServerSteps = async (play, g) => {
+  const past = [
+    ["Mount Si", "Poo Poo Point", "Heather Lake"],
+    ["Wallace Falls", "Twin Falls"],
+  ];
+  for (const [index, labels] of past.entries()) {
+    const month = String(index + 3).padStart(2, "0");
+    await play.seedRound(g, {
+      status: "complete",
+      startedAt: Date.UTC(2019, index + 2, 1, 18),
+      locations: labels.map((label) => ({ label, voters: voters(g, 0) })),
+      location: labels[0] ?? "",
+      dates: [{ label: `2019-${month}-16 10:00`, voters: voters(g, 0) }],
+      date: `2019-${month}-16 10:00`,
+    });
+  }
+  await locationVote()(play, g);
+};
+
 /** The round complete: Snow Lake on Sat, 15 Jun 2030 at 11:00 is planned. */
 const hikePlanned: ServerSteps = (play, g) =>
   play.seedRound(g, {
@@ -287,14 +322,15 @@ export const SEEDS: Record<string, Seed> = {
   "server-location-decided": server(locationDecided),
   "server-location-decided-admin": server(locationDecided, "admin"),
   "server-location-vote-admin": server(locationVote(), "admin"),
-  "server-date-vote": server(dateVote),
-  "server-date-vote-admin": server(dateVote, "admin"),
+  "server-date-vote": server(scheduledDateVote),
+  "server-date-vote-admin": server(scheduledDateVote, "admin"),
   /** The date vote open for its owner, and Discord refusing the forum. */
   "server-date-vote-forum-refused-admin": (e2e) =>
     server(async (play, g) => {
       await dateVote(play, g);
       e2e.discord.failChannel(g.channels.forum, "missing-permissions");
     }, "admin")(e2e),
+  "server-suggest-again": server(suggestAgain),
   "server-hike-planned": server(hikePlanned),
   "server-hike-planned-admin": server(hikePlanned, "admin"),
   "server-hike-log": server(hikeLog),

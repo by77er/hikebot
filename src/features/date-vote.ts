@@ -29,6 +29,7 @@ import { adminOnly } from "../guild/permissions";
 import {
   UNAVAILABLE_MESSAGE,
   type ComponentHandler,
+  type HandlerContext,
   type ModalHandler,
   type Router,
 } from "../guild/router";
@@ -45,6 +46,8 @@ import {
   MAX_OPTIONS,
   MIN_DATE_OPTIONS,
   PollStore,
+  type OptionView,
+  type PollView,
   type RoundView,
 } from "../polls/store";
 import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
@@ -59,6 +62,7 @@ import {
   answerPanel,
   roundContext,
   scheduleRefresh,
+  type MemberOutcome,
   type PollWording,
 } from "./poll-ui";
 import {
@@ -298,7 +302,7 @@ const submitStart: ModalHandler = adminOnly(
     ),
 );
 
-const FULL = `This vote already has ${String(MAX_OPTIONS)} dates, the most it can hold. Vote for one of them instead.`;
+export const FULL = `This vote already has ${String(MAX_OPTIONS)} dates, the most it can hold. Vote for one of them instead.`;
 
 /**
  * The Propose a date modal for the poll; its help text names the days a
@@ -311,10 +315,7 @@ export function proposeModal(
   today: string,
   window?: { first: string; last: string },
 ): APIInteractionResponse {
-  const { first, last } =
-    window === undefined
-      ? { first: today, last: addDays(today, MAX_PROPOSAL_DAYS_AHEAD) }
-      : windowFrom(window, today);
+  const { first, last } = proposalDays(today, window);
   return modal(DATE_IDS.propose(pollId), "Propose a date", [
     label(
       "Date",
@@ -327,6 +328,37 @@ export function proposeModal(
       `${first} to ${last}, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time defaults to ${DEFAULT_HIKE_TIME}.`,
     ),
   ]);
+}
+
+/**
+ * The first and last day (`YYYY-MM-DD`) a member may propose on `today`:
+ * the round's `window` from today at the earliest when it has one,
+ * otherwise today to `MAX_PROPOSAL_DAYS_AHEAD` days after it. The last day
+ * is before the first once a window has passed.
+ */
+export function proposalDays(
+  today: string,
+  window?: { first: string; last: string },
+): { first: string; last: string } {
+  return window === undefined
+    ? { first: today, last: addDays(today, MAX_PROPOSAL_DAYS_AHEAD) }
+    : windowFrom(window, today);
+}
+
+/**
+ * The days a member may propose for the open date poll `poll` at `now`,
+ * as the Propose a date modal names them.
+ */
+export function pollProposalDays(
+  storage: DurableObjectStorage,
+  poll: PollView,
+  now: number,
+): { first: string; last: string } {
+  const settings = new GuildConfig(storage).get();
+  return proposalDays(
+    todayIn(settings.timezone, now),
+    cadenceDateWindow(poll, settings) ?? undefined,
+  );
 }
 
 function pollIdArg(customIdValue: string): number | null {
@@ -386,33 +418,58 @@ const saveDateProposal: ModalHandler = async (interaction, context) => {
   if (pollId === null) {
     return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
   }
+  const outcome = await proposeDateOption(
+    context,
+    interaction.member?.user.id ?? interaction.user?.id ?? "",
+    pollId,
+    textInputValue(interaction.data, DATE_IDS.day) ?? "",
+  );
+  if (!outcome.ok) return { response: ephemeralNotice(outcome.message) };
+  return {
+    response: ephemeralNotice(
+      `Added **${outcome.value.label}** to the date vote. Use **Vote** to vote for it.`,
+    ),
+  };
+};
+
+/**
+ * Adds the date `typed` (`YYYY-MM-DD` or `YYYY-MM-DD HH:MM`) to the open
+ * date poll with `userId` as proposer, through `proposeDate` with the
+ * guild's time zone and the round's window, and marks the poll message for
+ * a refresh. The modal and the web page's form both propose with it; a
+ * refusal carries the bot's sentence.
+ */
+export async function proposeDateOption(
+  context: HandlerContext,
+  userId: string,
+  pollId: number,
+  typed: string,
+): Promise<MemberOutcome<OptionView>> {
   const store = new PollStore(context.storage);
-  const typed = (textInputValue(interaction.data, DATE_IDS.day) ?? "").trim();
+  const line = typed.trim();
   const settings = new GuildConfig(context.storage).get();
   const poll = store.getPoll(pollId);
   try {
     const option = store.proposeDate(
       pollId,
-      interaction.member?.user.id ?? interaction.user?.id ?? "",
-      typed,
+      userId,
+      line,
       settings.timezone,
       poll === null
         ? undefined
         : (cadenceDateWindow(poll, settings) ?? undefined),
     );
     await scheduleRefresh(context.storage, pollId, store.now());
-    return {
-      response: ephemeralNotice(
-        `Added **${option.label}** to the date vote. Use **Vote** to vote for it.`,
-      ),
-    };
+    return { ok: true, value: option };
   } catch (error) {
-    if (isPollError(error)) {
-      return { response: ephemeralNotice(proposalRefusal(error, typed)) };
-    }
-    throw error;
+    if (!isPollError(error)) throw error;
+    return {
+      ok: false,
+      code: error.code,
+      message: proposalRefusal(error, line),
+    };
   }
-};
+}
 
 /** Registers the date vote's start and propose controls. */
 export function registerDateVote(router: Router): Router {

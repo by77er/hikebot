@@ -6,6 +6,7 @@ import {
   adminAction,
   asAdmin,
   baseView,
+  FORMS,
   logSection,
   MARKUP,
   openVote,
@@ -17,7 +18,7 @@ const USER = { name: "Ana", avatar: null, csrf: "token" };
 
 async function page(view: Parameters<typeof ServerPage>[0]["view"]) {
   const html = await htmlResponse(
-    <ServerPage user={USER} view={view} />,
+    <ServerPage user={USER} view={view} forms={FORMS} />,
   ).text();
   return { html, page: await outline(html) };
 }
@@ -140,6 +141,7 @@ describe("ServerPage", () => {
         user={USER}
         view={view}
         notice={{ kind: "done", lines: ["Hike planned."], retries: [thread] }}
+        forms={FORMS}
       />,
     ).text();
     expect(await sections(html)).toEqual([
@@ -147,6 +149,7 @@ describe("ServerPage", () => {
       expect.stringMatching(/^Done, but a step failed\./),
       "Location vote",
       "Admin",
+      expect.stringMatching(/^Propose a location/),
       "Planned hike",
       "Hike log",
       "Calendar",

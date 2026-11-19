@@ -3,9 +3,11 @@ import { CurrentStep } from "../../../../src/web/pages/server/current-step";
 import { render, spokenText } from "../../components/render";
 import {
   baseView,
+  FORMS,
   MARKUP,
   openVote,
   plannedHike,
+  GUILD,
   round,
   TIME_ZONE,
 } from "./view";
@@ -13,51 +15,88 @@ import {
 const MESSAGE = /href="https:\/\/discord\.com\/channels\/\d+\/\d+\/\d+"/;
 
 describe("CurrentStep", () => {
-  it("shows an open location vote's tally with Vote in Discord", async () => {
+  it("shows an open location vote as a form to vote with, and links the vote in Discord", async () => {
     const vote = openVote("location", [
       { label: "Lake", votes: 3 },
       { label: "Ridge", votes: 1 },
     ]);
     const html = render(
       <CurrentStep
+        forms={FORMS}
         view={baseView({ round: round("location_vote_open", vote) })}
       />,
     );
     const text = await spokenText(html);
     expect(text).toContain("Location vote");
     expect(text).toContain("Open");
+    expect(text).toContain(
+      "Vote for every location you would go to; you can change your votes until the vote closes.",
+    );
     expect(text).toContain("Lake 3 votes");
     expect(text).toContain("Ridge 1 vote");
-    expect(text).toContain("You have not voted yet.");
-    expect(text).not.toContain("Your vote");
+    expect(html).toContain(
+      `<form class="tally-vote" method="post" action="/g/${GUILD}/polls/1/votes">`,
+    );
+    expect(html).toContain('<input type="hidden" name="csrf" value="token"/>');
+    expect([...html.matchAll(/type="checkbox"/g)]).toHaveLength(2);
+    expect(html).not.toContain("checked");
+    expect(text).toContain("Save votes");
     expect(html).toMatch(MESSAGE);
-    expect(text).toContain("Vote in Discord");
+    expect(text).toContain("See the vote in Discord");
   });
 
-  it("marks the viewer's own votes", async () => {
+  it("ticks the viewer's own votes", () => {
     const vote = openVote("location", [
       { label: "Lake", votes: 3, viewerVoted: true },
       { label: "Ridge", votes: 1 },
     ]);
     const html = render(
       <CurrentStep
+        forms={FORMS}
+        view={baseView({ round: round("location_vote_open", vote) })}
+      />,
+    );
+    expect(html).toMatch(/name="option" value="1" checked/);
+    expect(html).not.toMatch(/name="option" value="2" checked/);
+  });
+
+  it("shows a refused save with the bot's sentence and the boxes as they were sent", async () => {
+    const vote = openVote("location", [
+      { label: "Lake", votes: 3, viewerVoted: true },
+      { label: "Ridge", votes: 1 },
+    ]);
+    const html = render(
+      <CurrentStep
+        forms={{
+          csrf: "token",
+          refusal: {
+            form: "votes",
+            pollId: 1,
+            code: "unknown_option",
+            message: "That option is not in this poll.",
+            optionIds: [2],
+          },
+        }}
         view={baseView({ round: round("location_vote_open", vote) })}
       />,
     );
     const text = await spokenText(html);
-    expect(text).toContain("Lake 3 votes Your vote");
-    expect(text).not.toContain("Ridge 1 vote Your vote");
-    expect(text).toContain("You have voted.");
+    expect(text).toContain(
+      "Error Your votes were not saved. That option is not in this poll.",
+    );
+    expect(html).not.toMatch(/name="option" value="1" checked/);
+    expect(html).toMatch(/name="option" value="2" checked/);
   });
 
   it("says the vote's message is still being posted when it has none", async () => {
     const vote = openVote("location", [{ label: "Lake", votes: 0 }], null);
     const html = render(
       <CurrentStep
+        forms={FORMS}
         view={baseView({ round: round("location_vote_open", vote) })}
       />,
     );
-    expect(html).not.toContain("Vote in Discord");
+    expect(html).not.toContain("See the vote in Discord");
     expect(await spokenText(html)).toContain(
       "The vote's message is being posted in Discord.",
     );
@@ -69,6 +108,7 @@ describe("CurrentStep", () => {
     ]);
     const html = render(
       <CurrentStep
+        forms={FORMS}
         view={baseView({
           round: round("date_vote_open", vote, "Mailbox Peak"),
         })}
@@ -78,7 +118,8 @@ describe("CurrentStep", () => {
     expect(text).toContain("Date vote");
     expect(text).toContain("Where: Mailbox Peak");
     expect(text).toContain(`Times are in ${TIME_ZONE}.`);
-    expect(text).toContain("Sat, 15 Jun 2030 · 09:00 2 votes Your vote");
+    expect(text).toContain("Sat, 15 Jun 2030 · 09:00 2 votes");
+    expect(html).toMatch(/name="option" value="1" checked/);
     expect(text).not.toContain("America/Los_Angeles");
   });
 
@@ -86,7 +127,9 @@ describe("CurrentStep", () => {
     const view = baseView({
       round: round("location_decided", null, "Mailbox Peak"),
     });
-    const text = await spokenText(render(<CurrentStep view={view} />));
+    const text = await spokenText(
+      render(<CurrentStep view={view} forms={FORMS} />),
+    );
     expect(text).toContain("Decided");
     expect(text).toContain("Mailbox Peak won the location vote.");
     expect(text).toContain("The date vote is next.");
@@ -95,6 +138,7 @@ describe("CurrentStep", () => {
       render(
         <CurrentStep
           view={{ ...view, viewer: { ...view.viewer, isAdmin: true } }}
+          forms={FORMS}
         />,
       ),
     );
@@ -105,13 +149,16 @@ describe("CurrentStep", () => {
 
   it("shows an empty state with no round, with the admin hint for an admin", async () => {
     const view = baseView();
-    const member = await spokenText(render(<CurrentStep view={view} />));
+    const member = await spokenText(
+      render(<CurrentStep view={view} forms={FORMS} />),
+    );
     expect(member).toContain("No hike is being planned");
     expect(member).not.toContain("/hike admin");
     const admin = await spokenText(
       render(
         <CurrentStep
           view={{ ...view, viewer: { ...view.viewer, isAdmin: true } }}
+          forms={FORMS}
         />,
       ),
     );
@@ -122,7 +169,12 @@ describe("CurrentStep", () => {
 
   it("shows nothing with no round and a planned hike", () => {
     expect(
-      render(<CurrentStep view={baseView({ plannedHike: plannedHike() })} />),
+      render(
+        <CurrentStep
+          view={baseView({ plannedHike: plannedHike() })}
+          forms={FORMS}
+        />,
+      ),
     ).toBe("");
   });
 
@@ -132,6 +184,7 @@ describe("CurrentStep", () => {
     ]);
     const html = render(
       <CurrentStep
+        forms={FORMS}
         view={baseView({ round: round("location_vote_open", vote) })}
       />,
     );

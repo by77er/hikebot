@@ -33,6 +33,7 @@ beforeAll(async () => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 let counter = 0;
@@ -194,6 +195,9 @@ describe("the web view's round", () => {
         voterCount: 2,
         closesAt: null,
         messageUrl: `https://discord.com/channels/${g.guildId}/${VOTE}/${MESSAGE}`,
+        instructions:
+          "Vote for every location you would go to; you can change your votes until the vote closes.",
+        propose: { kind: "location", refusal: null, again: [], resting: null },
       },
     });
 
@@ -272,5 +276,64 @@ describe("the web view's round", () => {
       ["2030-06-15 11:00", "Sat, 15 Jun 2030 · 11:00", 2, true],
       ["2030-06-22 11:00", "Sat, 22 Jun 2030 · 11:00", 1, false],
     ]);
+  });
+
+  it("offers past locations to suggest again, and names the resting ones as the bot does", async () => {
+    const g = await setUp();
+    await g.store((s) => {
+      const first = startLocationVote(s, ["Lake", "Canyon"]);
+      const lake = first.options.find((o) => o.label === "Lake");
+      s.setVotes(first.id, ANA, [lake?.id ?? 0]);
+      s.closePoll(first.id, OWNER);
+      const dates = s.startDatePoll(first.roundId, OWNER, [
+        "2030-06-08",
+        "2030-06-15",
+      ]);
+      s.closePoll(dates.id, OWNER);
+      startLocationVote(s, ["Ridge"]);
+    });
+    const propose = (await g.view(ANA)).round?.vote?.propose;
+    expect(propose).toMatchObject({
+      kind: "location",
+      refusal: null,
+      again: [{ label: "Canyon", details: null }],
+    });
+    expect(propose?.kind === "location" && propose.resting).toBe(
+      "Resting: **Lake** (2 more hikes)",
+    );
+  });
+
+  it("refuses more locations with the bot's sentence once the vote is full", async () => {
+    const g = await setUp();
+    await g.store((s) =>
+      startLocationVote(
+        s,
+        Array.from({ length: 25 }, (_, i) => `Place ${String(i + 1)}`),
+      ),
+    );
+    expect((await g.view(ANA)).round?.vote?.propose).toMatchObject({
+      kind: "location",
+      refusal:
+        "This vote already has 25 locations, the most it can hold. Vote for one of them instead.",
+    });
+  });
+
+  it("names the days a member may propose for an open date vote", async () => {
+    const g = await setUp();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // 1 June 2030, 11:00 in Los Angeles.
+    vi.setSystemTime(Date.UTC(2030, 5, 1, 18));
+    await g.store((s) => {
+      const where = startLocationVote(s, ["Lake"]);
+      s.closePoll(where.id, OWNER);
+      s.startDatePoll(where.roundId, OWNER, ["2030-06-08", "2030-06-15"]);
+    });
+    expect((await g.view(ANA)).round?.vote?.propose).toEqual({
+      kind: "date",
+      refusal: null,
+      first: "2030-06-01",
+      last: "2030-07-02",
+      defaultTime: "11:00",
+    });
   });
 });

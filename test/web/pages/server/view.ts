@@ -5,9 +5,12 @@
  * page that showed Pacific time would be caught.
  */
 import type {
+  WebDateProposal,
+  WebLocationProposal,
   WebOpenVote,
   WebRoundSection,
 } from "../../../../src/features/round-section";
+import type { PageForms } from "../../../../src/web/pages/server/forms";
 import type { WebHikeLogEntry } from "../../../../src/features/hike-log";
 import type { WebPlannedHike } from "../../../../src/features/planned-hike-section";
 import type {
@@ -84,8 +87,43 @@ export function openVote(
     voterCount: Math.max(0, ...options.map((option) => option.votes)),
     closesAt: null,
     messageUrl,
+    instructions:
+      kind === "location"
+        ? "Vote for every location you would go to; you can change your votes until the vote closes."
+        : "Vote for every date you could make; you can change your votes until the vote closes.",
+    propose: kind === "location" ? locationProposal() : dateProposal(),
   };
 }
+
+/** Propose a location with room on the vote and nothing to suggest again. */
+export function locationProposal(
+  overrides: Partial<WebLocationProposal> = {},
+): WebLocationProposal {
+  return {
+    kind: "location",
+    refusal: null,
+    again: [],
+    resting: null,
+    ...overrides,
+  };
+}
+
+/** Propose a date from 1 to 31 June 2030. */
+export function dateProposal(
+  overrides: Partial<WebDateProposal> = {},
+): WebDateProposal {
+  return {
+    kind: "date",
+    refusal: null,
+    first: "2030-06-01",
+    last: "2030-07-02",
+    defaultTime: "11:00",
+    ...overrides,
+  };
+}
+
+/** The forms of a page with nothing refused. */
+export const FORMS: PageForms = { csrf: "token", refusal: null };
 
 export function round(
   step: WebRoundSection["step"],

@@ -201,6 +201,12 @@ binding. Nothing under `src/web/` opens the object's storage; the read is
 built inside the object by `readWebView` (`src/guild/web-view.ts`), from
 the existing stores and feature functions, and writes nothing but caches.
 
+A member's action on a server's page, saving their votes or proposing to
+the open vote, goes the same way: `voteInGuild` and `proposeInGuild`
+(`src/web/guild.ts`) call the RPC methods `webVote` and `webPropose`,
+built inside the object in `src/guild/web-action.ts`, beside the
+admin's controls (see "Actions" below).
+
 **Who may see a server.** Only its members. The read asks Discord with the
 bot's token, `GET /guilds/{guild.id}/members/{user.id}`
 (`getGuildMember`): a 404 means the user is not a member. The answer is a
@@ -234,8 +240,18 @@ permission", with the roles from their membership.
   poll id and kind; its options in the poll message's order (locations by
   votes, dates by date), each with label, details, date, proposer, vote
   count and whether the viewer voted for it; the number of voters;
-  `closesAt` (null: a vote closes when an admin closes it); and a link to
-  the poll's message (null until posted).
+  `closesAt` (null: a vote closes when an admin closes it); a link to
+  the poll's message (null until posted); the poll message's
+  `instructions`; and `propose`, what a member may add, as the Propose
+  button offers it in Discord. For a location vote: `again`, the past
+  locations the bot's "Suggest one again" select lists for the viewer
+  (neither on the vote nor resting, their own first, at most 25), and
+  `resting`, the bot's line naming the resting ones ("Resting: **Eagle
+  Peak** (2 more hikes)", null when none rests). For a date vote: the
+  `first` and `last` day a member may propose, as the Propose a date
+  modal names them, and the `defaultTime`. Both carry `refusal`, the bot's
+  sentence when nothing can be added (a full vote, or a scheduled round's
+  days all passed), else null.
 - `plannedHike` (`plannedHikeSection`,
   `src/features/planned-hike-section.ts`): the newest hike in the log while
   its start plus `HIKE_DURATION_HOURS` is after now, else null. Location,
@@ -287,18 +303,28 @@ matches the prefix `/g/*`, and `src/web/server-routes.tsx` picks the page
 from the rest of the path (a table with one entry per page); any other
 path under a server is the 404 page.
 
-- `GET /g/<guild id>`: the server's page (`src/web/pages/server/page.tsx`),
-  read-only. Its sections, top to bottom, one component per file in
+- `GET /g/<guild id>`: the server's page (`src/web/pages/server/page.tsx`).
+  Its sections, top to bottom, one component per file in
   `src/web/pages/server/`: the heading (Switch server back to `/servers`,
   the server's icon and name, and the round stepper at the round's step:
   Location vote for an open location vote, Date vote for a decided
   location or an open date vote, Hike planned for a planned hike with no
-  round open, none with neither); the current step (an open vote's options
-  as a tally with the counts, the viewer's own votes marked, the time zone
-  named for dates, and Vote in Discord linking to the poll's message; a
-  decided location waiting for its date vote; with no round and no planned
-  hike an empty state, telling an admin to start a vote from `/hike admin`
-  in Discord); for an admin, the Admin card (below); the planned hike as a full hike card (location, details,
+  round open, none with neither); the notice of the member's last action
+  (the one-time banner, or a refusal whose form is gone); the current step
+  (an open vote as a form to vote with: its instructions, one checkbox per
+  option with the counts, the viewer's votes ticked, **Save votes**, the
+  time zone named for dates, and See the vote in Discord linking to the
+  poll's message; a decided location waiting for its date vote; with no
+  round and no planned hike an empty state, telling an admin to start a
+  vote from `/hike admin` in Discord); for an admin, the Admin card
+  (below); while the location vote is open,
+  Propose a location (Suggest one again, a select of `again` with the
+  `resting` line under it, and New location with the modal's fields:
+  Name, up to 80 characters; Details, up to 300; Map link or
+  coordinates, up to 1000); while the date vote is open, Propose a date (a
+  date picker with `min` and `max` the days a member may propose, and an
+  optional time, defaulting to 11:00); either shows its `refusal`
+  sentence instead of its forms; the planned hike as a full hike card (location, details,
   date and time in the server's time zone with the zone named, links to the
   thread and the event); the hike log's five latest hikes, with a link to
   the whole log when it has more; and the calendar address in a read-only
@@ -367,7 +393,63 @@ changes.
 In a log, the hike that is the view's planned hike is drawn as planned and
 every other as a past hike.
 
-**The guard.** Every page and action under `/g/<guild id>` starts with
+**Actions.** A member's two form targets, one entry each in
+`SERVER_ACTIONS` of `src/web/server-routes.tsx` (the admin's are above),
+each the same operation as a Discord control:
+
+- `POST /g/<guild id>/polls/<poll id>/votes`: Save votes. The ticked
+  options (`option`, once per box) replace the member's votes in the poll,
+  exactly, through `castVotes` (`src/features/poll-ui.ts`), the Vote
+  select's `setVotes`; none ticked clears them. (The Discord select keeps
+  votes for options added after it was shown; the web form sends every
+  option it shows, so the ticked set is the whole answer.)
+- `POST /g/<guild id>/polls/<poll id>/options`: a proposal. With `again`
+  (an option id from the select) it is `suggestAgain`, the suggest-again
+  select's operation; with `date` (`YYYY-MM-DD`) and `time` (`HH:MM` or
+  empty) it is `proposeDateOption`, the Propose a date modal's, given
+  `<date> <time>` or the date alone; otherwise `name`, `details` and `map`
+  go to `proposeLocation`, the Propose a location modal's
+  (`src/features/location-vote.ts`, `src/features/date-vote.ts`). A form
+  sent without a date is refused with "Pick a date.", which the modal,
+  whose field is required, never needs.
+
+Each action is checked in this order: the session (signed out: 403, no
+redirect, since a form cannot be sent again after sign-in), the session's
+server list (404, as for a page), `checkPost` (the CSRF token sealed for
+the session's user, and `Sec-Fetch-Site: same-origin` or a same-origin
+`Origin`; 403 otherwise), all before the `GUILD_HIKE` binding is touched
+(`requireServerAction`). Then the guild object asks Discord whether the
+user is a member at that moment (`getGuildMember`, past the member cache,
+whose entry the answer replaces), so someone removed after loading the
+page is refused (`not_member`, the 403 page) and Discord not answering is
+the 503 page; nothing is stored either way. A member's vote or proposal is
+stored under their Discord user id, and marks the poll message for the
+debounced refresh (see "Live updates"), so Discord and the web show one
+tally.
+
+The answer (`WebMemberResult`) is `done` with a banner, or `refused` with
+the store's code and the bot's own sentence for it, the one the Discord
+control answers with (`This vote has closed.`, `**Lake** is already on
+the list. Vote for it instead.`, the cooldown message, a date out of
+range, …). Done: a 303 back to `/g/<guild id>` (post, redirect, get) that
+sets the one-time banner, "Your votes are saved." ("Your votes are
+cleared." for none) or "Added <label>." (with the bot's note when the map
+field held no coordinates). Refused: the server's page as it is now, with
+status 422 and a title starting "Error:", the sentence at the top of the
+form it came from and on its field, in the bot's words with its bold and
+code marks, and what was sent kept in the form; when that form is no
+longer on the page (the vote closed since the page loaded), the sentence
+is at the top of the page.
+
+**The one-time banner** is a cookie, `__Host-hikebot_flash`, sealed
+(purpose `flash`) with the user, the server, the banner and its note, for
+60 seconds (`src/web/flash.ts`). The server's page shows it once, if it
+is for the signed-in user and this server, and clears it in the same
+answer; a reload shows the page without it and repeats nothing. One for
+another server is left for that server's page; one for another user, or
+tampered with, is cleared unshown. Everything works without JavaScript.
+
+**The guard.** Every page under `/g/<guild id>` starts with
 `requireServer(request, env, guildId, log)` (`src/web/server-guard.tsx`),
 which answers in this order:
 
@@ -379,7 +461,8 @@ which answers in this order:
    server any more", with Refresh servers (`/login?next=/servers`) and
    Choose a server; `unavailable` is a 503 page, "Discord could not be
    reached", with Try again (the same page; for an action, the server's
-   page). Neither shows the server's name or anything else of it, nor
+   page). A refused action reads the server this way to show its page
+   again. Neither shows the server's name or anything else of it, nor
    anything Discord answered.
 4. Otherwise the request gets the session, the clock, the layout's user and
    the view, with the viewer's admin flag from the read.
@@ -508,9 +591,9 @@ work" describes.
 Besides `handleInteraction` and `runFollowUp`, the object has the web's
 calls, each a one-line call into the code that owns it:
 `calendarFeed(guildId)` into `src/features/calendar-feed.ts` (see
-"Calendar feed"), `webView(request)` into `src/guild/web-view.ts` and
-`adminAction(request)` into `src/guild/web-action.ts` (see "Web pages for
-a server").
+"Calendar feed"), `webView(request)` into `src/guild/web-view.ts`, and
+`adminAction(request)`, `webVote(request)` and `webPropose(request)` into
+`src/guild/web-action.ts` (see "Web pages for a server").
 
 ## Deferred work
 
@@ -678,6 +761,7 @@ now)` returns the payload, or null when the token is malformed, changed,
   | `csrf`        | A form's CSRF token, bound to the session                    |
   | `calendar`    | A calendar feed address, so it can be shared without sign-in |
   | `notice`      | The result of an admin's action, carried across its redirect |
+  | `flash`       | The one-time banner after a member's action on the web       |
 
 - A calendar feed address is `/calendar/<guild id>/<signature>.ics` with the
   signature `sign(SIGNING_SECRET, "calendar", <guild id>)`
@@ -1259,6 +1343,8 @@ yet. Propose one first." Submitting replaces the member's votes among the
 options that select lists with the ones picked, keeping their votes for
 options added after it was shown, and updates the ephemeral message with
 what they now vote for (or that their votes are cleared) and a fresh select.
+The server's web page votes through the same operation (`castVotes`); see
+"Web pages for a server".
 
 ### Propose a location
 
