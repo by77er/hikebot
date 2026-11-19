@@ -4,7 +4,10 @@
  * as code. Everything else, and everything inside the marks, is text.
  */
 
-const MARKS = /(\*\*.+?\*\*|`[^`]+`)/;
+/** A backtick, which opens and closes the bot's code marks. */
+const TICK = "\x60";
+
+const MARKS = /(\*\*.+?\*\*|\x60[^\x60]+\x60)/;
 
 export function BotSentence({ text }: { text: string }) {
   return (
@@ -13,7 +16,7 @@ export function BotSentence({ text }: { text: string }) {
         if (part.length > 4 && part.startsWith("**") && part.endsWith("**")) {
           return <strong key={i}>{part.slice(2, -2)}</strong>;
         }
-        if (part.length > 2 && part.startsWith("`") && part.endsWith("`")) {
+        if (part.length > 2 && part.startsWith(TICK) && part.endsWith(TICK)) {
           return <code key={i}>{part.slice(1, -1)}</code>;
         }
         return part;
