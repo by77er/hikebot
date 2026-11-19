@@ -514,9 +514,11 @@ its styles in `public/assets/cairn/components/`, its unit test in
     ("Vote for every location you would go to; you can change your votes
     until the vote closes."), the tally list with each row's label as a
     real checkbox's `<label>` (checked for the saved votes, described by
-    the row's count), and one primary **Vote** button that stays at the
-    foot of the screen (`position: sticky`) while a long list scrolls. The
-    form sends every checked option's id under one name, so the route
+    the row's count), and one primary **Vote** button right after the
+    list. It does not stick to the foot of the screen: a sticky bar sits
+    over the top of the list until the list is scrolled to, and the list
+    stays short enough (details folded past six options) to reach the
+    end. The form sends every checked option's id under one name, so the route
     replaces the member's votes with them, as the bot's select does.
   - _Variants_: with options; with none it is no form, only the `empty`
     sentence.

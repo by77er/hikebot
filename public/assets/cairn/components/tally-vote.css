@@ -24,18 +24,8 @@
   max-width: var(--measure);
 }
 
-/*
- * The Vote button stays in reach at the foot of the screen while the list
- * scrolls past, so a member who ticks the first of 25 options need not
- * scroll to the end; it settles under the list when the list ends.
- */
 .tally-vote__actions {
-  position: sticky;
-  inset-block-end: 0;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-  padding-block: var(--space-3);
-  border-block-start: var(--border-width) solid var(--color-border);
-  background: var(--color-bg);
 }
