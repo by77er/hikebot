@@ -8,7 +8,7 @@
  */
 import type { VectorTile, VectorTileFeature } from "@mapbox/vector-tile";
 import { clipLine, clipRing, type Rect } from "./clip";
-import type { FontFace, MapFonts } from "./font";
+import type { FontFace, LabelFont, MapFonts } from "./font";
 import { overlaps, placeLabels, type Box, type LabelCandidate } from "./labels";
 import {
   metresPerPixel,
@@ -24,6 +24,7 @@ import {
   FURNITURE,
   LABEL_COLOURS,
   LABEL_FONTS,
+  LABEL_PRIORITY,
   LABEL_SIZES,
   LABEL_ZOOM_LEAD,
   MIN_ZOOM,
@@ -48,7 +49,7 @@ export interface Scene {
   pin: { lon: number; lat: number };
   units: Units;
   attribution: string;
-  fonts: Pick<MapFonts, "family" | "metrics">;
+  fonts: Pick<MapFonts, "family" | "metrics" | "forText">;
 }
 
 type FillRole =
@@ -378,6 +379,7 @@ function pathData(shapes: Point[][], closed: boolean): string {
 
 interface TextLabel {
   role: LabelRole;
+  font: LabelFont;
   /** One or two lines; the second line is drawn smaller. */
   lines: string[];
   /** The centre of the text block, by position. */
@@ -387,6 +389,7 @@ interface TextLabel {
 
 interface CurvedLabel {
   role: LabelRole;
+  font: LabelFont;
   text: string;
   /** The path the text follows, by position, left to right. */
   paths: Point[][];
@@ -410,8 +413,13 @@ function drawLabels(
     const minZoom = Number(feature.properties.min_zoom ?? 0);
     return minZoom <= zoom + LABEL_ZOOM_LEAD[role];
   };
-  const textBox = (role: LabelRole, lines: string[], centre: Point): Box => {
-    const metrics = fonts.metrics(face(role));
+  const textBox = (
+    font: LabelFont,
+    role: LabelRole,
+    lines: string[],
+    centre: Point,
+  ): Box => {
+    const metrics = font.metrics(face(role));
     const heights = lines.map((_, i) => lineSize(size(role), i));
     const width = Math.max(
       ...lines.map((line, i) => metrics.width(line, heights[i] ?? 0)),
@@ -477,6 +485,7 @@ function drawLabels(
             Number.isFinite(elevation) && elevation > 0
               ? [name, formatElevation(elevation, scene.units)]
               : [name];
+          const font = fonts.forText(lines.join(""));
           const marker = (FURNITURE.peakSize * ratio) / 2;
           const markerBox: Box = {
             left: at.x - marker,
@@ -484,7 +493,7 @@ function drawLabels(
             top: at.y - marker,
             bottom: at.y + marker,
           };
-          const probe = textBox(role, lines, { x: 0, y: 0 });
+          const probe = textBox(font, role, lines, { x: 0, y: 0 });
           const w = probe.right - probe.left;
           const h = probe.bottom - probe.top;
           const gap = marker + 2 * ratio;
@@ -500,11 +509,12 @@ function drawLabels(
             priority,
             positions: centres.map((c) => [
               ...markers,
-              textBox(role, lines, c),
+              textBox(font, role, lines, c),
             ]),
             value: {
               text: {
                 role,
+                font,
                 lines,
                 centres,
                 ...(markers.length > 0 ? { marker: at } : {}),
@@ -514,7 +524,8 @@ function drawLabels(
           continue;
         }
         const lines = [name];
-        const box = textBox(role, lines, at);
+        const font = fonts.forText(name);
+        const box = textBox(font, role, lines, at);
         const h = box.bottom - box.top;
         const w = box.right - box.left;
         const centres = [
@@ -526,8 +537,8 @@ function drawLabels(
         ];
         candidates.push({
           priority,
-          positions: centres.map((c) => [textBox(role, lines, c)]),
-          value: { text: { role, lines, centres } },
+          positions: centres.map((c) => [textBox(font, role, lines, c)]),
+          value: { text: { role, font, lines, centres } },
         });
       }
     }
@@ -535,7 +546,8 @@ function drawLabels(
 
   for (const [name, { role, line }] of curves) {
     const fontSize = size(role);
-    const width = fonts.metrics(face(role)).width(name, fontSize) + 2 * halo;
+    const font = fonts.forText(name);
+    const width = font.metrics(face(role)).width(name, fontSize) + 2 * halo;
     const paths: Point[][] = [];
     const positions: Box[][] = [];
     for (const share of [0.5, 0.35, 0.65, 0.2, 0.8]) {
@@ -550,9 +562,9 @@ function drawLabels(
     }
     if (positions.length === 0) continue;
     candidates.push({
-      priority: 30,
+      priority: LABEL_PRIORITY.water,
       positions,
-      value: { curved: { role, text: name, paths } },
+      value: { curved: { role, font, text: name, paths } },
     });
   }
 
@@ -566,21 +578,21 @@ function drawLabels(
   const markers: string[] = [];
   placed.forEach(({ value, position }, index) => {
     if ("curved" in value) {
-      const { role, text, paths } = value.curved;
+      const { role, font, text, paths } = value.curved;
       const path = paths[position] ?? [];
       const id = `l${String(index)}`;
       defs.push(
         `<path id="${id}" d="M${path.map((p) => `${num(p.x)} ${num(p.y)}`).join("L")}"/>`,
       );
       out.push(
-        `<text${textAttributes(scene, role, size(role), halo)} dy="${num(size(role) * 0.35)}"><textPath xlink:href="#${id}" startOffset="50%" text-anchor="middle">${escape(text)}</textPath></text>`,
+        `<text${textAttributes(font, role, size(role), halo)} dy="${num(size(role) * 0.35)}"><textPath xlink:href="#${id}" startOffset="50%" text-anchor="middle">${escape(text)}</textPath></text>`,
       );
       return;
     }
-    const { role, lines, centres, marker } = value.text;
+    const { role, font, lines, centres, marker } = value.text;
     const centre = centres[position] ?? centres[0] ?? { x: 0, y: 0 };
-    const metrics = fonts.metrics(face(role));
-    const box = textBox(role, lines, centre);
+    const metrics = font.metrics(face(role));
+    const box = textBox(font, role, lines, centre);
     let y = box.top;
     const anchor =
       marker && position === 0
@@ -601,7 +613,7 @@ function drawLabels(
       return `<tspan x="${num(x)}" y="${num(baseline)}" font-size="${num(lineHeight)}">${escape(line)}</tspan>`;
     });
     out.push(
-      `<text${textAttributes(scene, role, size(role), halo)} text-anchor="${anchor}">${tspans.join("")}</text>`,
+      `<text${textAttributes(font, role, size(role), halo)} text-anchor="${anchor}">${tspans.join("")}</text>`,
     );
     if (marker) {
       const r = (FURNITURE.peakSize * ratio) / 2;
@@ -647,15 +659,13 @@ function labelPriority(role: LabelRole, feature: VectorTileFeature): number {
   const elevation = Number(feature.properties.elevation ?? 0) || 0;
   switch (role) {
     case "town":
-      return 90 + rank;
-    case "peak":
-      return 60 + Math.min(elevation, 9000) / 1000;
-    case "water":
-      return 50;
     case "village":
-      return 40 + rank;
+      return LABEL_PRIORITY[role] + rank;
+    case "peak":
+      return LABEL_PRIORITY.peak + Math.min(elevation, 9000) / 1000;
+    case "water":
     case "neighbourhood":
-      return 10;
+      return LABEL_PRIORITY[role];
   }
 }
 
@@ -671,14 +681,14 @@ function groupThousands(value: number): string {
 }
 
 function textAttributes(
-  scene: Scene,
+  font: LabelFont,
   role: LabelRole,
   size: number,
   halo: number,
 ): string {
   const face = LABEL_FONTS[role];
   return (
-    ` font-family="${scene.fonts.family}" font-size="${num(size)}" font-weight="${String(face.weight)}"` +
+    ` font-family="${font.family}" font-size="${num(size)}" font-weight="${String(face.weight)}"` +
     (face.italic ? ` font-style="italic"` : "") +
     `${fill(LABEL_COLOURS[role])}${stroke("labelHalo", halo)} stroke-linejoin="round" paint-order="stroke"`
   );
@@ -802,27 +812,35 @@ function drawFurniture(scene: Scene): {
     attributes: ` font-family="${fonts.family}" font-size="${num(size)}"${fill("furniture")}`,
   });
 
-  // The pin: a teardrop whose tip is on the point.
+  // The pin: the trail blaze, a painted upright rectangle, on a short
+  // pointer whose tip is on the point.
   const tip = toPicture(view, scene.pin.lon, scene.pin.lat);
-  const r = FURNITURE.pinRadius * ratio;
-  const head = { x: tip.x, y: tip.y - FURNITURE.pinHeight * ratio };
+  const halfWidth = (FURNITURE.pinWidth * ratio) / 2;
+  const bottom = tip.y - FURNITURE.pinTip * ratio;
+  const top = tip.y - FURNITURE.pinHeight * ratio;
+  const corner = FURNITURE.pinCorner * ratio;
+  const neck = halfWidth * 0.45;
   const outline = FURNITURE.pinOutline * ratio;
-  const spread = Math.asin(r / (tip.y - head.y));
-  const side = (sign: number) => ({
-    x: head.x + sign * r * Math.cos(spread),
-    y: head.y + r * Math.sin(spread),
-  });
-  const left = side(-1);
-  const right = side(1);
+  const keyline = FURNITURE.pinKeyline * ratio;
+  const [left, right] = [tip.x - halfWidth, tip.x + halfWidth];
+  const arc = (x: number, y: number) =>
+    `A${num(corner)} ${num(corner)} 0 0 1 ${num(x)} ${num(y)}`;
+  const blaze =
+    `M${num(tip.x)} ${num(tip.y)}L${num(tip.x - neck)} ${num(bottom)}` +
+    `H${num(left + corner)}${arc(left, bottom - corner)}` +
+    `V${num(top + corner)}${arc(left + corner, top)}` +
+    `H${num(right - corner)}${arc(right, top + corner)}` +
+    `V${num(bottom - corner)}${arc(right - corner, bottom)}` +
+    `H${num(tip.x + neck)}Z`;
   svg.push(
-    `<path d="M${num(tip.x)} ${num(tip.y)}L${num(left.x)} ${num(left.y)}A${num(r)} ${num(r)} 0 1 1 ${num(right.x)} ${num(right.y)}Z"${fill("pin")}${stroke("pinOutline", outline)} stroke-linejoin="round" paint-order="stroke"/>`,
-    `<circle cx="${num(head.x)}" cy="${num(head.y)}" r="${num(r * 0.38)}"${fill("pinOutline")}/>`,
+    `<path d="${blaze}" fill="none"${stroke("pinKeyline", 2 * (outline + keyline))} stroke-linejoin="round"/>`,
+    `<path d="${blaze}"${fill("pin")}${stroke("pinOutline", 2 * outline)} stroke-linejoin="round" paint-order="stroke"/>`,
   );
   const pin: Box = {
-    left: head.x - r - outline,
-    right: head.x + r + outline,
-    top: head.y - r - outline,
-    bottom: tip.y + outline,
+    left: left - outline - keyline,
+    right: right + outline + keyline,
+    top: top - outline - keyline,
+    bottom: tip.y + outline + keyline,
   };
 
   // The attribution, bottom right.

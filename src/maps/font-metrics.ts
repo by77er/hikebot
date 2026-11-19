@@ -7,6 +7,8 @@
 export interface FontMetrics {
   /** The text's width at `size` pixels. */
   width(text: string, size: number): number;
+  /** True when the font has a glyph for every character of `text`. */
+  covers(text: string): boolean;
   /** Ascender and descender as fractions of the size (descender positive). */
   ascent: number;
   descent: number;
@@ -51,6 +53,12 @@ export function readFontMetrics(font: Uint8Array): FontMetrics {
       let units = 0;
       for (const char of text) units += advance(char.codePointAt(0) ?? 0);
       return (units / unitsPerEm) * size;
+    },
+    covers(text) {
+      for (const char of text) {
+        if (glyphOf(char.codePointAt(0) ?? 0) === 0) return false;
+      }
+      return true;
     },
     ascent: ascender / unitsPerEm,
     descent: -descender / unitsPerEm,
