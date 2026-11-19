@@ -40,8 +40,8 @@ export const MAP_PIN_IDS = {
   point: customId("pin", "point"),
 } as const;
 
-/** The longest map link or coordinates the modal takes. */
-const MAX_PIN_INPUT = 1000;
+/** The longest map link or coordinates the modal and the web form take. */
+export const MAX_PIN_INPUT = 1000;
 
 /** A changed pin, as the hooks get it. */
 export interface MapPinChange {
@@ -157,6 +157,59 @@ export async function setMapPin(
   return { change, notes: await runMapPinHooks(change, context, hooks) };
 }
 
+/** What setting a pin from a web page came to. */
+export type WebPinOutcome =
+  | { kind: "unreadable" }
+  | { kind: "not_pinnable" }
+  | {
+      kind: "set";
+      /** The decided location's label. */
+      location: string;
+      /** The new pin as the form shows it, null when it was removed. */
+      point: string | null;
+      /** A note for each hook that failed. */
+      notes: string[];
+    };
+
+/**
+ * What was typed into Set map pin: a point, null when it is empty (which
+ * removes the pin), or "unreadable" when no coordinates can be read from
+ * it.
+ */
+export function readPinInput(typed: string): Point | null | "unreadable" {
+  const trimmed = typed.trim();
+  if (trimmed === "") return null;
+  if (trimmed.length > MAX_PIN_INPUT) return "unreadable";
+  return parseCoordinates(trimmed) ?? "unreadable";
+}
+
+/**
+ * Set map pin from a web page, for a caller that has checked the user is
+ * an admin: reads `input` as the panel's modal does and sets the pin of
+ * round `roundId`'s decided location with `setMapPin`, running `hooks`
+ * before it returns.
+ */
+export async function setMapPinFromWeb(
+  context: HandlerContext,
+  pin: { roundId: number; guildId: string; input: string },
+  hooks: readonly MapPinHook[],
+): Promise<WebPinOutcome> {
+  const point = readPinInput(pin.input);
+  if (point === "unreadable") return { kind: "unreadable" };
+  const result = await setMapPin(
+    context,
+    { roundId: pin.roundId, point, guildId: pin.guildId },
+    hooks,
+  );
+  if (result === null) return { kind: "not_pinnable" };
+  return {
+    kind: "set",
+    location: result.change.location.label,
+    point: point === null ? null : formatPoint(point),
+    notes: result.notes,
+  };
+}
+
 const NOT_PINNABLE =
   "That hike's location can no longer be pinned from here. Refresh the panel.";
 
@@ -198,11 +251,10 @@ const openPinModal: ComponentHandler = adminOnly(
 function savePin(hooks: readonly MapPinHook[]): ModalHandler {
   return adminOnly(
     (interaction: APIModalSubmitInteraction, context, settings) => {
-      const typed = (
-        textInputValue(interaction.data, MAP_PIN_IDS.point) ?? ""
-      ).trim();
-      const point = typed === "" ? null : parseCoordinates(typed);
-      if (typed !== "" && point === null) {
+      const point = readPinInput(
+        textInputValue(interaction.data, MAP_PIN_IDS.point) ?? "",
+      );
+      if (point === "unreadable") {
         return {
           response: ephemeralNotice(
             "No coordinates could be read from that, so the pin is unchanged. Enter `lat, lon` in decimal degrees such as `47.4875, -121.7234`, or paste a Google Maps, OpenStreetMap or Apple Maps link that shows the coordinates (short links such as maps.app.goo.gl are not opened). Leave it empty to remove the pin.",

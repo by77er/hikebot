@@ -7,12 +7,13 @@
  */
 import type { WebViewSource } from "../guild/web-view";
 import { dateTimeIn, timeIn } from "../polls/dates";
-import type { Units } from "../weather/forecast";
+import type { StoredForecast, Units } from "../weather/forecast";
 import {
   forecastNotes,
   hikeSunTimes,
   hourlyHours,
   unitLabels,
+  type HikeHours,
   type UnitLabels,
 } from "../weather/format";
 import { conditions } from "../weather/wmo";
@@ -87,9 +88,21 @@ export function hikeForecastSection(
       text: NO_FORECAST_TEXT[weather.reason],
     };
   }
-  const { forecast, updatedAt } = weather.stored;
-  const hours = hourlyHours(forecast, weather.hike);
-  const sun = hikeSunTimes(forecast, weather.hike, timeZone);
+  return webForecast(weather.stored, weather.hike, timeZone);
+}
+
+/**
+ * `stored` as the web view gives it for a hike of `hike`'s hours in
+ * `timeZone`: the thread's hours, sun times and notes.
+ */
+export function webForecast(
+  stored: StoredForecast,
+  hike: HikeHours,
+  timeZone: string,
+): WebHikeForecast {
+  const { forecast, updatedAt } = stored;
+  const hours = hourlyHours(forecast, hike);
+  const sun = hikeSunTimes(forecast, hike, timeZone);
   return {
     kind: "forecast",
     units: forecast.units,
