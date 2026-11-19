@@ -37,6 +37,7 @@ import {
   type CloseStep,
 } from "./poll-ui";
 import { retryMapPicture } from "./round-actions";
+import { noteShown, weatherTexts } from "./weather-state";
 
 /**
  * The picture's file name on the thread's first message, which the media
@@ -69,12 +70,16 @@ async function putPicture(
 ): Promise<string | null> {
   const api = discordApi(context.env);
   if (round.threadId !== null) {
+    const weather =
+      weatherTexts(round, timeZone, new PollStore(context.storage).now())
+        ?.thread ?? null;
     const body = messageBody(
       renderThreadMessage(
         { ...round, mapPictureKey: picture?.key ?? null },
         guildId,
         timeZone,
         context.env.DISCORD_APPLICATION_ID,
+        weather,
       ),
     );
     try {
@@ -91,6 +96,9 @@ async function putPicture(
           ]));
     } catch (error) {
       return `Could not show the map picture on the hike thread: ${errorText(error)}. ${RETRY}`;
+    }
+    if (weather !== null) {
+      noteShown(context.storage, round.id, guildId, "thread", weather);
     }
   }
   if (round.eventId !== null) {

@@ -155,6 +155,13 @@ describe("DiscordApi routes", () => {
       auth: true,
     },
     {
+      name: "editThread",
+      call: (api) => api.editThread("70", { archived: false }),
+      method: "PATCH",
+      url: `${base}/channels/70`,
+      auth: true,
+    },
+    {
       name: "getGuild",
       call: (api) => api.getGuild("40"),
       method: "GET",

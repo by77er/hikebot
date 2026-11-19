@@ -111,6 +111,7 @@ describe("the hike-day announcement", () => {
       ),
     );
     expect(lines.slice(2)).toEqual([
+      "**Weather:** No forecast: this hike has no map pin. An admin can set one from /hike admin.",
       `**Hike thread:** <#${thread?.id ?? "?"}>`,
       `**Discord event:** https://discord.com/events/${g.guildId}/${event?.id ?? "?"}`,
       expect.stringMatching(

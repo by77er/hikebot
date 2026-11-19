@@ -11,7 +11,7 @@ import type {
   APIMessageComponentInteraction,
   APIMessageTopLevelComponent,
 } from "discord-api-types/v10";
-import { discordApi, eventUrl } from "../discord/api";
+import { DiscordApiError, discordApi, eventUrl } from "../discord/api";
 import {
   container,
   mediaGallery,
@@ -49,6 +49,7 @@ import {
   type CloseStep,
 } from "./poll-ui";
 import { retryHikeThread } from "./round-actions";
+import { noteShown, weatherTexts } from "./weather-state";
 
 /** Discord's limit on a thread name. */
 export const MAX_THREAD_NAME = 100;
@@ -129,16 +130,18 @@ function resultLine(
  * one), the date with its start in the guild's time zone as a relative
  * timestamp, the link to the hike's scheduled event once it exists, the
  * result of both votes with links to their messages, and OpenStreetMap's
- * attribution under a pin. Location labels (80), details (300) and place
- * names (80) are bounded, so it stays far within 40 components and 4000
- * characters. A proposer whose id is `botId` (the application's own) is
- * named hikebot.
+ * attribution under a pin, with the `weather` block (`weatherTexts`) after
+ * the head when there is one. Location labels (80), details (300) and
+ * place names (80) are bounded, and the weather block holds nine rows, so
+ * it stays within 40 components and 4000 characters. A proposer
+ * whose id is `botId` (the application's own) is named hikebot.
  */
 export function renderThreadMessage(
   round: RoundView,
   guildId: string,
   timeZone: string,
   botId?: string,
+  weather: string | null = null,
 ): APIMessageTopLevelComponent[] {
   const location = winnerOf(round.locationPoll);
   const date = winnerOf(round.datePoll);
@@ -171,6 +174,7 @@ export function renderThreadMessage(
   return [
     container([
       ...top,
+      ...(weather === null ? [] : [separator(), textDisplay(weather)]),
       separator(),
       textDisplay(
         [
@@ -206,6 +210,7 @@ export async function createHikeThread(
     recordHikeThreadFailure(context.storage, round.id, reason);
     return { ok: false, reason };
   }
+  const weather = weatherTexts(round, timeZone, store.now())?.thread ?? null;
   try {
     const thread = await discordApi(context.env).startForumThread(forumId, {
       name: threadTitle(
@@ -219,6 +224,7 @@ export async function createHikeThread(
           guildId,
           timeZone,
           context.env.DISCORD_APPLICATION_ID,
+          weather,
         ),
       ),
     });
@@ -226,6 +232,9 @@ export async function createHikeThread(
     // The picture shown on the event so far is not on this thread yet.
     store.setRoundMapPicture(round.id, null);
     clearHikeThreadAttempt(context.storage, round.id);
+    if (weather !== null) {
+      noteShown(context.storage, round.id, guildId, "thread", weather);
+    }
     return { ok: true, threadId: thread.id };
   } catch (error) {
     const reason = `Could not create the hike thread in <#${forumId}>: ${errorText(error)}. Check that it is still a forum channel and that the bot can create posts in it, then click Create hike thread.`;
@@ -276,26 +285,80 @@ const createAgain: ComponentHandler = adminOnly(
 );
 
 /**
+ * Discord's code for an operation on an archived thread, "such as editing
+ * a message" (https://docs.discord.com/developers/topics/opcodes-and-status-codes).
+ */
+const ARCHIVED_THREAD = 50083;
+
+/**
+ * Edits the thread's first message so it shows `round` as it is now, with
+ * its weather at the store's time, and records the weather it shows. An
+ * archived thread takes no message edits: "Users cannot edit messages, add
+ * reactions, use application commands, or join archived threads", and
+ * "Editing a thread to set `archived` to `false` only requires the current
+ * user has already been added to the thread", or for a locked one that the
+ * user created it (https://docs.discord.com/developers/topics/threads).
+ * So when Discord refuses the edit as archived, the bot, which created the
+ * thread, unarchives it, edits the message and archives it again, leaving
+ * it as it was. Archiving it again may be refused ("Otherwise, requires the
+ * `MANAGE_THREADS` permission", https://docs.discord.com/developers/resources/channel),
+ * which is logged: the edit stands. Throws Discord's error otherwise.
+ */
+export async function editThreadMessage(
+  round: RoundView,
+  guildId: string,
+  timeZone: string,
+  context: HandlerContext,
+): Promise<void> {
+  const threadId = round.threadId;
+  if (threadId === null) return;
+  const store = new PollStore(context.storage);
+  const weather = weatherTexts(round, timeZone, store.now())?.thread ?? null;
+  const api = discordApi(context.env);
+  const body = messageBody(
+    renderThreadMessage(
+      round,
+      guildId,
+      timeZone,
+      context.env.DISCORD_APPLICATION_ID,
+      weather,
+    ),
+  );
+  try {
+    // A forum thread's first message has the thread's id.
+    await api.editMessage(threadId, threadId, body);
+  } catch (error) {
+    if (!(error instanceof DiscordApiError && error.code === ARCHIVED_THREAD)) {
+      throw error;
+    }
+    await api.editThread(threadId, { archived: false });
+    try {
+      await api.editMessage(threadId, threadId, body);
+    } finally {
+      try {
+        await api.editThread(threadId, { archived: true });
+      } catch (error) {
+        // Archiving needs Manage Threads in some cases; the thread then
+        // archives itself again after its inactivity period.
+        console.error(
+          `archiving the thread of round ${String(round.id)} again failed: ${errorText(error)}`,
+        );
+      }
+    }
+  }
+  if (weather !== null) {
+    noteShown(context.storage, round.id, guildId, "thread", weather);
+  }
+}
+
+/**
  * After the map pin changed: edits the thread's first message, when the
  * thread exists, so it shows the new pin.
  */
 export const updateThreadPin: MapPinHook = {
   name: "update the hike thread",
   run: async ({ round, guildId, timeZone }, context) => {
-    if (round.threadId === null) return;
-    // A forum thread's first message has the thread's id.
-    await discordApi(context.env).editMessage(
-      round.threadId,
-      round.threadId,
-      messageBody(
-        renderThreadMessage(
-          round,
-          guildId,
-          timeZone,
-          context.env.DISCORD_APPLICATION_ID,
-        ),
-      ),
-    );
+    await editThreadMessage(round, guildId, timeZone, context);
   },
 };
 

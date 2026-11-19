@@ -8,6 +8,7 @@ import {
   cadenceDateVoteClose,
   cadenceWindow,
   clockIn,
+  dateTimeIn,
   defaultDateCandidates,
   hikeStart,
   nextCadenceInstant,
@@ -15,6 +16,7 @@ import {
   normalizeTimeZone,
   parseDateOption,
   previousCadenceInstant,
+  timeIn,
   todayIn,
   weekdayOf,
 } from "../../src/polls/dates";
@@ -139,6 +141,39 @@ describe("clockIn", () => {
     ["2026-11-18T19:42:00Z", "Asia/Kolkata", "Thu 01:12"],
   ])("at %s in %s is %s", (iso, zone, text) => {
     expect(clockIn(zone, Date.parse(iso))).toBe(text);
+  });
+});
+
+describe("timeIn and dateTimeIn", () => {
+  it.each([
+    [
+      "2026-11-18T19:42:00Z",
+      "America/Los_Angeles",
+      "11:42",
+      "Wed, 18 Nov 2026 · 11:42",
+    ],
+    [
+      "2026-11-19T08:00:00Z",
+      "America/Los_Angeles",
+      "00:00",
+      "Thu, 19 Nov 2026 · 00:00",
+    ],
+    [
+      "2026-11-18T19:42:00Z",
+      "Asia/Kolkata",
+      "01:12",
+      "Thu, 19 Nov 2026 · 01:12",
+    ],
+    // The second 01:30 of the night the clocks go back in Los Angeles.
+    [
+      "2026-11-01T09:30:00Z",
+      "America/Los_Angeles",
+      "01:30",
+      "Sun, 1 Nov 2026 · 01:30",
+    ],
+  ])("at %s in %s is %s, %s", (iso, zone, time, written) => {
+    expect(timeIn(zone, Date.parse(iso))).toBe(time);
+    expect(dateTimeIn(zone, Date.parse(iso))).toBe(written);
   });
 });
 

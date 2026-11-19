@@ -62,6 +62,7 @@ import {
   type PollWording,
 } from "./poll-ui";
 import { dateVoteRefusal, defaultDates, startDateVote } from "./round-actions";
+import { planWeatherStep } from "./weather";
 
 export const DATE_IDS = {
   start: POLL_CONTROL_IDS.startDateVote,
@@ -129,6 +130,7 @@ export const DATE_POLL: PollWording = {
     createHikeEventStep,
     showMapPictureStep,
     planHikeDayStep,
+    planWeatherStep,
   ],
 };
 

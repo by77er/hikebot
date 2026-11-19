@@ -414,6 +414,21 @@ export function cadenceDateCandidates(
   return days;
 }
 
+/** The clock time in `timeZone` at the instant `at`: `09:05`. */
+export function timeIn(timeZone: string, at: number): string {
+  const clock = wallClock(timeZone, at);
+  return `${String(clock.hour).padStart(2, "0")}:${String(clock.minute).padStart(2, "0")}`;
+}
+
+/**
+ * The date and time in `timeZone` at the instant `at`, written as dates
+ * are labelled: `Sat, 21 Nov 2026 · 14:05`.
+ */
+export function dateTimeIn(timeZone: string, at: number): string {
+  const label = parseDateOption(todayIn(timeZone, at))?.label ?? "";
+  return `${label.slice(0, label.lastIndexOf(" · "))} · ${timeIn(timeZone, at)}`;
+}
+
 /** The weekday and time in `timeZone` at the instant `now`: `Wed 11:42`. */
 export function clockIn(timeZone: string, now: number): string {
   const clock = wallClock(timeZone, now);

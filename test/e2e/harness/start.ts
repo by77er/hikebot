@@ -1,7 +1,8 @@
 /**
  * Starts the Worker under test in local workerd with Wrangler's
- * `createTestHarness`, next to a fake Discord API and a fake Nominatim
- * geocoder (`./fake-nominatim.ts`). Each start gets fresh
+ * `createTestHarness`, next to a fake Discord API, a fake Nominatim
+ * geocoder (`./fake-nominatim.ts`) and a fake Open-Meteo forecast API
+ * (`./fake-open-meteo.ts`). Each start gets fresh
  * in-memory Durable Object storage, a `MAPS` bucket holding the sample map
  * archive and its manifest (`./maps.ts`) unless `maps` is false, a newly
  * generated signing key pair, a
@@ -9,7 +10,8 @@
  * PUBLIC_URL set to an example origin, DISCORD_API_BASE and
  * DISCORD_OAUTH_AUTHORIZE_URL pointing at the fake Discord API, which
  * accepts `${PUBLIC_URL}/auth/callback` as the application's OAuth2 redirect
- * URI, and NOMINATIM_BASE at the fake geocoder.
+ * URI, NOMINATIM_BASE at the fake geocoder and OPEN_METEO_BASE at the fake
+ * forecast API.
  * These go in as the harness's `vars` and `secrets`, which override
  * whatever `.dev.vars`, `.env` files or the environment hold, so the Worker
  * runs the same in any checkout. `useE2E` in `./worker` starts one per test
@@ -29,6 +31,7 @@ import {
 } from "wrangler";
 import { FakeDiscord } from "./fake-discord";
 import { FakeNominatim } from "./fake-nominatim";
+import { FakeOpenMeteo } from "./fake-open-meteo";
 import { createSigner, InteractionClient, type Signer } from "./interactions";
 import { seedMaps, type MapsBucket } from "./maps";
 import {
@@ -60,6 +63,8 @@ export interface E2E {
   discord: FakeDiscord;
   /** The fake Nominatim the Worker looks place names up with. */
   geocoder: FakeNominatim;
+  /** The fake Open-Meteo the Worker gets hike forecasts from. */
+  weather: FakeOpenMeteo;
   signer: Signer;
   /** Sends signed interactions and checks the Worker's answers. */
   client: InteractionClient;
@@ -100,13 +105,15 @@ export interface E2EOptions {
 }
 
 /**
- * One run of the fake Discord API, the fake geocoder and the Worker. `close` stops whatever
- * `start` began, also when the start failed or is still under way.
+ * One run of the fake Discord API, the fake geocoder, the fake forecast API
+ * and the Worker. `close` stops whatever `start` began, also when the start
+ * failed or is still under way.
  */
 export class E2ERun {
   private harness?: TestHarness;
   private discord?: FakeDiscord;
   private geocoder?: FakeNominatim;
+  private weather?: FakeOpenMeteo;
   private probeDir?: string;
 
   async start(options: E2EOptions = {}): Promise<E2E> {
@@ -121,6 +128,9 @@ export class E2ERun {
     const geocoder = new FakeNominatim();
     this.geocoder = geocoder;
     await geocoder.listen();
+    const weather = new FakeOpenMeteo();
+    this.weather = weather;
+    await weather.listen();
     const signer = createSigner();
     const secrets = {
       DISCORD_PUBLIC_KEY: signer.publicKeyHex,
@@ -133,6 +143,7 @@ export class E2ERun {
       DISCORD_API_BASE: discord.apiBase,
       DISCORD_OAUTH_AUTHORIZE_URL: discord.authorizeUrl,
       NOMINATIM_BASE: geocoder.base,
+      OPEN_METEO_BASE: weather.base,
       PUBLIC_URL,
     };
     const root = options.root?.() ?? ROOT;
@@ -151,6 +162,7 @@ export class E2ERun {
       url,
       discord,
       geocoder,
+      weather,
       signer,
       harness,
       outbound: (after = 0) =>
@@ -166,10 +178,11 @@ export class E2ERun {
   }
 
   async close(): Promise<void> {
-    const { harness, discord, geocoder, probeDir } = this;
+    const { harness, discord, geocoder, weather, probeDir } = this;
     this.harness = undefined;
     this.discord = undefined;
     this.geocoder = undefined;
+    this.weather = undefined;
     this.probeDir = undefined;
     try {
       await harness?.close();
@@ -180,7 +193,11 @@ export class E2ERun {
         try {
           await geocoder?.close();
         } finally {
-          if (probeDir) await rm(probeDir, { recursive: true, force: true });
+          try {
+            await weather?.close();
+          } finally {
+            if (probeDir) await rm(probeDir, { recursive: true, force: true });
+          }
         }
       }
     }

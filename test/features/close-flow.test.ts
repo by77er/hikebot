@@ -34,6 +34,7 @@ import {
 import { DATE_POLL } from "../../src/features/date-vote";
 import { HIKE_DAY_JOB } from "../../src/features/hike-day";
 import { claimHikeThread } from "../../src/features/hike-thread-state";
+import { WEATHER_JOB } from "../../src/features/weather-state";
 import {
   CLOSE_FLOW_DELAY_MS,
   CLOSE_FLOW_JOB,
@@ -66,6 +67,7 @@ const THREAD_STEP = "create the hike thread";
 const EVENT_STEP = "create the hike event";
 const PICTURE_STEP = "show the map picture";
 const DAY_STEP = "plan the hike-day announcement";
+const WEATHER_STEP = "plan the forecast";
 
 /**
  * What is left scheduled once a close flow is done: the hike-day
@@ -73,6 +75,11 @@ const DAY_STEP = "plan the hike-day announcement";
  * nothing before then.
  */
 const ONLY_HIKE_DAY = new Map([[HIKE_DAY_JOB, Date.UTC(2030, 5, 15, 14)]]);
+/** After the close: the hike-day announcement and the first forecast run. */
+const HIKE_DAY_AND_WEATHER = new Map([
+  ...ONLY_HIKE_DAY,
+  [WEATHER_JOB, expect.any(Number) as number],
+]);
 
 let signer: Signer;
 beforeAll(async () => {
@@ -334,6 +341,7 @@ describe("closing a poll", () => {
           EVENT_STEP,
           PICTURE_STEP,
           DAY_STEP,
+          WEATHER_STEP,
           ANNOUNCE_PART,
         ].map((name) => ({ name, startedAt: null })),
         announce: [],
@@ -400,14 +408,19 @@ describe("the close-flow job", () => {
     // Nothing is left, so the job is not scheduled again.
     await inObject(guild, async (storage) => {
       expect(pendingClose(storage, view.id)).toBeNull();
-      expect(await scheduledJobs(storage)).toEqual(ONLY_HIKE_DAY);
+      expect(await scheduledJobs(storage)).toEqual(HIKE_DAY_AND_WEATHER);
       expect(announcementStatus(storage, view.id, Date.now())).toEqual({
         state: "posted",
         messageId: ANNOUNCEMENT,
       });
     });
+    // The forecast's first run: the hike has no map pin, and the thread
+    // and the event already say so.
     expect(await runDurableObjectAlarm(stub(guild))).toBe(true);
     expect(sent).toHaveLength(5);
+    expect(await inObject(guild, (storage) => scheduledJobs(storage))).toEqual(
+      ONLY_HIKE_DAY,
+    );
   });
 
   it("posts nothing after a follow-up that ran", async () => {
@@ -428,6 +441,8 @@ describe("the close-flow job", () => {
       "The date vote is closed: **Sat, 15 Jun 2030 · 11:00** won with 1 vote.",
     );
 
+    // The forecast's first run, then the close-flow job.
+    expect(await runDurableObjectAlarm(stub(guild))).toBe(true);
     expect(await runDurableObjectAlarm(stub(guild))).toBe(true);
     expect(routes(sent).filter((r) => r === ROUTES.announcement)).toHaveLength(
       1,
@@ -474,7 +489,7 @@ describe("the close-flow job", () => {
         { date: DATE_POLL },
       );
       expect(run.waiting).toBe(true);
-      expect(pendingClose(storage, view.id)?.parts).toHaveLength(6);
+      expect(pendingClose(storage, view.id)?.parts).toHaveLength(7);
     });
     // The job finds the part held, so it schedules itself again.
     expect(await runDurableObjectAlarm(stub(guild))).toBe(true);
@@ -487,7 +502,7 @@ describe("the close-flow job", () => {
     expect(await runDurableObjectAlarm(stub(guild))).toBe(true);
     await inObject(guild, async (storage) => {
       expect(pendingClose(storage, view.id)).toBeNull();
-      expect(await scheduledJobs(storage)).toEqual(ONLY_HIKE_DAY);
+      expect(await scheduledJobs(storage)).toEqual(HIKE_DAY_AND_WEATHER);
     });
   });
 
@@ -528,7 +543,7 @@ describe("the close-flow job", () => {
       POLL_CONTROL_IDS.createHikeThread(view.roundId),
     );
     expect(await inObject(guild, (storage) => scheduledJobs(storage))).toEqual(
-      ONLY_HIKE_DAY,
+      HIKE_DAY_AND_WEATHER,
     );
   });
 });

@@ -1,7 +1,7 @@
 /**
- * Starts the Worker under test, the fake Discord API and the fake geocoder
- * once per test file,
- * as `E2ERun` in `./start` describes.
+ * Starts the Worker under test, the fake Discord API, the fake geocoder and
+ * the fake forecast API once per test file, as `E2ERun` in `./start`
+ * describes.
  */
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { E2ERun, type E2E, type E2EOptions } from "./start";
@@ -17,11 +17,12 @@ export {
 } from "./start";
 
 /**
- * Registers hooks that start the Worker and the fake before the file's tests
+ * Registers hooks that start the Worker and the fakes before the file's tests
  * and stop them after them, also when a test fails. After each test it fails
- * the test if the fake Discord API or the fake geocoder refused a request
- * the test did not take with `discord.takeRejections()` or
- * `geocoder.takeRejections()`, and prints the Worker's logs if the test
+ * the test if the fake Discord API, the fake geocoder or the fake forecast
+ * API refused a request the test did not take with
+ * `discord.takeRejections()`, `geocoder.takeRejections()` or
+ * `weather.takeRejections()`, and prints the Worker's logs if the test
  * failed. Use the returned object inside tests only.
  */
 export function useE2E(options: E2EOptions = {}): E2E {
@@ -42,9 +43,11 @@ export function useE2E(options: E2EOptions = {}): E2E {
   afterEach(({ task }) => {
     if (!started) return;
     if (task.result?.state === "fail") started.harness.debug();
-    // Take both records before failing, so neither leaks into the next test.
+    // Take all three records before failing, so none leaks into the next
+    // test.
     const rejected = started.discord.takeRejections();
     const refused = started.geocoder.takeRejections();
+    const declined = started.weather.takeRejections();
     const failures: string[] = [];
     if (rejected.length > 0) {
       failures.push(
@@ -59,6 +62,16 @@ export function useE2E(options: E2EOptions = {}): E2E {
     if (refused.length > 0) {
       failures.push(
         `the fake Nominatim refused requests from the Worker:\n${refused
+          .map(
+            (r) =>
+              `${r.method} ${r.path} ${JSON.stringify(r.query)} (User-Agent ${JSON.stringify(r.userAgent)}) -> ${String(r.status)} ${JSON.stringify(r.response)}`,
+          )
+          .join("\n")}`,
+      );
+    }
+    if (declined.length > 0) {
+      failures.push(
+        `the fake Open-Meteo refused requests from the Worker:\n${declined
           .map(
             (r) =>
               `${r.method} ${r.path} ${JSON.stringify(r.query)} (User-Agent ${JSON.stringify(r.userAgent)}) -> ${String(r.status)} ${JSON.stringify(r.response)}`,
@@ -85,6 +98,9 @@ export function useE2E(options: E2EOptions = {}): E2E {
     },
     get geocoder() {
       return get().geocoder;
+    },
+    get weather() {
+      return get().weather;
     },
     get signer() {
       return get().signer;

@@ -37,6 +37,7 @@ export default defineConfig({
                 PUBLIC_URL: "https://hikebot.example",
                 // Never the real geocoder: tests answer for it with a fetch spy.
                 NOMINATIM_BASE: "https://nominatim.test",
+                OPEN_METEO_BASE: "https://open-meteo.test",
               },
             },
           }),

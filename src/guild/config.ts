@@ -1,4 +1,5 @@
 import { DEFAULT_TIMEZONE } from "../polls/dates";
+import { DEFAULT_UNITS, type Units } from "../weather/forecast";
 
 /**
  * The guild's settings, one row in the `guild_settings` table of its
@@ -30,6 +31,8 @@ export interface GuildSettings {
   homeArea: HomeArea | null;
   /** The weekly schedule the bot runs the rounds on by itself. */
   cadence: CadenceSettings;
+  /** The units forecasts are in: the ones an admin set, or `DEFAULT_UNITS`. */
+  units: Units;
 }
 
 /** The guild's home area and where the geocoder found it. */
@@ -101,6 +104,7 @@ interface Row extends Record<string, SqlStorageValue> {
   cadence_time: string;
   cadence_date_vote_days: number;
   cadence_on_since: number | null;
+  units: Units | null;
 }
 
 /**
@@ -126,7 +130,7 @@ export class GuildConfig {
            forum_channel_id, owner_id, owner_fetched_at, timezone,
            home_area, home_name, home_lat, home_lon,
            cadence_enabled, cadence_weekday, cadence_time,
-           cadence_date_vote_days, cadence_on_since
+           cadence_date_vote_days, cadence_on_since, units
          FROM guild_settings WHERE id = 1`,
       )
       .one();
@@ -154,6 +158,7 @@ export class GuildConfig {
         dateVoteDays: row.cadence_date_vote_days,
         onSince: row.cadence_on_since,
       },
+      units: row.units ?? DEFAULT_UNITS,
     };
   }
 
@@ -212,6 +217,15 @@ export class GuildConfig {
       cadence.time,
       cadence.dateVoteDays,
       cadence.onSince,
+    );
+    return this.get();
+  }
+
+  /** Sets the units forecasts are in. Returns the settings after the change. */
+  setUnits(units: Units): GuildSettings {
+    this.storage.sql.exec(
+      "UPDATE guild_settings SET units = ? WHERE id = 1",
+      units,
     );
     return this.get();
   }

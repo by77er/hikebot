@@ -81,6 +81,7 @@ const EMPTY: GuildSettings = {
   timezone: "America/Los_Angeles",
   homeArea: null,
   cadence: DEFAULT_CADENCE,
+  units: "imperial",
 };
 const COMPLETE: GuildSettings = {
   ...EMPTY,
@@ -1065,6 +1066,7 @@ function votingRound(poll: PollView): RoundView {
     eventId: null,
     mapPictureKey: null,
     dayOf: null,
+    forecast: null,
     startedBy: OWNER,
     startedAt: 0,
     endedBy: null,
@@ -1212,6 +1214,37 @@ describe("renderAdminSettings", () => {
       "**Schedule:** on · Saturdays at 09:00 (America/Los_Angeles) · date vote 2 days\n**Next:** Opens a location vote <t:1893862800:F> (<t:1893862800:R>).",
     );
     expectWithinLimits(view);
+  });
+
+  it("shows the units with a select defaulting to imperial, then to what an admin picked", () => {
+    const view = renderAdminSettings({ settings: COMPLETE, round: null });
+    expect(text(asNodes(view))).toContain(
+      "**Units:** imperial\nThe units of the hike's weather forecast.",
+    );
+    expect(find(asNodes(view), ADMIN_PANEL_IDS.units)).toMatchObject({
+      type: ComponentType.StringSelect,
+      options: [
+        {
+          label: "Imperial: °F, mph, inches, feet",
+          value: "imperial",
+          default: true,
+        },
+        {
+          label: "Metric: °C, km/h, millimetres, metres",
+          value: "metric",
+          default: false,
+        },
+      ],
+    });
+    expectWithinLimits(view);
+    const metric = renderAdminSettings({
+      settings: { ...COMPLETE, units: "metric" },
+      round: null,
+    });
+    expect(text(asNodes(metric))).toContain("**Units:** metric");
+    expect(find(asNodes(metric), ADMIN_PANEL_IDS.units)).toMatchObject({
+      options: [{ default: false }, { default: true }],
+    });
   });
 
   it("shows each current value as the select's default", () => {
@@ -1763,6 +1796,17 @@ describe("the admin panel", () => {
       [
         ADMIN_PANEL_IDS.homeArea,
         (g) => click(ADMIN_PANEL_IDS.homeArea, g, STRANGER),
+      ],
+      [
+        ADMIN_PANEL_IDS.units,
+        (g) => {
+          const pick = click(ADMIN_PANEL_IDS.units, g, STRANGER);
+          Object.assign(pick.data, {
+            component_type: ComponentType.StringSelect,
+            values: ["metric"],
+          });
+          return pick;
+        },
       ],
       [ADMIN_PANEL_IDS.role, (g) => pickRole(g, STRANGER, ROLE)],
       ...[

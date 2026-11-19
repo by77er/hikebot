@@ -157,7 +157,7 @@ describe("a whole hike round", () => {
       scheduled_start_time: "2030-06-15T09:00:00.000Z",
       scheduled_end_time: "2030-06-15T13:00:00.000Z",
       entity_metadata: { location: "Lake Loop" },
-      description: `Hike thread: https://discord.com/channels/${g.guildId}/${thread?.id ?? ""}`,
+      description: `Weather: No forecast: this hike has no map pin. An admin can set one from /hike admin.\n\nHike thread: https://discord.com/channels/${g.guildId}/${thread?.id ?? ""}`,
     });
     const eventLink = `https://discord.com/events/${g.guildId}/${event?.id ?? ""}`;
     expect(threadText).toContain(`**Hike event:** ${eventLink}`);

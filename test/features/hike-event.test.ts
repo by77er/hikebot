@@ -169,6 +169,7 @@ function hike(
     eventId: null,
     mapPictureKey: null,
     dayOf: null,
+    forecast: null,
     startedBy: OWNER,
     startedAt: 0,
     endedBy: OWNER,
@@ -177,6 +178,10 @@ function hike(
     datePoll: date,
   };
 }
+
+/** What the weather part says of a hike without a map pin. */
+const NO_PIN =
+  "No forecast: this hike has no map pin. An admin can set one from /hike admin.";
 
 /** 2026-11-18 12:00 UTC. */
 const NOW = Date.UTC(2026, 10, 18, 12);
@@ -200,7 +205,7 @@ describe("hikeEventRequest", () => {
       scheduled_end_time: "2030-06-15T20:00:00.000Z",
       entity_type: GuildScheduledEventEntityType.External,
       entity_metadata: { location: "Lake Loop" },
-      description: `Meet at the north lot.\n\nHike thread: https://discord.com/channels/${GUILD}/${THREAD}`,
+      description: `Meet at the north lot.\n\nWeather: ${NO_PIN}\n\nHike thread: https://discord.com/channels/${GUILD}/${THREAD}`,
     });
     expect(body).not.toHaveProperty("channel_id");
     expect(HIKE_DURATION_HOURS).toBe(4);
@@ -227,9 +232,9 @@ describe("hikeEventRequest", () => {
     );
   });
 
-  it("has no description without details or a thread", () => {
-    expect(request(hike("Ridge", "2030-06-15 09:00"))).not.toHaveProperty(
-      "description",
+  it("describes only the weather without details, a pin or a thread", () => {
+    expect(request(hike("Ridge", "2030-06-15 09:00")).description).toBe(
+      `Weather: ${NO_PIN}`,
     );
   });
 
@@ -257,7 +262,11 @@ describe("hikeEventRequest", () => {
     expect(body.name.endsWith("…")).toBe(true);
     expect(body.entity_metadata?.location).toHaveLength(MAX_EVENT_LOCATION);
     expect(body.description).toHaveLength(MAX_EVENT_DESCRIPTION);
-    expect(body.description?.endsWith(`…\n\nHike thread: ${link}`)).toBe(true);
+    expect(
+      body.description?.endsWith(
+        `…\n\nWeather: ${NO_PIN}\n\nHike thread: ${link}`,
+      ),
+    ).toBe(true);
   });
 
   it("asks for no event when the start is not after now", () => {
@@ -637,7 +646,7 @@ describe("closing the date vote", () => {
       scheduled_end_time: "2030-06-15T20:00:00.000Z",
       entity_type: 3,
       entity_metadata: { location: "Lake Loop" },
-      description: `Meet at the north lot.\n\nHike thread: https://discord.com/channels/${guild}/${THREAD}`,
+      description: `Meet at the north lot.\n\nWeather: ${NO_PIN}\n\nHike thread: https://discord.com/channels/${guild}/${THREAD}`,
     });
     expect(text(thread?.body.message?.components ?? [])).not.toContain(
       "Hike event",

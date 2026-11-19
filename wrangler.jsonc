@@ -67,6 +67,9 @@
     // OpenStreetMap's geocoder, which finds where proposed locations are.
     // Tests override this to point at a fake geocoder.
     "NOMINATIM_BASE": "https://nominatim.openstreetmap.org",
+    // Open-Meteo's forecast API, which the hike's weather comes from. Tests
+    // override this to point at a fake.
+    "OPEN_METEO_BASE": "https://api.open-meteo.com",
   },
   // The deploy workflow sets them from GitHub Actions secrets; locally they come
   // from .dev.vars.

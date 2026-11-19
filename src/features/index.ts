@@ -16,6 +16,7 @@ import { registerMapPicture, updateMapPicture } from "./map-picture";
 import { registerMapPin, type MapPinHook } from "./map-pin";
 import { registerPollUi } from "./poll-ui";
 import { pollWordings } from "./round-actions";
+import { refreshWeatherPin, registerWeather } from "./weather";
 
 /**
  * What runs after the decided location's map pin changes, in order. A
@@ -25,6 +26,7 @@ export const MAP_PIN_HOOKS: readonly MapPinHook[] = [
   updateThreadPin,
   updateEventPin,
   updateMapPicture,
+  refreshWeatherPin,
 ];
 
 /**
@@ -54,6 +56,7 @@ export function registerFeatures(router: Router): Router {
   registerMapPicture(router);
   router.job(LOCATE_JOB, locatePlaces);
   registerCadence(router);
+  registerWeather(router);
   return router;
 }
 

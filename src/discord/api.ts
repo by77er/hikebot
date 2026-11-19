@@ -8,8 +8,10 @@ import type {
   RESTGetAPIGuildChannelsResult,
   RESTGetAPIGuildMemberResult,
   RESTGetAPIGuildResult,
+  RESTPatchAPIChannelJSONBody,
   RESTPatchAPIChannelMessageJSONBody,
   RESTPatchAPIChannelMessageResult,
+  RESTPatchAPIChannelResult,
   RESTPatchAPIGuildScheduledEventJSONBody,
   RESTPatchAPIGuildScheduledEventResult,
   RESTPatchAPIWebhookWithTokenMessageJSONBody,
@@ -264,6 +266,25 @@ export class DiscordApi {
       path: `/channels/${channelId}/messages/${messageId}`,
       body: withFiles(withoutPings(body), files),
       files,
+      auth: true,
+    });
+  }
+
+  /**
+   * Edits a thread's settings, such as `archived`. Archived threads take no
+   * message edits ("Users cannot edit messages, add reactions, use
+   * application commands, or join archived threads.",
+   * https://docs.discord.com/developers/topics/threads),
+   * so an edit there unarchives the thread with `{ archived: false }` first.
+   */
+  editThread(
+    threadId: string,
+    body: RESTPatchAPIChannelJSONBody,
+  ): Promise<RESTPatchAPIChannelResult> {
+    return this.call({
+      method: "PATCH",
+      path: `/channels/${threadId}`,
+      body,
       auth: true,
     });
   }

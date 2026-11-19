@@ -62,6 +62,9 @@ import type {
   Router,
 } from "../guild/router";
 import { UNAVAILABLE_MESSAGE } from "../guild/router";
+import { schedule } from "../guild/schedule";
+import { UNITS, type Units } from "../weather/forecast";
+import { WEATHER_JOB } from "./weather-state";
 import {
   announcementStatus,
   type AnnouncementStatus,
@@ -142,6 +145,7 @@ export const ADMIN_PANEL_IDS = {
   cadenceDay: customId("admin", "cadence-day"),
   cadenceDays: customId("admin", "cadence-days"),
   cadenceTime: customId("admin", "cadence-time"),
+  units: customId("admin", "units"),
 } as const;
 
 /** The fields of the panel's modals, read back from their submissions. */
@@ -177,6 +181,12 @@ export const POLL_NAMES: Record<PollKind, string> = {
 };
 
 const NOT_SET = "not set";
+
+/** How the settings name each unit system. */
+const UNIT_NAMES: Record<Units, string> = {
+  imperial: "Imperial: °F, mph, inches, feet",
+  metric: "Metric: °C, km/h, millimetres, metres",
+};
 
 /** The channel settings, the channel types each accepts and their names. */
 const CHANNEL_SETTINGS = [
@@ -917,6 +927,20 @@ export function renderAdminSettings(
           style: ButtonStyle.Secondary,
         }),
       ),
+      textDisplay(
+        `**Units:** ${settings.units}\nThe units of the hike's weather forecast.`,
+      ),
+      actionRow(
+        stringSelect({
+          custom_id: ADMIN_PANEL_IDS.units,
+          placeholder: "Pick the units",
+          options: UNITS.map((units) => ({
+            label: UNIT_NAMES[units],
+            value: units,
+            default: units === settings.units,
+          })),
+        }),
+      ),
       separator(),
       ...scheduleSettings(state),
     ]),
@@ -1014,6 +1038,28 @@ function saveChannel(
     );
   });
 }
+
+/**
+ * Saves the units picked for the forecast and runs the weather job at
+ * once, so the forecast is fetched again in them.
+ */
+const saveUnits: ComponentHandler = adminOnly(async (interaction, context) => {
+  const picked =
+    interaction.data.component_type === ComponentType.StringSelect
+      ? interaction.data.values[0]
+      : undefined;
+  const units = UNITS.find((u) => u === picked);
+  if (units === undefined) {
+    return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
+  }
+  new GuildConfig(context.storage).setUnits(units);
+  await schedule(
+    context.storage,
+    WEATHER_JOB,
+    new PollStore(context.storage).now(),
+  );
+  return settingsUpdate(context, `Units set to ${units}.`);
+});
 
 /** The longest time zone name the modal takes. */
 const MAX_TIMEZONE_INPUT = 64;
@@ -1275,5 +1321,6 @@ export function registerAdminPanel(router: Router): Router {
   router.component(ADMIN_PANEL_IDS.cadenceDays, saveCadenceDays);
   router.component(ADMIN_PANEL_IDS.cadenceTime, openCadenceTimeModal);
   router.modal(ADMIN_PANEL_IDS.cadenceTime, saveCadenceTime);
+  router.component(ADMIN_PANEL_IDS.units, saveUnits);
   return router;
 }

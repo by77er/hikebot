@@ -41,6 +41,8 @@ const IMAGE_DATA = `${DOCS}/reference#image-data`;
 export const MAX_FILE_BYTES = 20 * 1024 * 1024;
 /** "The maximum request size when sending a message is **25 MiB**". */
 export const MAX_MESSAGE_REQUEST_BYTES = 25 * 1024 * 1024;
+const THREADS = `${DOCS}/topics/threads`;
+const MODIFY_CHANNEL = `${DOCS}/resources/channel#modify-channel`;
 
 /** A rule the fake enforces. `docs` is where the limit is stated. */
 export interface Rule {
@@ -346,6 +348,21 @@ export const RULES = {
    * a scheduled event's `image` is image data.
    */
   imageData: rule("image-data-uri", IMAGE_DATA),
+  /**
+   * "Users cannot edit messages, add reactions, use application commands,
+   * or join archived threads." Discord answers 400, code 50083: "Tried to
+   * perform an operation on an archived thread, such as editing a message
+   * or adding a user to the thread".
+   */
+  archivedThread: rule("archived-thread-no-message-edits", THREADS),
+  /**
+   * Modify Channel, for a thread: `archived`, a boolean, "whether the thread
+   * is archived", and `locked`, a boolean, "whether the thread is locked;
+   * when a thread is locked, only users with MANAGE_THREADS can unarchive
+   * it". "Returns a channel on success, and a 400 BAD REQUEST on invalid
+   * parameters."
+   */
+  threadEdit: rule("thread-edit-archived-locked-booleans", MODIFY_CHANNEL),
 } as const;
 
 export interface Violation {
@@ -1127,6 +1144,33 @@ export function validateUploadSize(
       rule: RULES.maxMessageRequestSize,
       path: "",
       detail: `the request is ${String(requestBytes)} bytes, max ${String(MAX_MESSAGE_REQUEST_BYTES)}`,
+    });
+  }
+  return violations;
+}
+
+/**
+ * Checks the body of Modify Channel for a thread: the fields the fake
+ * applies, `archived` and `locked`, are booleans when given, and at least
+ * one field is given.
+ */
+export function validateThreadEdit(body: unknown): Violation[] {
+  const o = isObject(body) ? body : {};
+  const violations: Violation[] = [];
+  for (const field of ["archived", "locked"]) {
+    if (o[field] !== undefined && typeof o[field] !== "boolean") {
+      violations.push({
+        rule: RULES.threadEdit,
+        path: field,
+        detail: `${field} must be a boolean`,
+      });
+    }
+  }
+  if (Object.keys(o).length === 0) {
+    violations.push({
+      rule: RULES.threadEdit,
+      path: "",
+      detail: "the body must change at least one field",
     });
   }
   return violations;

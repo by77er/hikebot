@@ -16,7 +16,7 @@ import {
   type RESTPostAPIGuildScheduledEventJSONBody,
 } from "discord-api-types/v10";
 import { DiscordApiError, discordApi, eventUrl } from "../discord/api";
-import { messageBody, parseCustomId } from "../discord/components";
+import { parseCustomId } from "../discord/components";
 import { adminOnly } from "../guild/permissions";
 import type { ComponentHandler, HandlerContext, Router } from "../guild/router";
 import type { Point } from "../geo/coordinates";
@@ -30,7 +30,7 @@ import {
   recordHikeEventFailure,
   roundStart,
 } from "./hike-event-state";
-import { renderThreadMessage } from "./hike-thread";
+import { editThreadMessage } from "./hike-thread";
 import type { MapPinHook } from "./map-pin";
 import {
   actorOf,
@@ -41,6 +41,7 @@ import {
   type CloseStep,
 } from "./poll-ui";
 import { retryHikeEvent } from "./round-actions";
+import { noteShown, weatherTexts } from "./weather-state";
 
 /** Discord's limits on a scheduled event's name, description and location. */
 export const MAX_EVENT_NAME = 100;
@@ -86,18 +87,21 @@ function placeText({ point, name }: EventPlace): string {
 
 /**
  * The event's description: the location's details, where it is on the map
- * when it has a pin, then the link to the hike thread when there is one,
- * within Discord's 1000 characters; the details are shortened, the map
- * links and the thread link kept whole. Empty when there is none of them.
+ * when it has a pin, the compact `weather` (`weatherTexts`) when there is
+ * one, then the link to the hike thread when there is one, within
+ * Discord's 1000 characters; the details are shortened, the map links,
+ * the weather and the thread link kept whole. Empty when there is none of
+ * them.
  */
 export function eventDescription(
   details: string | null,
   threadLink: string | null,
   place: EventPlace | null = null,
+  weather: string | null = null,
 ): string {
   const link = threadLink === null ? "" : `Hike thread: ${threadLink}`;
   const where = place === null ? "" : placeText(place);
-  const kept = [where, link].filter((part) => part !== "");
+  const kept = [where, weather ?? "", link].filter((part) => part !== "");
   const room =
     MAX_EVENT_DESCRIPTION -
     kept.reduce((sum, part) => sum + part.length + 2, 0);
@@ -106,10 +110,14 @@ export function eventDescription(
     .join("\n\n");
 }
 
-/** The description of `round`'s event, from its decided location. */
+/**
+ * The description of `round`'s event, from its decided location and its
+ * `weather`.
+ */
 export function hikeEventDescription(
   round: RoundView,
   guildId: string,
+  weather: string | null = null,
 ): string {
   const location = round.locationPoll?.options.find(
     (option) => option.id === round.locationOptionId,
@@ -121,6 +129,7 @@ export function hikeEventDescription(
       ? null
       : `https://discord.com/channels/${guildId}/${round.threadId}`,
     place?.point ? { point: place.point, name: place.name } : null,
+    weather,
   );
 }
 
@@ -128,8 +137,9 @@ export function hikeEventDescription(
  * The EXTERNAL scheduled event for `round`: named and located at the
  * decided location, starting at the winning date in `timeZone` and ending
  * `HIKE_DURATION_HOURS` later, described by the location's details, its
- * map links and the thread's link. None when the start is not after `now`, or when the round
- * has no decided location and date.
+ * map links, its weather at `now` and the thread's link. None when the
+ * start is not after `now`, or when the round has no decided location and
+ * date.
  */
 export function hikeEventRequest(
   round: RoundView,
@@ -145,7 +155,11 @@ export function hikeEventRequest(
     return { ok: false, why: "undecided" };
   }
   if (start <= now) return { ok: false, why: "past" };
-  const description = hikeEventDescription(round, guildId);
+  const description = hikeEventDescription(
+    round,
+    guildId,
+    weatherTexts(round, timeZone, now)?.event ?? null,
+  );
   return {
     ok: true,
     body: {
@@ -190,21 +204,8 @@ async function linkEventInThread(
   timeZone: string,
   context: HandlerContext,
 ): Promise<void> {
-  if (round.threadId === null) return;
   try {
-    // A forum thread's first message has the thread's id.
-    await discordApi(context.env).editMessage(
-      round.threadId,
-      round.threadId,
-      messageBody(
-        renderThreadMessage(
-          round,
-          guildId,
-          timeZone,
-          context.env.DISCORD_APPLICATION_ID,
-        ),
-      ),
-    );
+    await editThreadMessage(round, guildId, timeZone, context);
   } catch (error) {
     console.error(
       `linking the event in the thread of round ${String(round.id)} failed: ${errorText(error)}`,
@@ -226,8 +227,8 @@ export async function createHikeEvent(
 ): Promise<Created> {
   const store = new PollStore(context.storage);
   const round = store.getRound(roundId);
-  const request =
-    round && hikeEventRequest(round, guildId, timeZone, store.now());
+  const now = store.now();
+  const request = round && hikeEventRequest(round, guildId, timeZone, now);
   if (round === null || request === null || !request.ok) {
     if (request?.ok === false && request.why === "past") {
       // The start passed since the claim; the panel says so by itself.
@@ -254,6 +255,10 @@ export async function createHikeEvent(
   }
   store.setRoundEvent(roundId, eventId);
   clearHikeEventAttempt(context.storage, roundId);
+  const weather = weatherTexts(round, timeZone, now)?.event;
+  if (weather !== undefined) {
+    noteShown(context.storage, roundId, guildId, "event", weather);
+  }
   await linkEventInThread({ ...round, eventId }, guildId, timeZone, context);
   return { ok: true, eventId };
 }
@@ -303,19 +308,38 @@ const createAgain: ComponentHandler = adminOnly(
 );
 
 /**
+ * Edits the event's description so it shows `round` as it is now, with its
+ * weather at the store's time, and records the weather it shows. Throws
+ * Discord's error.
+ */
+export async function editEventDescription(
+  round: RoundView,
+  guildId: string,
+  timeZone: string,
+  context: HandlerContext,
+): Promise<void> {
+  if (round.eventId === null) return;
+  const store = new PollStore(context.storage);
+  const weather = weatherTexts(round, timeZone, store.now())?.event ?? null;
+  const description = hikeEventDescription(round, guildId, weather);
+  await discordApi(context.env).editGuildScheduledEvent(
+    guildId,
+    round.eventId,
+    { description: description === "" ? null : description },
+  );
+  if (weather !== null) {
+    noteShown(context.storage, round.id, guildId, "event", weather);
+  }
+}
+
+/**
  * After the map pin changed: edits the event's description, when the event
  * exists, so it shows the new pin.
  */
 export const updateEventPin: MapPinHook = {
   name: "update the hike event",
-  run: async ({ round, guildId }, context) => {
-    if (round.eventId === null) return;
-    const description = hikeEventDescription(round, guildId);
-    await discordApi(context.env).editGuildScheduledEvent(
-      guildId,
-      round.eventId,
-      { description: description === "" ? null : description },
-    );
+  run: async ({ round, guildId, timeZone }, context) => {
+    await editEventDescription(round, guildId, timeZone, context);
   },
 };
 
