@@ -376,7 +376,7 @@ in `docs/design-system.md` says what the component shows, and
    in `src/guild/AGENTS.md` says, as `plannedHike.point` and the location
    options' `point` were added.
 2. Render `MapView` from `src/web/components/map-view.tsx`, with no map
-   when there is no place. One marker is a pin, centred at zoom 12; give
+   when there is no place. One marker is a pin, centred at zoom 13; give
    several markers `number`s, which the map and its list under it show.
    Pass the stored picture's address as `picture` when there is one, so
    the page shows it without JavaScript; a picture of a server's hike is

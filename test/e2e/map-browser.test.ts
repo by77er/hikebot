@@ -218,7 +218,8 @@ it("zooms from the keyboard, with a visible focus, and from its buttons", async 
       ),
     );
   const before = await zoom();
-  expect(before).toBe(12);
+  // PLACE_ZOOM in src/web/components/map-view.tsx.
+  expect(before).toBe(13);
 
   // Tab to the planned hike's map, as a keyboard user would.
   for (let i = 0; i < 60; i++) {
