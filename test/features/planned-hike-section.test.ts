@@ -76,7 +76,21 @@ describe("the web view's planned hike", () => {
       eventId: EVENT,
       eventUrl: `https://discord.com/events/${guildId}/${EVENT}`,
       mapPictureKey: "pictures/ridge.png",
+      point: null,
     });
+  });
+
+  it("gives the pin of the hike's location, where its map centres", async () => {
+    const { view } = await viewAfter((store) => {
+      const round = completeRound(store, "Ridge", "2030-06-15");
+      const option = store.getRound(round)?.locationPoll?.options[0];
+      store.recordPlaceLookup(option?.id ?? 0, {
+        kind: "found",
+        point: { lat: 47.4881, lon: -121.7232 },
+        name: "Mount Si",
+      });
+    });
+    expect(view.plannedHike?.point).toEqual({ lat: 47.4881, lon: -121.7232 });
   });
 
   it("has no links while the hike has no thread or event", async () => {
@@ -90,6 +104,7 @@ describe("the web view's planned hike", () => {
       eventId: null,
       eventUrl: null,
       mapPictureKey: null,
+      point: null,
     });
   });
 

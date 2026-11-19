@@ -52,7 +52,7 @@ export interface Scene {
   fonts: SceneFonts;
 }
 
-type FillRole =
+export type FillRole =
   | "settled"
   | "grass"
   | "forest"
@@ -75,7 +75,7 @@ type LineRole =
   | "track";
 
 /** Fills in drawing order, bottom first. */
-const FILL_ORDER: FillRole[] = [
+export const FILL_ORDER: FillRole[] = [
   "settled",
   "grass",
   "forest",
@@ -95,7 +95,8 @@ const CASINGS: Record<(typeof ROADS)[number], ColourRole> = {
   roadMotorway: "roadMotorwayCasing",
 };
 
-const LANDUSE_FILLS: Record<string, FillRole> = {
+/** The fill of each `kind` of the `landuse` and `landcover` layers. */
+export const LANDUSE_FILLS: Record<string, FillRole> = {
   forest: "forest",
   wood: "forest",
   grass: "grass",
@@ -135,8 +136,10 @@ const LANDUSE_FILLS: Record<string, FillRole> = {
   urban_area: "settled",
 };
 
-const PATH_DETAILS = new Set(["path", "bridleway", "cycleway"]);
-const FOOTWAY_DETAILS = new Set(["footway", "steps"]);
+/** Paths (`kind` `path`) drawn as trails from their first zoom. */
+export const PATH_DETAILS = new Set(["path", "bridleway", "cycleway"]);
+/** Paths drawn as trails only from `MIN_ZOOM.footway`. */
+export const FOOTWAY_DETAILS = new Set(["footway", "steps"]);
 
 interface Paths {
   fills: Map<FillRole, string[]>;

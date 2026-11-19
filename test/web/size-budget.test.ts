@@ -6,7 +6,7 @@ import { STYLESHEET_PATHS } from "./design-files";
 /** The budgets "Size budget" in docs/design-system.md states, in bytes. */
 const BUDGET = {
   font: 32 * 1024,
-  stylesheetsGzip: 24 * 1024,
+  stylesheetsGzip: 26 * 1024,
   contours: 12 * 1024,
   /** Everything a page loads from the design system, as transferred. */
   total: 64 * 1024,
@@ -38,7 +38,7 @@ describe("the size budget", () => {
     );
   });
 
-  it("keeps every stylesheet together within 24 KB gzipped, and a page within 64 KB", async () => {
+  it("keeps every stylesheet together within 26 KB gzipped, and a page within 64 KB", async () => {
     const files = STYLESHEET_PATHS.map((path) =>
       path.replace(/^public\/assets\//, ""),
     );

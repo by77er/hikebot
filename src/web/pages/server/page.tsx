@@ -15,6 +15,7 @@ import { CurrentStep } from "./current-step";
 import { LogPreview } from "./log-preview";
 import { PlannedHike } from "./planned-hike";
 import { ServerHeading } from "./server-heading";
+import { VoteMap } from "./vote-map";
 
 export function ServerPage({
   user,
@@ -32,6 +33,7 @@ export function ServerPage({
         <ServerHeading view={view} />
         <AdminNoticeBanner view={view} notice={notice} csrf={user.csrf} />
         <CurrentStep view={view} />
+        <VoteMap view={view} />
         <AdminControls view={view} notice={notice} csrf={user.csrf} />
         <PlannedHike view={view} />
         <LogPreview view={view} />

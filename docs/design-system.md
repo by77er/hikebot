@@ -653,6 +653,31 @@ its styles in `public/assets/cairn/components/`, its unit test in
   with Discord** only: its shape is Discord's own, as published in the
   `simple-icons` package (16.38.0, CC0; the mark itself is Discord's
   trademark, used as its brand guidelines say, see Discord sign-in).
+- **Map view** (`map-view.tsx`, `/styleguide/map-view`): a map of one
+  place or a few, drawn in the browser from hikebot's own vector tiles by
+  MapLibre GL JS, in the Cairn map style ("In the browser" under "Cairn
+  map"). One marker is the hike's **pin**, the blaze on a pointer with the
+  place's name in a popup over it, and the map is centred on it at zoom
+  13 (the picture is zoom 12 drawn from zoom 13 tiles, which hold the
+  trails; the browser draws a zoom from its own tiles); several markers are **numbered** circles (the
+  map's label colour, a white ring and a dark keyline), the map fitted to
+  them, with their **list** under it: the same number, the name and the
+  coordinates. The frame is 3:2, the picture's shape. The library is
+  **MapLibre GL JS 6.19.0**, from the `maplibre-gl` npm package, under the
+  **BSD 3-Clause licence**, copied unchanged into
+  `public/assets/maps/maplibre/` with its `LICENSE.txt`. Without JavaScript
+  it shows the stored map picture in it, or, with none, the line "Turn on
+  JavaScript to see the map."; the map replaces either once it has drawn,
+  so nothing moves. The **zoom buttons** (Zoom in, Zoom out, 44px, top
+  right) appear with the map; the **attribution** is always shown, bottom
+  left. The map is focusable (its accessible name is the `title`, such as
+  "Map of Mount Si"): the arrow keys pan it and `+` and `-` zoom it, with
+  the focus ring inside its frame. Under `prefers-reduced-motion` nothing
+  is animated. The `caption` (the place and its coordinates) and the list
+  are its text alternative. `framed={false}` inside something that frames
+  it already, such as the hike card's picture slot. Inside the frame
+  everything keeps the map's one look, in both schemes: markers, popups,
+  buttons and the attribution use the `--map-*` tokens.
 - **Pagination** (`pagination.tsx`, `/styleguide/pagination`): the way
   through a list that comes in pages, newest first, such as the hike log.
   - _Anatomy:_ a `nav` named by its `label` ("Hike log pages"), with
@@ -1076,6 +1101,35 @@ wide. The style is tuned at zooms 11, 12 and 14 on the samples for that:
    protected areas at 8 per cent with a dashed edge, railways, the scale bar
    and the attribution) stays quiet.
 
+### In the browser
+
+The map on the web pages (the map view component) is drawn by MapLibre GL
+JS from the same vector tiles, with a style made from the same data:
+`browserStyle` in `src/maps/browser-style.ts` reads the roles, opacities,
+widths, dashes, first zooms, label sizes and priorities of
+`src/maps/style.ts`, and the same reading of the tiles as the picture
+(`src/maps/svg.ts`), so a change to the style changes both, and
+`test/maps/browser-style.test.ts` fails if the browser's style holds a
+colour that is not a role's. What differs, because the browser draws it:
+
+- **Labels** are set in the page's own Public Sans (the web font Cairn
+  already loads), so nothing more is downloaded for text: regular, semibold
+  for peaks and villages, and water names slanted by the browser, as the
+  web font has no italic. A character Public Sans lacks comes from the
+  browser's sans-serif.
+- **Peaks' triangles** are drawn by the page's script, in the `peak` and
+  `labelHalo` colours the style passes it.
+- **The pin and markers** are page elements over the map (see "Map view").
+- **No scale bar**: the map can be zoomed; the attribution is shown.
+
+**Dark scheme.** The map has no dark variant, as the picture has none: it
+keeps its light, paper look on a dark page, inside a frame
+(`--color-border`) that sets it off, and the furniture over it (markers,
+popups, zoom buttons, attribution) uses the `--map-*` tokens, so it does
+not change with the scheme either. A dark map would be a second style to
+keep in step with the picture for little gain: the paper reads well on the
+dark page, and members compare the web map with the picture in Discord.
+
 ### Do and don't
 
 - **Do** add a colour as a role: a recipe in `RECIPES`, its `--map-*` token
@@ -1098,21 +1152,29 @@ wide. The style is tuned at zooms 11, 12 and 14 on the samples for that:
 
 `test/web/size-budget.test.ts` fails when an asset outgrows its budget:
 
-| What                                            | Budget | Now           |
-| ----------------------------------------------- | ------ | ------------- |
-| The font file                                   | 32 KB  | 27 KB         |
-| All stylesheets, each gzipped, together         | 24 KB  | about 22.5 KB |
-| The contour pattern                             | 12 KB  | 9 KB          |
-| Everything a page loads from Cairn, transferred | 64 KB  | about 53 KB   |
+| What                                            | Budget | Now         |
+| ----------------------------------------------- | ------ | ----------- |
+| The font file                                   | 32 KB  | 27 KB       |
+| All stylesheets, each gzipped, together         | 26 KB  | about 25 KB |
+| The contour pattern                             | 12 KB  | 9 KB        |
+| Everything a page loads from Cairn, transferred | 64 KB  | about 56 KB |
 
-The stylesheets' budget is 24 KB rather than 20 KB, for two reasons.
+The stylesheets' budget is 26 KB rather than 20 KB, for three reasons.
 Each file is compressed on its own, and one file per component means 33
 small files whose shared vocabulary (`var(--space-`, `border-radius`) is
 compressed again in each: joined into one file, the same rules are about
-13.5 KB gzipped. And the cost a member pays is the whole page's, which
-stays within its 64 KB, with every file cached for a year. Raise it again
+13.5 KB gzipped. The cost a member pays is the whole page's, which
+stays within its 64 KB, with every file cached for a year. And the map
+view's file, about 1.8 KB gzipped, lays out and styles MapLibre's own
+markup, in place of MapLibre's stylesheet (72 KB, about 10 KB gzipped,
+with colours of its own) that pages would otherwise load. Raise it again
 only with the same kind of reason, and first look for rules components can
 share.
+
+The interactive map's files are outside this budget, as they are not
+Cairn's: MapLibre GL JS and its worker (about 450 KB gzipped together) and
+the map's own script load only on a page with a map, under the versioned
+path, so a browser fetches them once a deploy.
 
 ## Designing a new page
 

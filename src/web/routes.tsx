@@ -7,7 +7,8 @@
  * same files cacheable for a year (see `src/web/assets.ts`).
  * `/maps/sample.png` is the map picture of the sample point in
  * `maps/regions.json`, which the deploy's smoke check fetches to prove the
- * map pictures work in production.
+ * map pictures work in production. `/tiles/*` and `/maps/style.json` are
+ * the interactive map's tiles and style (see `src/web/maps.ts`).
  */
 import regions from "../../maps/regions.json";
 import { systemNow } from "../clock";
@@ -17,6 +18,7 @@ import { addSignInRoutes } from "./auth/routes";
 import { readSession } from "./auth/session";
 import { calendarRoute } from "./calendar";
 import { inviteUrl } from "./invite";
+import { styleRoute, tileRoute } from "./maps";
 import { MethodNotAllowedPage, NotFoundPage } from "./pages/errors";
 import { HomePage } from "./pages/home";
 import {
@@ -95,6 +97,8 @@ export const webRouter = new WebRouter({
       },
     });
   })
+  .get("/tiles/*", tileRoute)
+  .get("/maps/style.json", styleRoute)
   .get(
     "/healthz",
     () =>

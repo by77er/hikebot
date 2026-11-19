@@ -6,6 +6,7 @@
  */
 import type { WebView } from "../../../guild/web-view";
 import { HikeCard } from "../../components/hike-card";
+import { hikeMap } from "./hike-map";
 
 export function PlannedHike({ view }: { view: WebView }) {
   const hike = view.plannedHike;
@@ -19,6 +20,7 @@ export function PlannedHike({ view }: { view: WebView }) {
         start={hike.start}
         when="upcoming"
         links={{ thread: hike.threadUrl, event: hike.eventUrl }}
+        picture={hikeMap(view)}
         headingLevel={3}
       />
     </section>
