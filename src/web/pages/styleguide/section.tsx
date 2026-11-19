@@ -16,6 +16,11 @@ export interface StyleguideSection {
   id: string;
   title: string;
   render: (props: SectionProps) => preact.JSX.Element;
+  /**
+   * Shown on a page of its own at `/styleguide/<id>` rather than on the
+   * style guide, for a section too tall for the style guide's screenshot.
+   */
+  ownPage?: boolean;
 }
 
 export function Section({

@@ -1,0 +1,50 @@
+/*
+ * Empty state: a quiet panel on the contour-line pattern, drawn the same
+ * way as behind the page header (the contour colour at the contour
+ * opacity, through the pattern as a mask), so its text stays on the plain
+ * page colour plus a tint the contrast test accounts for.
+ */
+
+.empty-state {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-7) var(--space-5);
+  border: var(--border-width) dashed var(--color-border-strong);
+  border-radius: var(--radius-card);
+  background: var(--color-bg);
+  text-align: center;
+  isolation: isolate;
+}
+
+.empty-state::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--color-contour);
+  opacity: var(--contour-opacity);
+  -webkit-mask: url("../contours.svg") center / cover no-repeat;
+  mask: url("../contours.svg") center / cover no-repeat;
+  pointer-events: none;
+}
+
+.empty-state__title {
+  font-size: var(--font-size-h3);
+  line-height: var(--line-height-h3);
+}
+
+.empty-state__text {
+  color: var(--color-text-muted);
+}
+
+.empty-state__action {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-block-start: var(--space-2);
+}

@@ -13,11 +13,18 @@ import { buttonSection } from "./styleguide/button";
 import { cardSection } from "./styleguide/card";
 import { colourSection } from "./styleguide/colour";
 import { contrastSection } from "./styleguide/contrast";
+import { emptyStateSection } from "./styleguide/empty-state";
+import { hikeCardSection } from "./styleguide/hike-card";
 import { iconsSection } from "./styleguide/icons";
 import { layoutMotionSection } from "./styleguide/layout-motion";
+import { roundStepperSection } from "./styleguide/round-stepper";
 import type { StyleguideSection } from "./styleguide/section";
 import { shapeSection } from "./styleguide/shape";
 import { spaceSection } from "./styleguide/space";
+import { statusPillSection } from "./styleguide/status-pill";
+import { tallyListSection } from "./styleguide/tally-list";
+import { tallyRowSection } from "./styleguide/tally-row";
+import { tallyVoteSection } from "./styleguide/tally-vote";
 import { typographySection } from "./styleguide/typography";
 
 /** The tokens, in the order docs/design-system.md gives them. */
@@ -36,11 +43,30 @@ const COMPONENTS: StyleguideSection[] = [
   blazeSection,
   buttonSection,
   cardSection,
+  emptyStateSection,
+  hikeCardSection,
   iconsSection,
+  roundStepperSection,
+  statusPillSection,
+  tallyListSection,
+  tallyRowSection,
+  tallyVoteSection,
 ];
 
-/** Every section, in the order the page shows them. */
+/** Every section, in the order the index lists them. */
 export const STYLEGUIDE_SECTIONS = [...FOUNDATIONS, ...COMPONENTS];
+
+/** Where a section is shown: on the style guide, or on a page of its own. */
+export function sectionHref({ id, ownPage }: StyleguideSection): string {
+  return ownPage ? `/styleguide/${id}` : `#${id}`;
+}
+
+/** The section shown on its own at `/styleguide/<id>`, if there is one. */
+export function ownPageSection(id: string): StyleguideSection | undefined {
+  return STYLEGUIDE_SECTIONS.find(
+    (section) => section.ownPage && section.id === id,
+  );
+}
 
 function Index({
   title,
@@ -53,9 +79,9 @@ function Index({
     <div class="stack stack--tight">
       <h3>{title}</h3>
       <ol>
-        {sections.map(({ id, title: name }) => (
-          <li key={id}>
-            <a href={`#${id}`}>{name}</a>
+        {sections.map((section) => (
+          <li key={section.id}>
+            <a href={sectionHref(section)}>{section.title}</a>
           </li>
         ))}
       </ol>
@@ -76,13 +102,40 @@ export function StyleguidePage({ tokens }: { tokens: SchemeTokens }) {
           </p>
         </div>
         <nav class="styleguide-index stack" aria-label="Style guide">
-          <h2>On this page</h2>
+          <h2>Contents</h2>
           <Index title="Foundations" sections={FOUNDATIONS} />
           <Index title="Components" sections={COMPONENTS} />
         </nav>
-        {STYLEGUIDE_SECTIONS.map(({ id, render: Render }) => (
-          <Render key={id} tokens={tokens} />
-        ))}
+        {STYLEGUIDE_SECTIONS.filter(({ ownPage }) => !ownPage).map(
+          ({ id, render: Render }) => (
+            <Render key={id} tokens={tokens} />
+          ),
+        )}
+      </div>
+    </Layout>
+  );
+}
+
+/** A section too tall for the style guide, on its own page. */
+export function StyleguideSectionPage({
+  section,
+  tokens,
+}: {
+  section: StyleguideSection;
+  tokens: SchemeTokens;
+}) {
+  const { title, render: Render } = section;
+  return (
+    <Layout title={`${title} · Style guide · hikebot`} width="overview">
+      <div class="stack stack--section">
+        <div class="page-heading">
+          <p class="page-heading__eyebrow">Cairn design system</p>
+          <h1>Style guide</h1>
+          <p class="page-heading__lead">
+            {title}, on a page of its own, in every state.
+          </p>
+        </div>
+        <Render tokens={tokens} />
       </div>
     </Layout>
   );

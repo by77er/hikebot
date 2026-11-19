@@ -17,6 +17,11 @@ const IMMUTABLE = "public, max-age=31536000, immutable";
 
 const PAGES = [
   { path: "/styleguide", status: 200, title: "Style guide · hikebot" },
+  {
+    path: "/styleguide/tally-vote",
+    status: 200,
+    title: "Tally vote · Style guide · hikebot",
+  },
   { path: "/", status: 200, title: "hikebot" },
   { path: "/no-such-page", status: 404, title: "Page not found · hikebot" },
 ];
@@ -139,5 +144,56 @@ describe("the design system's files", () => {
     );
     const [stylesheet = ""] = stylesheetLinks(page.body);
     expect(await stylesheetFiles(client, stylesheet)).toContain(preload);
+  });
+});
+
+describe("the style guide's hike components", () => {
+  const COMPONENTS = [
+    ["empty-state", "Empty state", '<section class="empty-state"'],
+    ["hike-card", "Hike card", '<article class="hike-card hike-card--full'],
+    ["round-stepper", "Round stepper", 'aria-current="step"'],
+    ["status-pill", "Status pill", "status-pill--cancelled"],
+    ["tally-list", "Tally list", '<ol class="tally-list__rows"'],
+    ["tally-row", "Tally row", '<p class="tally-row__tie">'],
+    ["tally-vote", "Tally vote", '<form class="tally-vote" method="post"'],
+  ];
+
+  it("lists every hike component, each linking to its own page", async () => {
+    const page = await new PageClient(e2e.url).get("/styleguide");
+    for (const [id = "", title = ""] of COMPONENTS) {
+      expect(page.body).toContain(`<a href="/styleguide/${id}">${title}</a>`);
+    }
+  });
+
+  it.each(COMPONENTS)(
+    "shows %s in its states on /styleguide/%s",
+    async (id, title, marker) => {
+      const page = await new PageClient(e2e.url).get(`/styleguide/${id}`);
+      expect(page.status).toBe(200);
+      expect(page.body).toContain(
+        `<title>${title} · Style guide · hikebot</title>`,
+      );
+      expect(page.body).toContain(
+        `<section class="styleguide-section" id="${id}"`,
+      );
+      expect(page.body).toContain(marker);
+    },
+  );
+
+  it("shows the 25-option votable tally as a form that posts without JavaScript", async () => {
+    const page = await new PageClient(e2e.url).get("/styleguide/tally-vote");
+    const forms = page.body.split('<form class="tally-vote"').slice(1);
+    const longest =
+      forms
+        .map((form) => form.slice(0, form.indexOf("</form>")))
+        .sort((a, b) => b.length - a.length)[0] ?? "";
+    expect(longest.match(/type="checkbox"/g)).toHaveLength(25);
+    expect(longest).toContain('type="submit"');
+    expect(page.body).not.toMatch(/<script/);
+  });
+
+  it("answers 404 for a section without a page of its own", async () => {
+    const page = await new PageClient(e2e.url).get("/styleguide/colour");
+    expect(page.status).toBe(404);
   });
 });

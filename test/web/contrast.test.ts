@@ -81,3 +81,56 @@ describe("the tokens in tokens.css", () => {
     ).toContain("light color-text-muted");
   });
 });
+
+/** `top` drawn at `opacity` over `bottom`, both `#rrggbb`. */
+function blend(top: string, bottom: string, opacity: number): string {
+  const channels = [0, 1, 2].map((index) => {
+    const at = 1 + index * 2;
+    const a = parseInt(top.slice(at, at + 2), 16);
+    const b = parseInt(bottom.slice(at, at + 2), 16);
+    return Math.round(a * opacity + b * (1 - opacity))
+      .toString(16)
+      .padStart(2, "0");
+  });
+  return `#${channels.join("")}`;
+}
+
+describe("the empty state on the contour pattern", () => {
+  let tokens: ReturnType<typeof parseTokens>;
+  beforeAll(async () => {
+    tokens = parseTokens(await publicText(TOKENS_FILE));
+  });
+
+  it.each(["light", "dark"] as const)(
+    "keeps its text, the focus ring and the button boundary within the minimums where a line crosses it, in the %s scheme",
+    (scheme) => {
+      const values = tokens[scheme];
+      const opacity = Number(values["contour-opacity"]);
+      expect(opacity).toBeGreaterThan(0);
+      const line = blend(
+        values["color-contour"] ?? "",
+        values["color-bg"] ?? "",
+        opacity,
+      );
+      const checks: [string, number][] = [
+        ["color-text", 4.5],
+        ["color-text-muted", 4.5],
+        ["color-border-strong", 3],
+        ["color-focus", 3],
+        ["color-primary", 3],
+      ];
+      const failures = checks
+        .map(([token, minimum]) => ({
+          token,
+          minimum,
+          ratio: contrastRatio(values[token] ?? "", line),
+        }))
+        .filter(({ ratio, minimum }) => ratio < minimum)
+        .map(
+          ({ token, ratio, minimum }) =>
+            `${token} on a contour line is ${ratio.toFixed(2)}:1, below ${String(minimum)}:1`,
+        );
+      expect(failures).toEqual([]);
+    },
+  );
+});

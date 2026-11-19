@@ -1,0 +1,148 @@
+/*
+ * Hike card: a calendar leaf beside the hike's location, time and state,
+ * then its details and links across the card. An upcoming hike's leaf is filled in pine; a past
+ * hike's is sandstone with muted figures, so a list of hikes shows at a
+ * glance which are still to come. The links are as tall as a tap target.
+ */
+
+.hike-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-card);
+  color: var(--color-text);
+}
+
+.hike-card--compact {
+  padding: var(--space-4);
+  gap: var(--space-2);
+}
+
+/* The leaf beside the headline; everything after runs the full width. */
+.hike-card__head {
+  display: grid;
+  grid-template-columns: var(--width-date-leaf) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.hike-card--compact .hike-card__head {
+  gap: var(--space-3);
+}
+
+.hike-card__leaf {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-block: var(--space-2);
+  border-radius: var(--radius-control);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.hike-card--past .hike-card__leaf {
+  background: var(--color-surface-subtle);
+  color: var(--color-text-muted);
+}
+
+.hike-card__weekday,
+.hike-card__month {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  font-weight: var(--font-weight-semibold);
+}
+
+.hike-card__day {
+  font-size: var(--font-size-h2);
+  line-height: var(--line-height-h2);
+  font-weight: var(--font-weight-bold);
+}
+
+.hike-card__headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.hike-card__title {
+  font-size: var(--font-size-h3);
+  line-height: var(--line-height-h3);
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.hike-card--compact .hike-card__title {
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+.hike-card__time {
+  display: flex;
+  align-items: start;
+  gap: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.hike-card__time .hike-card__icon {
+  margin-block-start: calc(
+    (var(--line-height-body) - var(--icon-size-small)) / 2
+  );
+  color: var(--color-text-muted);
+}
+
+.hike-card__zone {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  overflow-wrap: anywhere;
+}
+
+.hike-card__state {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  font-weight: var(--font-weight-semibold);
+}
+
+.hike-card__details,
+.hike-card__proposer {
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.hike-card__proposer {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.hike-card__picture {
+  max-width: 100%;
+  overflow: hidden;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.hike-card__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.hike-card__links li + li {
+  margin: 0;
+}
+
+.hike-card__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  font-weight: var(--font-weight-semibold);
+}

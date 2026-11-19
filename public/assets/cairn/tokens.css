@@ -92,6 +92,7 @@
     --icon-size-small: 1rem;
     --blaze-width: 0.5rem;
     --blaze-height: 1.125rem;
+    --width-date-leaf: 4rem;
 
     /* Layout widths: a readable task column and a wider overview. */
     --width-task: 45rem;

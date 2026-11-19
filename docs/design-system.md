@@ -141,6 +141,8 @@ its ratio. "Surfaces" are `bg`, `surface`, `surface-raised` and
 | `primary` and `danger` fills on `bg` and `surface` (button boundary)                                     | 3:1 (1.4.11)            |
 | `focus` on every surface (focus ring)                                                                    | 3:1 (1.4.11, 2.4.13)    |
 | `accent` on every surface (the blaze)                                                                    | 3:1 (1.4.11)            |
+| `info`, `success`, `danger` as text on their `*-subtle` background (status pills)                        | 4.5:1                   |
+| `primary` on `surface-subtle` (the tally bar's fill on its track)                                        | 3:1 (1.4.11)            |
 
 Every text pairing in fact clears 4.5:1, headings included; the 3:1
 large-text minimum is the floor, not the target. Disabled controls are
@@ -274,17 +276,18 @@ only; nothing moves on its own.
 
 ### Layout and fixed sizes
 
-| Token                             | Value                          | Use                                                            |
-| --------------------------------- | ------------------------------ | -------------------------------------------------------------- |
-| `--width-task`                    | 720px                          | The content width of a page that does one job (the default).   |
-| `--width-overview`                | 1080px                         | Lists and dashboards (`Layout width="overview"`).              |
-| `--gutter`                        | 16px, 32px from the breakpoint | Space between the content and the screen edge.                 |
-| `--width-card-min`                | 216px                          | The narrowest a card gets in a `.grid` before it wraps.        |
-| `--height-screen`                 | 100dvh                         | The shell's minimum height, so the footer stays at the bottom. |
-| `--target-min`                    | 44px                           | The smallest tap target, in both directions.                   |
-| `--icon-size`                     | 20px                           | Icons next to body text.                                       |
-| `--icon-size-small`               | 16px                           | Icons next to small text.                                      |
-| `--blaze-width`, `--blaze-height` | 8px by 18px                    | The blaze.                                                     |
+| Token                             | Value                          | Use                                                                                                                              |
+| --------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `--width-task`                    | 720px                          | The content width of a page that does one job (the default).                                                                     |
+| `--width-overview`                | 1080px                         | Lists and dashboards (`Layout width="overview"`).                                                                                |
+| `--gutter`                        | 16px, 32px from the breakpoint | Space between the content and the screen edge.                                                                                   |
+| `--width-card-min`                | 216px                          | The narrowest a card gets in a `.grid` before it wraps.                                                                          |
+| `--height-screen`                 | 100dvh                         | The shell's minimum height, so the footer stays at the bottom.                                                                   |
+| `--target-min`                    | 44px                           | The smallest tap target, in both directions.                                                                                     |
+| `--icon-size`                     | 20px                           | Icons next to body text.                                                                                                         |
+| `--icon-size-small`               | 16px                           | Icons next to small text.                                                                                                        |
+| `--blaze-width`, `--blaze-height` | 8px by 18px                    | The blaze.                                                                                                                       |
+| `--width-date-leaf`               | 64px                           | The hike card's calendar leaf: room for a two-digit day at h2 size and "Wed" or "Sep" in small semibold, with space either side. |
 
 The one breakpoint is **48rem (768px)**, written out in media queries
 because they cannot read custom properties. Below it there is a single
@@ -393,11 +396,140 @@ its styles in `public/assets/cairn/components/`, its unit test in
   heading (level 2 to 4). With `href` the heading's link covers the card,
   which gets hover, active and focus states; links and buttons in its
   footer stay separately clickable.
+- **Empty state** (`empty-state.tsx`): what a page or section shows when
+  it has nothing yet.
+  - _Purpose_: say there is nothing, why, and what happens next, so an
+    empty page is never a dead end.
+  - _Anatomy_: a `<section>` named by its heading (level 2 to 4), one
+    sentence on what happens next in the bot's words ("The first one
+    appears here when a date vote closes."), an optional action, on the
+    contour-line pattern inside a dashed `border-strong` edge.
+  - _Variants_: without an action; with one action (one `Button`, primary
+    when it is the page's main action).
+  - _States_: none of its own; the action has the button's.
+  - _Do_: use it for "no vote open", "no hikes yet", "no options yet". _Don't_:
+    use it for errors (a `Banner`), put more than one action in it, or use
+    the contour pattern anywhere else in a page's body. The text sits on
+    the page colour plus the pattern's tint; `test/web/contrast.test.ts`
+    checks text, muted text, the button and focus ring against a contour
+    line in both schemes.
+- **Hike card** (`hike-card.tsx`): one planned or past hike.
+  - _Purpose_: when and where a hike is, and the way to everything about
+    it (thread, event, calendar, map), at a glance.
+  - _Anatomy_: an `<article>` named by its heading, the location. The
+    date block: a calendar leaf (weekday, day, month; hidden from screen
+    readers, which read the line beside it) and a line with the bot's date
+    label ("Sat, 5 Dec 2026 · 11:00") in a `<time>` and the server's time
+    zone. Then the state (the `Planned` status pill, or "Past hike"), the
+    details, "Proposed by", room for a small map picture (`picture`), and a
+    row of links, each with an icon and a 44px target: Hike thread, Hike
+    event, Calendar, Map, shown only when given.
+  - _Variants_: `full` (details, proposer, picture) for a hike's page or
+    the planned hike on a server's page; `compact` (headline and links
+    only) for lists such as the hike log. `upcoming` has a pine leaf,
+    `past` a sandstone one with muted figures.
+  - _States_: the links' own (hover, focus, active).
+  - _Do_: pass the date and time as the server's wall clock with its time
+    zone, as the bot shows them. _Don't_: reformat the bot's date label,
+    or leave a link in that has nowhere to go (leave it out).
 - **Icons** (`icon.tsx`, `icons.tsx`): stroke icons on a 24-unit grid with
   a 2-unit round stroke in the current text colour, at 20px or 16px. They
   are the shapes of **Lucide** (lucide.dev) 1.75.0, under the **ISC
   licence**, whose notice is in `icons.tsx`. Decorative (`aria-hidden`)
   unless given a `label`, which names them.
+- **Round stepper** (`round-stepper.tsx`): where a hike round is.
+  - _Purpose_: the page's "where are we": which of the round's steps are
+    done, which is now and which are to come.
+  - _Anatomy_: an `<ol>` named "Hike round" with three steps (Location vote,
+    Date vote, Hike planned), each a marker, its name and its state in
+    words, joined by a line drawn in the success colour as far as the
+    round has got.
+  - _Variants_: at the location vote, at the date vote (also while the
+    date vote is still to be started), the hike planned (every step done);
+    cancelled at the location vote or the date vote.
+  - _States_ of a step: **Done** (a check, success colour), **Now** (the
+    blaze, with `aria-current="step"`), **To come** (an open dashed
+    circle), **Cancelled** (a cross, danger colour, also
+    `aria-current="step"`) and **Not reached** (after a cancelled step).
+    The planned step, reached, is "Done" with the blaze. A screen reader
+    hears "Date vote, Now, current step".
+  - _Do_: put one near the top of a round's page. _Don't_: use it for
+    anything but a round, or rely on the marker's colour: the word is the
+    state.
+- **Status pill** (`status-pill.tsx`): a state in one word with an icon.
+  - _Purpose_: the honest state of a vote, round or hike, in the bot's
+    words.
+  - _Anatomy_: a pill (`--radius-pill`) with an icon and the word, in
+    small semibold text. The word is the accessible text; the icon is
+    decorative.
+  - _Variants_: **Open** (vote icon, info colours), **Closed** (lock,
+    neutral), **Decided** (check in a circle, success colours), **Planned**
+    (calendar with a check, filled pine: the one filled pill, for the end
+    of a round), **Cancelled** (cross in a circle, danger colours).
+  - _States_: none; it is not interactive.
+  - _Do_: put it next to the heading of what it describes. _Don't_: make it
+    a link or a button, or invent a state the bot does not have.
+- **Tally list** (`tally-list.tsx`): every option of a vote.
+  - _Purpose_: the whole vote at a glance, up to 25 options, readable on a
+    phone.
+  - _Anatomy_: the bot's voter line ("No one has voted yet.", "1 member
+    has voted.", "14 members have voted."), then an `<ol>` named by `label`
+    ("Locations", "Dates") of tally rows divided by hairlines, not boxed,
+    so the labels and counts form two columns the eye runs down.
+  - _Variants_: open and closed (with the winner and the tie note on the
+    winning row); with no options it shows the `empty` sentence, such as
+    "There are no locations to vote for yet. Propose one first."; past six
+    options every row's details fold behind "Details", so 25 rows stay
+    scannable.
+  - _States_: the rows' own.
+  - _Do_: keep the bot's order (locations by votes, dates by date). _Don't_:
+    sort it differently from Discord, or page it: 25 is the most a vote
+    holds.
+- **Tally row** (`tally-row.tsx`): one option of a vote.
+  - _Purpose_: what the option is, how it is doing, and whether it is the
+    viewer's vote or the winner.
+  - _Anatomy_: the label (semibold) and the count in tabular figures ("7
+    votes", "1 vote") on one line; a bar (a native `<meter>`, hidden from
+    screen readers, which read the count) whose full length is the members
+    who voted; the marks **Winner** (with the blaze) and **Your vote**
+    (with a check); the tie note, in the bot's words ("3 options tied with
+    4 votes each; the winner was drawn at random."); the details; "Proposed
+    by" and the name ("hikebot" for the bot's own). Date options have no
+    proposer.
+  - _Variants_: open or closed; winner, winner from a tie; with the details
+    shown or folded behind a "Details" disclosure (a native `<details>`
+    whose summary is a 44px target named "Details of <label>"); votable
+    (`choice`, below).
+  - _States_: no votes (an empty bar), one vote, the viewer's vote, the
+    winner; the disclosure's open, hover and focus.
+  - _Do_: pass the label, details and proposer as they are; they are
+    rendered as text, so markup or Markdown in them shows as typed. Long
+    words and links wrap. _Don't_: colour a row to mark the winner or the
+    viewer's vote: the marks say it in words.
+- **Tally vote** (`tally-vote.tsx`): the votable form of a tally.
+  - _Purpose_: vote on the web as with the bot's Vote button, without
+    JavaScript.
+  - _Anatomy_: a `<form method="post">` holding the caller's hidden fields
+    (the CSRF token), a `<fieldset>` whose legend is the bot's instructions
+    ("Vote for every location you would go to; you can change your votes
+    until the vote closes."), the tally list with each row's label as a
+    real checkbox's `<label>` (checked for the saved votes, described by
+    the row's count), and one primary **Vote** button right after the
+    list. It does not stick to the foot of the screen: a sticky bar sits
+    over the top of the list until the list is scrolled to, and the list
+    stays short enough (details folded past six options) to reach the
+    end. The form sends every checked option's id under one name, so the route
+    replaces the member's votes with them, as the bot's select does.
+  - _Variants_: with options; with none it is no form, only the `empty`
+    sentence.
+  - _States_ of a row: not voted, voted (checked), hover (the label in pine
+    and underlined), focus visible (the ring on the checkbox). The
+    checkbox is styled here, as part of the row: the native control at
+    `--icon-size` in `accent-color: var(--color-primary)`, inside a label
+    at least `--target-min` tall that is the whole tap target. The row's
+    "Your vote" mark is left out, since the checkbox shows it.
+  - _Do_: put the CSRF field in `hidden`. _Don't_: submit on change (it
+    would need JavaScript), or add a second Vote button.
 
 ## Layout rules
 
@@ -466,9 +598,9 @@ Cairn meets WCAG 2.2 AA:
 | What                                            | Budget | Now         |
 | ----------------------------------------------- | ------ | ----------- |
 | The font file                                   | 32 KB  | 27 KB       |
-| All stylesheets, each gzipped, together         | 20 KB  | about 10 KB |
+| All stylesheets, each gzipped, together         | 20 KB  | about 15 KB |
 | The contour pattern                             | 12 KB  | 9 KB        |
-| Everything a page loads from Cairn, transferred | 64 KB  | about 41 KB |
+| Everything a page loads from Cairn, transferred | 64 KB  | about 46 KB |
 
 ## Designing a new page
 

@@ -1,0 +1,31 @@
+/*
+ * Tally vote: the votable tally in its form. The fieldset loses its
+ * default frame (the list's hairlines group the rows), the legend is the
+ * instructions in body text, and the Vote button follows the list.
+ */
+
+.tally-vote {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.tally-vote__fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tally-vote__legend {
+  padding: 0;
+  margin-block-end: var(--space-2);
+  max-width: var(--measure);
+}
+
+.tally-vote__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
