@@ -1,5 +1,6 @@
 import type {
   APIAllowedMentions,
+  RESTAPIAttachment,
   RESTError,
   RESTGetAPICurrentUserGuildsQuery,
   RESTGetAPICurrentUserGuildsResult,
@@ -103,6 +104,33 @@ export function guildIconUrl(guildId: string, iconHash: string): string {
   return `https://cdn.discordapp.com/icons/${guildId}/${iconHash}.png`;
 }
 
+/**
+ * A file sent with a message as `files[n]`, where `n` is its place in the
+ * list. Discord's limit is 20 MiB per file and 25 MiB per request.
+ * https://docs.discord.com/developers/reference#uploading-files
+ */
+export interface FileUpload {
+  /** The attachment's file name, which `attachment://<name>` refers to. */
+  name: string;
+  data: Uint8Array;
+  /** The file's media type, such as `image/png`. */
+  contentType: string;
+}
+
+/**
+ * `bytes` as image data, the data URI Discord takes for an image field such
+ * as a scheduled event's cover: JPG, GIF or PNG.
+ * https://docs.discord.com/developers/reference#image-data
+ */
+export function imageData(bytes: Uint8Array, contentType: string): string {
+  let binary = "";
+  // In slices, so the spread stays far within the engine's argument limit.
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return `data:${contentType};base64,${btoa(binary)}`;
+}
+
 const USER_AGENT = "DiscordBot (https://github.com/by77er/hikebot, 0.0.0)";
 
 /** Mentions in bot messages never notify anyone unless a caller says so. */
@@ -153,6 +181,11 @@ interface Call {
   body?: unknown;
   /** A form body, sent as `application/x-www-form-urlencoded`. */
   form?: Record<string, string>;
+  /**
+   * Files to upload with `body`: both go as `multipart/form-data`, the body
+   * as `payload_json` and each file as `files[n]`.
+   */
+  files?: readonly FileUpload[];
   /** Send the bot token. False for interaction webhook routes. */
   auth: boolean;
   /**
@@ -196,27 +229,41 @@ export class DiscordApi {
     this.maxRetryWaitMs = options.maxRetryWaitMs ?? 5_000;
   }
 
+  /**
+   * Posts a message, with `files` as its attachments when given (see
+   * `withFiles`).
+   */
   createMessage(
     channelId: string,
     body: RESTPostAPIChannelMessageJSONBody,
+    files?: readonly FileUpload[],
   ): Promise<RESTPostAPIChannelMessageResult> {
     return this.call({
       method: "POST",
       path: `/channels/${channelId}/messages`,
-      body: withoutPings(body),
+      body: withFiles(withoutPings(body), files),
+      files,
       auth: true,
     });
   }
 
+  /**
+   * Edits a message. Without `files` and without `attachments` in `body`,
+   * Discord keeps the message's attachments as they are. With `files`, they
+   * replace them: only the new files and the attachments `body` lists by id
+   * stay (see `withFiles`).
+   */
   editMessage(
     channelId: string,
     messageId: string,
     body: RESTPatchAPIChannelMessageJSONBody,
+    files?: readonly FileUpload[],
   ): Promise<RESTPatchAPIChannelMessageResult> {
     return this.call({
       method: "PATCH",
       path: `/channels/${channelId}/messages/${messageId}`,
-      body: withoutPings(body),
+      body: withFiles(withoutPings(body), files),
+      files,
       auth: true,
     });
   }
@@ -247,7 +294,10 @@ export class DiscordApi {
     });
   }
 
-  /** Edits a scheduled event, such as its description. */
+  /**
+   * Edits a scheduled event, such as its description, or its cover `image`
+   * (image data from `imageData`; null removes it).
+   */
   editGuildScheduledEvent(
     guildId: string,
     eventId: string,
@@ -419,8 +469,20 @@ export class DiscordApi {
     if (call.authorization !== undefined) {
       headers.Authorization = call.authorization;
     }
-    let body: string | undefined;
-    if (call.form !== undefined) {
+    let body: string | FormData | undefined;
+    if (call.files !== undefined && call.files.length > 0) {
+      // fetch sets the multipart Content-Type with its boundary.
+      const form = new FormData();
+      form.append("payload_json", JSON.stringify(call.body ?? {}));
+      call.files.forEach((file, n) => {
+        form.append(
+          `files[${String(n)}]`,
+          new Blob([file.data], { type: file.contentType }),
+          file.name,
+        );
+      });
+      body = form;
+    } else if (call.form !== undefined) {
       headers["Content-Type"] = "application/x-www-form-urlencoded";
       body = new URLSearchParams(call.form).toString();
     } else if (call.body !== undefined) {
@@ -467,6 +529,26 @@ export class DiscordApi {
 /** HTTP Basic credentials, `client_id:client_secret`, for OAuth2 routes. */
 function basicAuth(client: OAuthClient): string {
   return `Basic ${btoa(`${client.id}:${client.secret}`)}`;
+}
+
+/**
+ * `body` with an `attachments` entry for each of `files`, its id the file's
+ * `n` in `files[n]`, after the existing attachments `body` keeps. Unchanged
+ * without files.
+ * https://docs.discord.com/developers/reference#uploading-files
+ */
+function withFiles<B extends { attachments?: RESTAPIAttachment[] }>(
+  body: B,
+  files: readonly FileUpload[] | undefined,
+): B {
+  if (files === undefined || files.length === 0) return body;
+  return {
+    ...body,
+    attachments: [
+      ...(body.attachments ?? []),
+      ...files.map((file, n) => ({ id: n, filename: file.name })),
+    ],
+  };
 }
 
 function withoutPings<B extends { allowed_mentions?: unknown }>(body: B): B {

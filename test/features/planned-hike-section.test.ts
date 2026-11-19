@@ -43,7 +43,7 @@ async function viewAfter(
 }
 
 describe("the web view's planned hike", () => {
-  it("shows the hike with its start in the guild's zone, and links to its thread and event", async () => {
+  it("shows the hike with its start in the guild's zone, links to its thread and event, and its map picture's bucket key", async () => {
     const { guildId, view } = await viewAfter((store, config) => {
       config.setTimezone("America/Denver");
       const round = completeRound(
@@ -54,6 +54,7 @@ describe("the web view's planned hike", () => {
       );
       store.setRoundThread(round, THREAD);
       store.setRoundEvent(round, EVENT);
+      store.setRoundMapPicture(round, "pictures/ridge.png");
     });
     expect(view.plannedHike).toEqual({
       roundId: expect.any(Number) as number,
@@ -74,6 +75,7 @@ describe("the web view's planned hike", () => {
       threadUrl: `https://discord.com/channels/${guildId}/${THREAD}`,
       eventId: EVENT,
       eventUrl: `https://discord.com/events/${guildId}/${EVENT}`,
+      mapPictureKey: "pictures/ridge.png",
     });
   });
 
@@ -87,6 +89,7 @@ describe("the web view's planned hike", () => {
       threadUrl: null,
       eventId: null,
       eventUrl: null,
+      mapPictureKey: null,
     });
   });
 

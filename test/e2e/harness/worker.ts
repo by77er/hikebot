@@ -95,5 +95,7 @@ export function useE2E(options: E2EOptions = {}): E2E {
     get harness() {
       return get().harness;
     },
+    outbound: (after) => get().outbound(after),
+    outboundMark: () => get().outboundMark(),
   };
 }

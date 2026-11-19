@@ -88,6 +88,8 @@ describe("the hike event", () => {
       entity_id: null,
       entity_metadata: { location: "Lake Loop" },
       description: `Hike thread: https://discord.com/channels/${g.guildId}/${thread?.id ?? ""}`,
+      // Lake Loop has no map pin, so no map picture for a cover.
+      image: null,
     });
     const link = `**Hike event:** https://discord.com/events/${g.guildId}/${event?.id ?? ""}`;
     expect(messageText(threadMessage(g)).split("\n")).toContain(link);

@@ -124,6 +124,11 @@ export interface RoundView {
   threadId: string | null;
   /** The hike's Discord scheduled event, once created. */
   eventId: string | null;
+  /**
+   * The `MAPS` bucket key of the map picture shown on the hike's thread and
+   * event, while one is shown.
+   */
+  mapPictureKey: string | null;
   /** The hike-day announcement, once posted. */
   dayOf: { channelId: string; messageId: string } | null;
   startedBy: string;
@@ -148,6 +153,8 @@ export interface HikeView {
   date: { value: string; label: string };
   threadId: string | null;
   eventId: string | null;
+  /** The bucket key of the map picture its thread and event show, if any. */
+  mapPictureKey: string | null;
   /** When the date vote closed and the round completed. */
   completedAt: number;
   locationPoll: MessageLocation;
@@ -199,6 +206,7 @@ type RoundRow = {
   date_option_id: number | null;
   thread_id: string | null;
   event_id: string | null;
+  map_picture_key: string | null;
   day_of_channel_id: string | null;
   day_of_message_id: string | null;
   started_by: string;
@@ -246,6 +254,7 @@ type HikeRow = {
   id: number;
   thread_id: string | null;
   event_id: string | null;
+  map_picture_key: string | null;
   ended_at: number;
   location_label: string;
   location_details: string | null;
@@ -717,7 +726,7 @@ export class PollStore {
   listHikes(page: { limit: number; offset: number }): HikeView[] {
     return this.sql
       .exec<HikeRow>(
-        `SELECT r.id, r.thread_id, r.event_id, r.ended_at,
+        `SELECT r.id, r.thread_id, r.event_id, r.map_picture_key, r.ended_at,
            lo.label AS location_label, lo.details AS location_details,
            lo.proposed_by AS location_proposed_by,
            dt.date_value, dt.label AS date_label,
@@ -740,6 +749,7 @@ export class PollStore {
         date: { value: row.date_value, label: row.date_label },
         threadId: row.thread_id,
         eventId: row.event_id,
+        mapPictureKey: row.map_picture_key,
         completedAt: row.ended_at,
         locationPoll: {
           channelId: row.location_channel_id,
@@ -975,6 +985,19 @@ export class PollStore {
     this.sql.exec(
       "UPDATE rounds SET event_id = ? WHERE id = ?",
       eventId,
+      roundId,
+    );
+  }
+
+  /**
+   * Records the bucket key of the map picture the round's thread and event
+   * show; null when they show none.
+   */
+  setRoundMapPicture(roundId: number, key: string | null): void {
+    this.roundRow(roundId);
+    this.sql.exec(
+      "UPDATE rounds SET map_picture_key = ? WHERE id = ?",
+      key,
       roundId,
     );
   }
@@ -1302,6 +1325,7 @@ export class PollStore {
       dateOptionId: row.date_option_id,
       threadId: row.thread_id,
       eventId: row.event_id,
+      mapPictureKey: row.map_picture_key,
       dayOf:
         row.day_of_channel_id === null || row.day_of_message_id === null
           ? null

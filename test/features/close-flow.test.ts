@@ -64,6 +64,7 @@ const DATE_MESSAGE = "700000000000000002";
 
 const THREAD_STEP = "create the hike thread";
 const EVENT_STEP = "create the hike event";
+const PICTURE_STEP = "show the map picture";
 const DAY_STEP = "plan the hike-day announcement";
 
 /**
@@ -331,6 +332,7 @@ describe("closing a poll", () => {
           FINALIZE_PART,
           THREAD_STEP,
           EVENT_STEP,
+          PICTURE_STEP,
           DAY_STEP,
           ANNOUNCE_PART,
         ].map((name) => ({ name, startedAt: null })),
@@ -472,7 +474,7 @@ describe("the close-flow job", () => {
         { date: DATE_POLL },
       );
       expect(run.waiting).toBe(true);
-      expect(pendingClose(storage, view.id)?.parts).toHaveLength(5);
+      expect(pendingClose(storage, view.id)?.parts).toHaveLength(6);
     });
     // The job finds the part held, so it schedules itself again.
     expect(await runDurableObjectAlarm(stub(guild))).toBe(true);

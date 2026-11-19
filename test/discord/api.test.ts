@@ -16,7 +16,9 @@ import {
   channelUrl,
   eventUrl,
   guildIconUrl,
+  imageData,
   oauthAuthorizeUrl,
+  type FileUpload,
   type DiscordApiOptions,
 } from "../../src/discord/api";
 
@@ -269,6 +271,139 @@ describe("DiscordApi routes", () => {
   it("accepts 204 No Content", async () => {
     const { api } = client([new Response(null, { status: 204 })]);
     await expect(api.getGuild("40")).resolves.toBeUndefined();
+  });
+});
+
+describe("file uploads", () => {
+  const png: FileUpload = {
+    name: "hike-map.png",
+    data: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]),
+    contentType: "image/png",
+  };
+
+  /** A fetch that keeps each request's multipart form. */
+  function formFetch(...responses: Response[]) {
+    const forms: { request: Request; form: FormData }[] = [];
+    const fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      forms.push({ request, form: await request.clone().formData() });
+      const response = responses.shift();
+      if (!response) throw new Error("unexpected request");
+      return response;
+    };
+    return { fetch, forms };
+  }
+
+  function payload(form: FormData | null | undefined): unknown {
+    const json = form?.get("payload_json");
+    if (typeof json !== "string") throw new Error("no payload_json field");
+    return JSON.parse(json);
+  }
+
+  async function fileBytes(form: FormData, field: string) {
+    const file = form.get(field);
+    if (!(file instanceof File)) throw new Error(`${field} is not a file`);
+    return {
+      name: file.name,
+      type: file.type,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+    };
+  }
+
+  it("posts a message with files as payload_json and files[n]", async () => {
+    const { fetch, forms } = formFetch(ok({ id: "99" }));
+    const api = new DiscordApi({ token: "bot-token", fetch });
+    await api.createMessage("10", message, [png]);
+    const { request, form } = forms[0] ?? { request: null, form: null };
+    expect(request?.method).toBe("POST");
+    expect(request?.url).toBe(
+      "https://discord.com/api/v10/channels/10/messages",
+    );
+    expect(request?.headers.get("Content-Type")).toMatch(
+      /^multipart\/form-data; boundary=/,
+    );
+    expect(request?.headers.get("Authorization")).toBe("Bot bot-token");
+    expect([...(form?.keys() ?? [])]).toEqual(["payload_json", "files[0]"]);
+    expect(payload(form)).toEqual({
+      ...message,
+      allowed_mentions: { parse: [] },
+      attachments: [{ id: 0, filename: "hike-map.png" }],
+    });
+    expect(await fileBytes(form ?? new FormData(), "files[0]")).toEqual({
+      name: "hike-map.png",
+      type: "image/png",
+      bytes: png.data,
+    });
+  });
+
+  it("edits a message with files, listing only the new files and the kept ones", async () => {
+    const { fetch, forms } = formFetch(ok({ id: "20" }));
+    const api = new DiscordApi({ token: "bot-token", fetch });
+    const other: FileUpload = { ...png, name: "second.png" };
+    await api.editMessage(
+      "10",
+      "20",
+      { ...message, attachments: [{ id: "555" }] },
+      [png, other],
+    );
+    const { request, form } = forms[0] ?? { request: null, form: null };
+    expect(request?.method).toBe("PATCH");
+    expect(payload(form)).toEqual({
+      ...message,
+      allowed_mentions: { parse: [] },
+      attachments: [
+        { id: "555" },
+        { id: 0, filename: "hike-map.png" },
+        { id: 1, filename: "second.png" },
+      ],
+    });
+    expect((await fileBytes(form ?? new FormData(), "files[1]")).name).toBe(
+      "second.png",
+    );
+  });
+
+  it("sends the same files again after a 429", async () => {
+    const { fetch, forms } = formFetch(rateLimited(0.01), ok({ id: "20" }));
+    const api = new DiscordApi({
+      token: "bot-token",
+      fetch,
+      sleep: () => Promise.resolve(),
+    });
+    await api.editMessage("10", "20", message, [png]);
+    expect(forms).toHaveLength(2);
+    expect(
+      (await fileBytes(forms[1]?.form ?? new FormData(), "files[0]")).bytes,
+    ).toEqual(png.data);
+  });
+
+  it("edits a message as JSON, leaving its attachments alone, without files", async () => {
+    const { api, sent } = client([ok({ id: "20" })]);
+    await api.editMessage("10", "20", message);
+    expect(sent[0]?.headers.get("Content-Type")).toBe("application/json");
+    expect(sent[0]?.body).toEqual({
+      ...message,
+      allowed_mentions: { parse: [] },
+    });
+  });
+
+  it("sends a scheduled event's cover as image data", async () => {
+    const { api, sent } = client([ok({ id: "60" })]);
+    await api.editGuildScheduledEvent("40", "60", {
+      image: imageData(png.data, "image/png"),
+    });
+    expect(sent[0]?.body).toEqual({
+      image: `data:image/png;base64,${btoa(String.fromCharCode(...png.data))}`,
+    });
+  });
+
+  it("encodes large images whole", () => {
+    const bytes = new Uint8Array(100_000).map((_, i) => i % 251);
+    const uri = imageData(bytes, "image/png");
+    const decoded = Uint8Array.from(
+      atob(uri.slice("data:image/png;base64,".length)),
+      (c) => c.charCodeAt(0),
+    );
+    expect(decoded).toEqual(bytes);
   });
 });
 

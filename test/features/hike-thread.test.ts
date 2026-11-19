@@ -5,6 +5,7 @@ import {
 } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import {
+  ComponentType,
   InteractionResponseType,
   MessageFlags,
   type APIMessageComponentInteraction,
@@ -74,6 +75,9 @@ interface Node {
   component?: Node;
   accessory?: Node;
 }
+
+/** The media gallery's component type, as the nodes hold it. */
+const GALLERY: number = ComponentType.MediaGallery;
 
 function flatten(components: readonly Node[]): Node[] {
   return components.flatMap((c) => [
@@ -188,6 +192,7 @@ function round(location: PollView, date: PollView): RoundView {
     dateOptionId: date.winnerOptionId,
     threadId: null,
     eventId: null,
+    mapPictureKey: null,
     dayOf: null,
     startedBy: OWNER,
     startedAt: 0,
@@ -277,6 +282,53 @@ describe("renderThreadMessage", () => {
     expect(lines.at(-1)).toBe("-# © OpenStreetMap contributors");
     const last = flatten(view).at(-1);
     expect(last?.content).toBe("-# © OpenStreetMap contributors");
+  });
+
+  it("shows the map picture between the title and the map links while the round has one", () => {
+    const place = {
+      status: "found",
+      point: { lat: 47.4875, lon: -121.7234 },
+      name: "Mount Si, King County, Washington",
+      attempts: 1,
+    } as const;
+    const without = located(place);
+    expect(flatten(without).filter((c) => c.type === GALLERY)).toEqual([]);
+    const location = poll(1, "location", [
+      option(1, 1, "Mount Si", {
+        details: "Steep, 13 km",
+        proposedBy: PROPOSER,
+        place,
+      }),
+    ]);
+    const date = poll(2, "date", [
+      option(11, 2, "Sat, 15 Jun 2030 · 09:00", {
+        dateValue: "2030-06-15 09:00",
+      }),
+    ]);
+    const view = renderThreadMessage(
+      { ...round(location, date), mapPictureKey: "pictures/a.png" },
+      GUILD,
+      "America/Los_Angeles",
+    );
+    const nodes = flatten(view);
+    expect(nodes.slice(1, 4).map((c) => c.type)).toEqual([
+      ComponentType.TextDisplay,
+      ComponentType.MediaGallery,
+      ComponentType.TextDisplay,
+    ]);
+    expect(nodes[1]?.content).toBe("## Mount Si\nSteep, 13 km");
+    expect(nodes[2]).toEqual({
+      type: ComponentType.MediaGallery,
+      items: [
+        {
+          media: { url: "attachment://hike-map.png" },
+          description: "Map of the area round Mount Si, with a pin where it is",
+        },
+      ],
+    });
+    expect(nodes[3]?.content).toMatch(/^📍 Mount Si.*\[OpenStreetMap\]/);
+    // The same lines as without the picture, and one attribution only.
+    expect(text(view)).toBe(text(without));
   });
 
   it("shows given coordinates without a place name", () => {

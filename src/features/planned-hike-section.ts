@@ -1,7 +1,8 @@
 /**
  * The planned hike's section of the web view (`src/guild/web-view.ts`): the
  * newest hike in the log while it has not ended yet, with its start in the
- * guild's time zone and links to its thread and Discord event.
+ * guild's time zone, links to its thread and Discord event, and where its
+ * map picture is kept.
  */
 import { channelUrl, eventUrl } from "../discord/api";
 import type { WebViewSource } from "../guild/web-view";
@@ -29,6 +30,12 @@ export interface WebPlannedHike {
   threadUrl: string | null;
   eventId: string | null;
   eventUrl: string | null;
+  /**
+   * The `MAPS` bucket key of the map picture its thread and event show, for
+   * a page to serve; null while they show none (no pin, no map data there,
+   * or not drawn yet).
+   */
+  mapPictureKey: string | null;
 }
 
 /**
@@ -54,5 +61,6 @@ export function plannedHikeSection(
     eventId: hike.eventId,
     eventUrl:
       hike.eventId === null ? null : eventUrl(source.guildId, hike.eventId),
+    mapPictureKey: hike.mapPictureKey,
   };
 }

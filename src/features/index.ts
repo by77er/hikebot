@@ -12,6 +12,7 @@ import { registerHikeThread, updateThreadPin } from "./hike-thread";
 import { registerHomeArea } from "./home-area";
 import { LOCATE_JOB, locatePlaces } from "./locate";
 import { registerLocationVote } from "./location-vote";
+import { registerMapPicture, updateMapPicture } from "./map-picture";
 import { registerMapPin, type MapPinHook } from "./map-pin";
 import { registerPollUi } from "./poll-ui";
 import { pollWordings } from "./round-actions";
@@ -23,6 +24,7 @@ import { pollWordings } from "./round-actions";
 export const MAP_PIN_HOOKS: readonly MapPinHook[] = [
   updateThreadPin,
   updateEventPin,
+  updateMapPicture,
 ];
 
 /**
@@ -49,6 +51,7 @@ export function registerFeatures(router: Router): Router {
   registerHikeLog(router);
   registerHomeArea(router);
   registerMapPin(router, MAP_PIN_HOOKS);
+  registerMapPicture(router);
   router.job(LOCATE_JOB, locatePlaces);
   registerCadence(router);
   return router;

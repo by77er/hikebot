@@ -259,11 +259,16 @@ export class RoundPlayer {
     return this.shown(select);
   }
 
-  /** Closes the open vote named `name` from the panel, confirming. */
+  /**
+   * Closes the open vote named `name` from the panel, confirming, and waits
+   * up to `timeout` ms (5 s by default) for the panel to show it closed,
+   * which it does once the close steps ran.
+   */
   async closeVote(
     owner: Member,
     panel: FakeMessage,
     name: "location vote" | "date vote",
+    options: { timeout?: number } = {},
   ): Promise<void> {
     await owner.click(panel, idStarting(this.shown(panel), "hb:poll:close:"));
     expect(messageText(this.shown(panel))).toContain(`Close the ${name} now?`);
@@ -274,7 +279,7 @@ export class RoundPlayer {
     expect(response.type).toBe(InteractionResponseType.DeferredMessageUpdate);
     await eventually(() => {
       expect(messageText(this.shown(panel))).toContain(`The ${name} is closed`);
-    });
+    }, options);
   }
 
   /**

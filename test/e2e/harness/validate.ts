@@ -33,6 +33,14 @@ const OAUTH2 = `${DOCS}/topics/oauth2`;
 const AUTHORIZATION_CODE_GRANT = `${OAUTH2}#authorization-code-grant`;
 const CURRENT_USER_GUILDS = `${DOCS}/resources/user#get-current-user-guilds`;
 const MODIFY_SCHEDULED_EVENT = `${SCHEDULED_EVENTS}#modify-guild-scheduled-event`;
+const UPLOADING_FILES = `${DOCS}/reference#uploading-files`;
+const EDITING_ATTACHMENTS = `${DOCS}/reference#editing-message-attachments`;
+const IMAGE_DATA = `${DOCS}/reference#image-data`;
+
+/** "The default limit is `20 MiB` for all users", per file. */
+export const MAX_FILE_BYTES = 20 * 1024 * 1024;
+/** "The maximum request size when sending a message is **25 MiB**". */
+export const MAX_MESSAGE_REQUEST_BYTES = 25 * 1024 * 1024;
 
 /** A rule the fake enforces. `docs` is where the limit is stated. */
 export interface Rule {
@@ -289,6 +297,55 @@ export const RULES = {
     "scheduled-event-must-exist",
     MODIFY_SCHEDULED_EVENT,
   ),
+  /**
+   * "Each file parameter must be uniquely named in the format `files[n]`
+   * such as `files[0]`, `files[1]`, or `files[42]`."
+   */
+  uploadFieldName: rule("upload-field-files-n", UPLOADING_FILES),
+  /**
+   * "The suffixed index `n` is the snowflake placeholder that can be used in
+   * the `attachments` field." When editing, "only files listed in the
+   * `attachments` parameter will be appended to the message"; an entry
+   * must name an uploaded `files[n]` by its `n` or an attachment the message
+   * has by its id.
+   */
+  attachmentReference: rule("attachment-id-names-a-file", EDITING_ATTACHMENTS),
+  /**
+   * "The file upload size limit applies to each file in a request. The
+   * default limit is `20 MiB` for all users." Discord answers 413, code
+   * 40005, "Request entity too large".
+   */
+  maxFileSize: rule("upload-file-max-20-mib", UPLOADING_FILES),
+  /**
+   * "The maximum request size when sending a message is **25 MiB**".
+   * Discord answers 413, code 40005, "Request entity too large".
+   */
+  maxMessageRequestSize: rule("message-request-max-25-mib", CREATE_MESSAGE),
+  /** A media gallery holds "1 to 10 media gallery items". */
+  mediaGalleryItems: rule(
+    "media-gallery-1-to-10-items",
+    `${COMPONENTS_REFERENCE}#media-gallery`,
+  ),
+  /** A media gallery item's description: "Alt text for the media, max 1024 characters." */
+  mediaGalleryDescription: rule(
+    "media-gallery-description-max-1024",
+    `${COMPONENTS_REFERENCE}#media-gallery`,
+  ),
+  /**
+   * An unfurled media item's url "Supports arbitrary urls and
+   * `attachment://<filename>` references."; the reference names a file the
+   * message has after the request.
+   */
+  attachmentUrl: rule(
+    "attachment-url-names-an-attachment",
+    `${COMPONENTS_REFERENCE}#unfurled-media-item`,
+  ),
+  /**
+   * "Image data is a Data URI scheme that supports JPG, GIF, and PNG
+   * formats." such as `data:image/jpeg;base64,BASE64_ENCODED_JPEG_IMAGE_DATA`;
+   * a scheduled event's `image` is image data.
+   */
+  imageData: rule("image-data-uri", IMAGE_DATA),
 } as const;
 
 export interface Violation {
@@ -327,6 +384,11 @@ class Checker {
   private readonly customIds = new Map<string, string>();
   components = 0;
   textCharacters = 0;
+  /**
+   * The file names of the attachments the message has after the request,
+   * when the caller knows them; `attachment://` urls must name one.
+   */
+  attachments: ReadonlySet<string> | undefined;
 
   fail(rule: Rule, path: string, detail: string): void {
     this.violations.push({ rule, path, detail });
@@ -379,6 +441,20 @@ class Checker {
       this.customIds.set(id, at);
     }
   }
+
+  /** Checks an unfurled media item's `attachment://<filename>` reference. */
+  media(path: string, value: unknown): void {
+    const url = isObject(value) ? text(value.url) : undefined;
+    if (url === undefined || !url.startsWith("attachment://")) return;
+    const name = url.slice("attachment://".length);
+    if (this.attachments !== undefined && !this.attachments.has(name)) {
+      this.fail(
+        RULES.attachmentUrl,
+        `${path}.url`,
+        `"${url}" names no attachment of the message; it will have: ${[...this.attachments].join(", ") || "none"}`,
+      );
+    }
+  }
 }
 
 const COMPONENT_TYPES = new Map<number, ComponentType>(
@@ -412,13 +488,20 @@ const SELECT_TYPES = new Set<number>([
 /**
  * Checks a message body as Create Message, Edit Message, a webhook edit or
  * follow-up, or the `data` of a message interaction response receives it.
- * `existingFlags` are the flags of the message being edited, if any.
+ * `existingFlags` are the flags of the message being edited, if any;
+ * `attachments` the file names of the attachments the message has after the
+ * request, which `attachment://<filename>` media urls must name. Without
+ * `attachments` those urls are not checked.
  */
 export function validateMessage(
   body: unknown,
-  options: { existingFlags?: number } = {},
+  options: { existingFlags?: number; attachments?: readonly string[] } = {},
 ): Violation[] {
   const c = new Checker();
+  c.attachments =
+    options.attachments === undefined
+      ? undefined
+      : new Set(options.attachments);
   if (!isObject(body)) {
     c.fail(RULES.v2FlagRequired, "", "the body is not a JSON object");
     return c.violations;
@@ -605,6 +688,34 @@ function checkMessageComponent(
           false,
         );
       });
+      return;
+    case ComponentType.MediaGallery: {
+      const items = list(component.items);
+      if (items.length < 1 || items.length > 10) {
+        c.fail(
+          RULES.mediaGalleryItems,
+          `${path}.items`,
+          `has ${String(items.length)} items, must be 1 to 10`,
+        );
+      }
+      items.forEach((item, i) => {
+        const at = `${path}.items[${String(i)}]`;
+        const o = isObject(item) ? item : {};
+        c.maxLength(
+          RULES.mediaGalleryDescription,
+          `${at}.description`,
+          o.description,
+          1024,
+        );
+        c.media(`${at}.media`, o.media);
+      });
+      return;
+    }
+    case ComponentType.Thumbnail:
+      c.media(`${path}.media`, component.media);
+      return;
+    case ComponentType.File:
+      c.media(`${path}.file`, component.file);
       return;
     case ComponentType.TextInput:
       c.fail(
@@ -893,6 +1004,7 @@ export function validateScheduledEvent(body: unknown): Violation[] {
       );
     }
   }
+  checkImage(c, "image", o.image);
   return c.violations;
 }
 
@@ -920,7 +1032,104 @@ export function validateScheduledEventEdit(body: unknown): Violation[] {
       1,
     );
   }
+  checkImage(c, "image", o.image);
   return c.violations;
+}
+
+/** The first bytes of each format image data supports. */
+const IMAGE_SIGNATURES: Record<string, readonly number[]> = {
+  png: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  jpeg: [0xff, 0xd8, 0xff],
+  gif: [0x47, 0x49, 0x46, 0x38],
+};
+
+/**
+ * The bytes of image data (`data:image/<png|jpeg|gif>;base64,<data>`), or
+ * why `value` is not image data whose bytes are of the format it names.
+ */
+export function decodeImageData(
+  value: unknown,
+): { bytes: Uint8Array } | { problem: string } {
+  const match =
+    typeof value === "string"
+      ? /^data:image\/(png|jpeg|gif);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value)
+      : null;
+  if (!match) {
+    return {
+      problem: `must be a data URI data:image/(png|jpeg|gif);base64,<data>; got ${JSON.stringify(typeof value === "string" ? value.slice(0, 40) : value)}`,
+    };
+  }
+  const format = match[1] ?? "";
+  const bytes = new Uint8Array(Buffer.from(match[2] ?? "", "base64"));
+  const signature = IMAGE_SIGNATURES[format] ?? [];
+  if (!signature.every((byte, i) => bytes[i] === byte)) {
+    return { problem: `the data is not a ${format} image` };
+  }
+  return { bytes };
+}
+
+function checkImage(c: Checker, path: string, value: unknown): void {
+  if (value === undefined || value === null) return;
+  const decoded = decodeImageData(value);
+  if ("problem" in decoded) c.fail(RULES.imageData, path, decoded.problem);
+}
+
+/** A file field of a multipart request, as the fake read it. */
+export interface UploadField {
+  /** The form field's name, such as `files[0]`. */
+  field: string;
+  /** The file's size in bytes. */
+  size: number;
+}
+
+/** Checks the names of a multipart message request's file fields. */
+export function validateUploadFields(
+  files: readonly UploadField[],
+): Violation[] {
+  const violations: Violation[] = [];
+  const seen = new Set<string>();
+  for (const file of files) {
+    if (!/^files\[\d+\]$/.test(file.field)) {
+      violations.push({
+        rule: RULES.uploadFieldName,
+        path: file.field,
+        detail: `the file field "${file.field}" is not named files[n]`,
+      });
+    } else if (seen.has(file.field)) {
+      violations.push({
+        rule: RULES.uploadFieldName,
+        path: file.field,
+        detail: `two files are named ${file.field}`,
+      });
+    }
+    seen.add(file.field);
+  }
+  return violations;
+}
+
+/**
+ * Checks the sizes of a multipart message request: each file and the whole
+ * request. Discord refuses these with 413, not 400.
+ */
+export function validateUploadSize(
+  files: readonly UploadField[],
+  requestBytes: number,
+): Violation[] {
+  const violations: Violation[] = files
+    .filter((file) => file.size > MAX_FILE_BYTES)
+    .map((file) => ({
+      rule: RULES.maxFileSize,
+      path: file.field,
+      detail: `is ${String(file.size)} bytes, max ${String(MAX_FILE_BYTES)}`,
+    }));
+  if (requestBytes > MAX_MESSAGE_REQUEST_BYTES) {
+    violations.push({
+      rule: RULES.maxMessageRequestSize,
+      path: "",
+      detail: `the request is ${String(requestBytes)} bytes, max ${String(MAX_MESSAGE_REQUEST_BYTES)}`,
+    });
+  }
+  return violations;
 }
 
 /** Checks the body of Bulk Overwrite Global Application Commands. */

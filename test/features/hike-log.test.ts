@@ -284,6 +284,7 @@ describe("renderHikeLog", () => {
     date: { value: "2030-12-28 09:00", label: "Wed, 28 Dec 2030 · 09:00" },
     threadId: "60000000000000000000",
     eventId: "70000000000000000000",
+    mapPictureKey: null,
     completedAt: 1_900_000_000_000,
     locationPoll: { channelId: "300", messageId: "701" },
     datePoll: { channelId: "300", messageId: "702" },

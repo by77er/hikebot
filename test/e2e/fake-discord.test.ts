@@ -80,6 +80,77 @@ async function call(
   };
 }
 
+interface TestFile {
+  /** The form field, `files[n]` unless a test breaks the rule. */
+  field: string;
+  name: string;
+  type?: string;
+  bytes: Uint8Array;
+}
+
+/** Sends `payload` as `payload_json` with `files`, as multipart/form-data. */
+async function upload(
+  method: string,
+  path: string,
+  payload: unknown,
+  files: TestFile[],
+): Promise<Reply> {
+  const form = new FormData();
+  form.append("payload_json", JSON.stringify(payload));
+  for (const file of files) {
+    form.append(
+      file.field,
+      new Blob([file.bytes], { type: file.type ?? "image/png" }),
+      file.name,
+    );
+  }
+  const response = await fetch(`${discord.apiBase}${path}`, {
+    method,
+    headers: { Authorization: `Bot ${BOT_TOKEN}` },
+    body: form,
+  });
+  const text = await response.text();
+  return {
+    status: response.status,
+    body: text === "" ? undefined : (JSON.parse(text) as unknown),
+  };
+}
+
+const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+/** A stand-in PNG: the signature, then `length` more bytes of `fill`. */
+function png(length = 8, fill = 1): Uint8Array {
+  const bytes = new Uint8Array(PNG_SIGNATURE.length + length).fill(fill);
+  bytes.set(PNG_SIGNATURE);
+  return bytes;
+}
+
+const file = (n: number, name: string, bytes = png()): TestFile => ({
+  field: `files[${String(n)}]`,
+  name,
+  bytes,
+});
+
+/** A Components V2 message showing `urls` in a media gallery. */
+const gallery = (...urls: string[]) =>
+  v2({
+    type: ComponentType.MediaGallery,
+    items: urls.map((url) => ({ media: { url }, description: "Map" })),
+  });
+
+/** Checks a 413 Request entity too large naming the rule. */
+function expectTooLarge(reply: Reply, rule: Rule): void {
+  expect(reply.status).toBe(413);
+  expect(reply.body).toMatchObject({
+    code: 40005,
+    errors: expect.arrayContaining([
+      expect.objectContaining({ rule: rule.id, docs: rule.docs }),
+    ]) as unknown,
+  });
+  refused.add(rule.id);
+  expect(discord.takeRejections()).toHaveLength(1);
+}
+
 function expectRefused(reply: Reply, rule: Rule): void {
   expect(reply.status).toBe(400);
   expect(reply.body).toMatchObject({
@@ -123,6 +194,13 @@ const select = (options: number, extra: object = {}) => ({
 });
 const option = (extra: object) =>
   select(1, { options: [{ label: "Ridge", value: "ridge", ...extra }] });
+const media = (items: number, description = "Map") => ({
+  type: ComponentType.MediaGallery,
+  items: Array.from({ length: items }, (_, i) => ({
+    media: { url: `https://example.com/${String(i)}.png` },
+    description,
+  })),
+});
 
 describe("Create Message refuses what Discord refuses", () => {
   const cases: [string, Rule, object, object][] = [
@@ -300,6 +378,30 @@ describe("Create Message refuses what Discord refuses", () => {
       RULES.customIdLength,
       v2(row(button(`hb:test:${x(92)}`))),
       v2(row(button(`hb:test:${x(93)}`))),
+    ],
+    [
+      "a media gallery with more than 10 items",
+      RULES.mediaGalleryItems,
+      v2(media(10)),
+      v2(media(11)),
+    ],
+    [
+      "a media gallery with no items",
+      RULES.mediaGalleryItems,
+      v2(media(1)),
+      v2(media(0)),
+    ],
+    [
+      "a media gallery description over 1024 characters",
+      RULES.mediaGalleryDescription,
+      v2(media(1, x(1024))),
+      v2(media(1, x(1025))),
+    ],
+    [
+      "an attachment:// media url without the attachment",
+      RULES.attachmentUrl,
+      gallery("https://example.com/map.png"),
+      gallery("attachment://map.png"),
     ],
     [
       "a custom_id used twice in one message",
@@ -773,6 +875,7 @@ describe("scheduled events", () => {
         entity_type: 3,
         entity_id: null,
         entity_metadata: { location: hike.entity_metadata.location },
+        image: null,
       },
     ]);
     expect(reply.body).toMatchObject({ id, name: hike.name });
@@ -910,6 +1013,67 @@ describe("scheduled events", () => {
     );
     discord.grantCreateEvents(guild);
     expect(discord.scheduledEvents(guild)[0]?.description).toBeNull();
+  });
+
+  it("sets, replaces and removes an event's cover from image data, and refuses anything else", async () => {
+    const guild = "220000000000000007";
+    discord.addGuild({ id: guild, ownerId: "420000000000000001" });
+    const data = (type: string, bytes: Uint8Array) =>
+      `data:${type};base64,${Buffer.from(bytes).toString("base64")}`;
+    const first = png(16, 1);
+    const created = await call("POST", path(guild), {
+      ...hike,
+      image: data("image/png", first),
+    });
+    expect(created.status).toBe(200);
+    const { id, image } = created.body as { id: string; image: string };
+    expect(image).toMatch(/^[0-9a-f]{40}$/);
+    expect(discord.scheduledEventImage(guild, id)).toEqual(first);
+
+    const second = png(16, 2);
+    const edited = await call("PATCH", `${path(guild)}/${id}`, {
+      image: data("image/png", second),
+    });
+    expect(edited).toMatchObject({ status: 200, body: { id } });
+    expect((edited.body as { image: string }).image).not.toBe(image);
+    expect(discord.scheduledEventImage(guild, id)).toEqual(second);
+    expect(
+      await call("PATCH", `${path(guild)}/${id}`, { description: "x" }),
+    ).toMatchObject({ status: 200 });
+    expect(discord.scheduledEventImage(guild, id)).toEqual(second);
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 1]);
+    expect(
+      await call("PATCH", `${path(guild)}/${id}`, {
+        image: data("image/jpeg", jpeg),
+      }),
+    ).toMatchObject({ status: 200 });
+
+    expectRefused(
+      await call("PATCH", `${path(guild)}/${id}`, {
+        image: data("image/png", jpeg),
+      }),
+      RULES.imageData,
+    );
+    expectRefused(
+      await call("PATCH", `${path(guild)}/${id}`, {
+        image: "https://example.com/map.png",
+      }),
+      RULES.imageData,
+    );
+    expectRefused(
+      await call("POST", path(guild), {
+        ...hike,
+        image: data("image/webp", first),
+      }),
+      RULES.imageData,
+    );
+    expect(discord.scheduledEventImage(guild, id)).toEqual(jpeg);
+
+    const removed = await call("PATCH", `${path(guild)}/${id}`, {
+      image: null,
+    });
+    expect(removed).toMatchObject({ status: 200, body: { image: null } });
+    expect(discord.scheduledEventImage(guild, id)).toBeUndefined();
   });
 
   it("answers Unknown Guild for a guild it does not hold", async () => {
@@ -1200,6 +1364,229 @@ describe("OAuth2 sign-in", () => {
       await get("/users/@me/guilds?limit=201", bot),
       RULES.currentUserGuildsLimit,
     );
+  });
+});
+
+describe("file uploads", () => {
+  const messages = `/channels/${TEXT_CHANNEL}/messages`;
+
+  /** Posts a message with `hike-map.png` and returns its id. */
+  async function withPicture(bytes = png()): Promise<string> {
+    const reply = await upload(
+      "POST",
+      messages,
+      {
+        ...gallery("attachment://hike-map.png"),
+        attachments: [{ id: 0, filename: "hike-map.png" }],
+      },
+      [file(0, "hike-map.png", bytes)],
+    );
+    expect(reply.status).toBe(200);
+    return (reply.body as { id: string }).id;
+  }
+
+  it("attaches the files of a multipart message and records them", async () => {
+    const bytes = png(32);
+    const id = await withPicture(bytes);
+    const stored = discord.message(id);
+    expect(stored?.attachments).toMatchObject([
+      { filename: "hike-map.png", content_type: "image/png", size: 40 },
+    ]);
+    expect(stored?.attachments[0]?.bytes).toEqual(bytes);
+    const request = discord.requests.at(-1);
+    expect(request?.headers["content-type"]).toMatch(/^multipart\/form-data/);
+    expect(request?.body).toMatchObject({ flags: MessageFlags.IsComponentsV2 });
+    expect(request?.files).toEqual([
+      {
+        field: "files[0]",
+        filename: "hike-map.png",
+        contentType: "image/png",
+        size: 40,
+      },
+    ]);
+    const attachment = stored?.attachments[0];
+    expect(request?.response).toMatchObject({
+      attachments: [
+        {
+          id: attachment?.id,
+          filename: "hike-map.png",
+          url: `https://cdn.discordapp.com/attachments/${TEXT_CHANNEL}/${attachment?.id ?? ""}/hike-map.png`,
+        },
+      ],
+    });
+  });
+
+  it("keeps the attachments on an edit without attachments, also when it appends a file", async () => {
+    const id = await withPicture();
+    const [picture] = discord.message(id)?.attachments ?? [];
+    const path = `${messages}/${id}`;
+    expect(
+      await call("PATCH", path, gallery("attachment://hike-map.png")),
+    ).toMatchObject({ status: 200 });
+    expect(discord.message(id)?.attachments).toEqual([picture]);
+    expect(
+      await upload("PATCH", path, gallery("attachment://hike-map.png"), [
+        file(0, "extra.png"),
+      ]),
+    ).toMatchObject({ status: 200 });
+    expect(
+      discord.message(id)?.attachments.map((a) => [a.id, a.filename]),
+    ).toEqual([
+      [picture?.id, "hike-map.png"],
+      [expect.any(String) as unknown, "extra.png"],
+    ]);
+  });
+
+  it("replaces the attachments with those an edit lists, and removes them with an empty list", async () => {
+    const id = await withPicture(png(8, 1));
+    const [old] = discord.message(id)?.attachments ?? [];
+    const path = `${messages}/${id}`;
+    const replaced = await upload(
+      "PATCH",
+      path,
+      {
+        ...gallery("attachment://hike-map.png"),
+        attachments: [{ id: 0, filename: "hike-map.png" }],
+      },
+      [file(0, "hike-map.png", png(8, 2))],
+    );
+    expect(replaced.status).toBe(200);
+    const [now] = discord.message(id)?.attachments ?? [];
+    expect(discord.message(id)?.attachments).toHaveLength(1);
+    expect(now?.id).not.toBe(old?.id);
+    expect(now?.bytes).toEqual(png(8, 2));
+
+    expect(
+      await upload(
+        "PATCH",
+        path,
+        {
+          ...gallery("attachment://hike-map.png", "attachment://extra.png"),
+          attachments: [{ id: now?.id }, { id: 0, filename: "extra.png" }],
+        },
+        [file(0, "extra.png")],
+      ),
+    ).toMatchObject({ status: 200 });
+    expect(discord.message(id)?.attachments.map((a) => a.filename)).toEqual([
+      "hike-map.png",
+      "extra.png",
+    ]);
+
+    expect(
+      await call("PATCH", path, { ...v2(text("No map")), attachments: [] }),
+    ).toMatchObject({ status: 200 });
+    expect(discord.message(id)?.attachments).toEqual([]);
+    expectRefused(
+      await call("PATCH", path, gallery("attachment://hike-map.png")),
+      RULES.attachmentUrl,
+    );
+  });
+
+  it("refuses a gallery that names a file the edit removes", async () => {
+    const id = await withPicture();
+    expectRefused(
+      await call("PATCH", `${messages}/${id}`, {
+        ...gallery("attachment://hike-map.png"),
+        attachments: [],
+      }),
+      RULES.attachmentUrl,
+    );
+    expect(discord.message(id)?.attachments).toHaveLength(1);
+  });
+
+  it("refuses a file field not named files[n]", async () => {
+    expectRefused(
+      await upload("POST", messages, v2(text("Map")), [
+        { field: "file", name: "map.png", bytes: png() },
+      ]),
+      RULES.uploadFieldName,
+    );
+    expectRefused(
+      await upload("POST", messages, v2(text("Map")), [
+        file(0, "a.png"),
+        file(0, "b.png"),
+      ]),
+      RULES.uploadFieldName,
+    );
+  });
+
+  it("refuses an attachments entry that names no uploaded file and no attachment", async () => {
+    expectRefused(
+      await upload(
+        "POST",
+        messages,
+        { ...v2(text("Map")), attachments: [{ id: 1, filename: "map.png" }] },
+        [file(0, "map.png")],
+      ),
+      RULES.attachmentReference,
+    );
+    const id = await withPicture();
+    expectRefused(
+      await call("PATCH", `${messages}/${id}`, {
+        ...v2(text("Map")),
+        attachments: [{ id: "1300000000000000000" }],
+      }),
+      RULES.attachmentReference,
+    );
+  });
+
+  it("refuses a file over 20 MiB and a request over 25 MiB with 413", async () => {
+    const mib = 1024 * 1024;
+    expect(
+      await upload("POST", messages, v2(text("Map")), [
+        file(0, "big.png", new Uint8Array(20 * mib)),
+      ]),
+    ).toMatchObject({ status: 200 });
+    expectTooLarge(
+      await upload("POST", messages, v2(text("Map")), [
+        file(0, "big.png", new Uint8Array(20 * mib + 1)),
+      ]),
+      RULES.maxFileSize,
+    );
+    expect(
+      await upload("POST", messages, v2(text("Map")), [
+        file(0, "a.png", new Uint8Array(12 * mib)),
+        file(1, "b.png", new Uint8Array(12 * mib)),
+      ]),
+    ).toMatchObject({ status: 200 });
+    expectTooLarge(
+      await upload("POST", messages, v2(text("Map")), [
+        file(0, "a.png", new Uint8Array(13 * mib)),
+        file(1, "b.png", new Uint8Array(13 * mib)),
+      ]),
+      RULES.maxMessageRequestSize,
+    );
+  });
+
+  it("fails the next upload in a forum's thread as set up, and only that one", async () => {
+    const created = await call("POST", `/channels/${FORUM_CHANNEL}/threads`, {
+      name: "Ridge",
+      message: v2(text("Hike details")),
+    });
+    const { id: thread } = created.body as { id: string };
+    const path = `/channels/${thread}/messages/${thread}`;
+    const picture = {
+      ...gallery("attachment://hike-map.png"),
+      attachments: [{ id: 0, filename: "hike-map.png" }],
+    };
+    discord.failNextUpload(FORUM_CHANNEL);
+    expect(
+      await call("PATCH", path, v2(text("Hike details, edited"))),
+    ).toMatchObject({ status: 200 });
+    expect(
+      await upload("PATCH", path, picture, [file(0, "hike-map.png")]),
+    ).toMatchObject({ status: 500 });
+    expect(discord.message(thread)?.attachments).toEqual([]);
+    expect(
+      await upload("PATCH", path, picture, [file(0, "hike-map.png")]),
+    ).toMatchObject({ status: 200 });
+    expect(discord.message(thread)?.attachments).toHaveLength(1);
+
+    discord.failNextUpload(thread, 413);
+    expect(
+      await upload("PATCH", path, picture, [file(0, "hike-map.png")]),
+    ).toMatchObject({ status: 413, body: { code: 40005 } });
+    expect(discord.takeRejections()).toEqual([]);
   });
 });
 

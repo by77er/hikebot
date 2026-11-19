@@ -140,6 +140,12 @@ export const migrations: readonly Migration[] = [
       ALTER TABLE guild_settings ADD COLUMN cadence_on_since INTEGER;
     `,
   },
+  {
+    // Where the map picture of a completed round's hike, as shown on its
+    // thread and its event, is kept in the MAPS bucket, if one is shown.
+    name: "0008_round_map_picture",
+    sql: "ALTER TABLE rounds ADD COLUMN map_picture_key TEXT",
+  },
 ];
 
 /**
