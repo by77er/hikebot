@@ -79,10 +79,16 @@ describe("MapView", () => {
     expect([...html.matchAll(/type="button"/g)]).toHaveLength(2);
   });
 
-  it("stays hidden without a picture, until the script shows the map", () => {
+  it("says the map needs JavaScript where it has no picture, in the frame the map takes", async () => {
     const html = render(<MapView title="Map" markers={[PIN]} />);
-    expect(html).toMatch(/<figure class="map-view__figure"[^>]* hidden/);
     expect(html).not.toContain("<img");
+    expect(html).not.toMatch(/<figure[^>]*hidden/);
+    expect(html).toContain(
+      '<div class="map-view__frame"><p class="map-view__picture map-view__fallback">',
+    );
+    expect(await spokenText(html)).toContain(
+      "Turn on JavaScript to see the map.",
+    );
   });
 
   it("lists numbered places under the map, in their order, with their coordinates", async () => {

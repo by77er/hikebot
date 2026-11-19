@@ -3,13 +3,16 @@
  * src/web/components/map-view.tsx): reads its settings from `data-map`,
  * loads the style from this site, and draws the map with MapLibre GL JS
  * (./maplibre/, which starts its worker from its own folder here) over the
- * stored picture, which it removes once the map has drawn. Markers, the
- * zoom buttons and the attribution are added; a map whose style cannot be
- * loaded, or whose places all lie outside the map data, is left as it was.
+ * stored picture (or the line saying the map needs JavaScript), which it
+ * removes once the map has drawn. Markers, the zoom buttons and the
+ * attribution are added. A map whose style cannot be loaded, or whose
+ * places all lie outside the map data, keeps its picture, or is hidden
+ * when it has none.
  *
  * `data-map-state` on the figure says where it is: `loading`, `idle` once
  * the map has drawn everything it shows (screenshots wait for it), or
- * `failed`. Loaded as a module, so a page with two maps runs it once.
+ * `failed`; `data-map-zoom` is the zoom it shows. Loaded as a module, so a
+ * page with two maps runs it once.
  */
 import {
   AttributionControl,
@@ -32,6 +35,7 @@ for (const figure of document.querySelectorAll("figure[data-map]")) {
   figure.dataset.mapState = "loading";
   start(figure).catch((error) => {
     figure.dataset.mapState = "failed";
+    if (!figure.querySelector("img.map-view__picture")) figure.hidden = true;
     console.warn(`The map could not be shown: ${String(error)}`);
   });
 }
@@ -49,7 +53,6 @@ async function start(figure) {
   const frame = figure.querySelector(".map-view__frame");
   const picture = frame.querySelector(".map-view__picture");
   const zoom = frame.querySelector(".map-view__zoom");
-  figure.hidden = false;
 
   const single = markers.length === 1 ? markers[0] : null;
   const map = new MapLibreMap({
@@ -90,9 +93,14 @@ async function start(figure) {
     });
   }
 
+  const showZoom = () => {
+    figure.dataset.mapZoom = map.getZoom().toFixed(2);
+  };
+  map.on("zoomend", showZoom);
   map.once("idle", () => {
     picture?.remove();
     zoom.hidden = false;
+    showZoom();
     figure.dataset.mapState = "idle";
   });
 }

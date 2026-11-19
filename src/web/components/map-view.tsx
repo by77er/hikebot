@@ -9,8 +9,10 @@
  * name and the coordinates of each, which is also their text alternative.
  *
  * Without JavaScript it shows `picture`, the stored map picture, at the
- * same size the map takes; a map without a picture stays hidden (the list
- * shows). The
+ * same size the map takes, or without one a line saying the map needs
+ * JavaScript, in the same frame, so the map arrives without moving
+ * anything. Where the script finds no map data for the places, it hides
+ * the frame (the list still shows). The
  * frame keeps a 3:2 shape (the picture's), so nothing moves when the map
  * replaces the picture. The map is one look in both colour schemes, as the
  * picture is ("Cairn map" in docs/design-system.md); the frame sets it off
@@ -84,13 +86,9 @@ export function MapView({
   const numbered = markers.filter((marker) => marker.number !== undefined);
   return (
     <div class={framed ? "map-view map-view--framed" : "map-view"}>
-      <figure
-        class="map-view__figure"
-        data-map={JSON.stringify(config)}
-        hidden={picture === null ? true : undefined}
-      >
+      <figure class="map-view__figure" data-map={JSON.stringify(config)}>
         <div class="map-view__frame">
-          {picture !== null && (
+          {picture !== null ? (
             <img
               class="map-view__picture"
               src={picture}
@@ -98,6 +96,10 @@ export function MapView({
               width={600}
               height={400}
             />
+          ) : (
+            <p class="map-view__picture map-view__fallback">
+              Turn on JavaScript to see the map.
+            </p>
           )}
           <div class="map-view__zoom" hidden>
             <button type="button" class="map-view__button" data-zoom="in">

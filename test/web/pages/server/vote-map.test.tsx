@@ -24,8 +24,8 @@ describe("VoteMap", () => {
     expect(html).toContain(
       "&quot;label&quot;:&quot;Little Si&quot;,&quot;number&quot;:2",
     );
-    // Without JavaScript only the list shows: there is no picture.
-    expect(html).toMatch(/<figure[^>]* hidden/);
+    // There is no picture to show without JavaScript.
+    expect(text).toContain("Turn on JavaScript to see the map.");
   });
 
   it("shows nothing while no option has a place", () => {
