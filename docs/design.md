@@ -75,7 +75,9 @@ The Worker (`src/index.ts`) handles the rest:
   - `GET /styleguide` (or `HEAD`): the style guide, every token and
     component of the design system (`docs/design-system.md`);
     `GET /styleguide/<component>` is the page of its own of a component
-    too large for that page (the HTML 404 page for any other name).
+    too large for that page (the HTML 404 page for any other name), and
+    `GET /styleguide/map` the Cairn map: the committed map sample pictures
+    and each colour role of the map style as a swatch.
   - `GET /assets/*`: the file from `public/` through the `ASSETS` binding,
     for a request that reaches the Worker.
   - `GET /assets/v/<version>/*`: the same files under the deployed
@@ -137,7 +139,7 @@ so a name or title from Discord or a form cannot inject markup.
   skip link to `<main id="main">`, and the header, main and footer
   landmarks), and the components are in `src/web/components/`.
   `GET /styleguide` shows every token and component, or links the
-  component's own page.
+  component's own page, and the map style's (`/styleguide/map`).
 - **Static files.** `public/` is the Workers Static Assets directory
   declared under `assets` in `wrangler.jsonc`, so
   `public/assets/cairn/cairn.css` is served at `/assets/cairn/cairn.css`,
@@ -2273,24 +2275,29 @@ labels; the pin; the scale bar (bottom left, in the requested units) and the
 attribution `MapReader.attribution()` returns (bottom right); a thin frame.
 
 **Labels.** Peaks with a name get a triangle, the name and the elevation (in
-metres or feet), places get their name (towns larger and bolder than
+metres or feet), in semibold; places get their name (towns larger than
 villages and neighbourhoods), lakes and rivers their name in italic water
 blue (rivers along their line). A label is shown up to a few zooms before
 the data's own `min_zoom` for it where it matters on a hike (peaks and water
 two zooms). Labels are measured with the font's own advance widths
 (`src/maps/font-metrics.ts`) and placed greedily by importance
-(`src/maps/labels.ts`): each at the first of its candidate positions that
+(`src/maps/labels.ts`), in the order of `LABEL_PRIORITY` (peaks, then water,
+then towns, villages and neighbourhoods): each at the first of its candidate positions that
 stays inside the picture and clear, by a padding, of every label placed and
 of the pin, scale bar and attribution; a label with no free position is left
 out, so no two labels and no label and the pin overlap. A peak under the pin
 is labelled beside the pin and its triangle left out.
 
-**Style.** `src/maps/style.ts` is the style, as data: a colour per role, the
-see-through roles' opacity, line widths and label sizes as `[zoom, value]`
-stops, dash patterns, the zoom each kind of feature starts at, the label
-fonts and the furniture's sizes, and `STYLE_VERSION`. The drawing code reads
-only these and writes no colour of its own (a test checks the sources). The
-colour roles:
+**Style.** `src/maps/style.ts` is the style, as data: a recipe per colour
+role that makes its colour from Cairn's tokens, the see-through roles'
+opacity, line widths and label sizes as `[zoom, value]` stops, dash
+patterns, the zoom each kind of feature starts at, the label families,
+fonts and priorities, the furniture's sizes, and `STYLE_VERSION`. The
+drawing code reads only these and writes no colour of its own (a test
+checks the sources). The style is part of the Cairn design system: "Cairn
+map" in `docs/design-system.md` gives each role's token and recipe, the
+hierarchy and the reasons, and `/styleguide/map` shows them. The colour
+roles:
 
 | Role                                                         | Used for                                                                  |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------- |
@@ -2304,16 +2311,20 @@ colour roles:
 | `building`                                                   | buildings, faint                                                          |
 | `label`, `labelHalo`                                         | place and peak names; the halo round every label                          |
 | `peak`                                                       | peak triangles                                                            |
-| `pin`, `pinOutline`                                          | the pin: trail-blaze orange with a light outline                          |
+| `pin`, `pinOutline`, `pinKeyline`                            | the pin: the trail blaze, a light outline and a dark line round it        |
 | `furniture`, `furnitureBackground`, `frame`                  | scale bar and attribution text, their backing, the picture's frame        |
 
-The palette is calm and light (warm paper land, pine greens, lake blue,
-granite greys) so the picture reads at Discord's display size, about 400
-pixels wide, on both of Discord's themes; the trails and the pin are the
-strongest marks. Labels use Noto Sans (SIL Open Font License 1.1), regular,
-semibold and italic, subset to Latin with its extensions, IPA and combining
-marks so names such as `q̓əlbc̓` draw; the files and their licence are in
-`src/maps/fonts/`, loaded only by `src/maps/font.ts`.
+The palette is Cairn's light scheme (warm paper land, forest from the
+success green, lake blue water, granite greys) so the picture reads at
+Discord's display size, about 400 pixels wide, on both of Discord's themes;
+the trails, the pin and the summits are the strongest marks. The pin is the
+trail blaze, an upright orange rectangle on a short pointer whose tip is on
+the point. Labels use Public Sans, Cairn's typeface, regular, semibold and
+italic; a label with a character Public Sans lacks (IPA, most combining
+marks, as in `Mount Si / q̓əlbc̓`) is set wholly in Noto Sans, subset to
+Latin with its extensions, IPA and combining marks, so its marks sit on
+their letters. Both are under the SIL Open Font License 1.1; the files and
+their licences are in `src/maps/fonts/`, loaded only by `src/maps/font.ts`.
 
 **Stored pictures.** A drawn picture is put into `MAPS` under
 `pictures/style-<STYLE_VERSION>/build-<build>/z<zoom>-<width>x<height>@<ratio>x-<units>/<lat>,<lon>.png`
@@ -2325,5 +2336,8 @@ stay in the bucket.
 **Samples.** `npm run maps:samples` starts the Worker in local workerd with
 the sample archive and draws a fixed set of views (`scripts/map-samples.ts`:
 the sample point at zooms 11, 12 and 14, also in imperial units, a peak, a
-lake shore and a town) into `docs/maps/samples/`. They are committed, and a
-style change is reviewed on them.
+lake shore and a town) into `public/assets/maps/samples/`. The sample
+archive has no glacier, so it also draws the pin on forest, water and snow
+from made-up tiles of one fill, with the same `buildSvg` and rasterizer.
+They are committed, `/styleguide/map` shows them, and a style change is
+reviewed on them.

@@ -90,13 +90,13 @@ export const PIN_FILLS = [
 
 export type PinFill = (typeof PIN_FILLS)[number];
 
-/** The scene of a pin on one fill, at zoom 14, 480 by 320 at 2x. */
+/** The scene of a pin on one fill, at zoom 14, 1200 by 800 at 2x. */
 export function pinScene(fill: PinFill, fonts: LabelFont): Scene {
   const view = viewportAt(regions.samplePoint, {
     zoom: 14,
     tileZoom: 14,
-    width: 480,
-    height: 320,
+    width: 1200,
+    height: 800,
     pixelRatio: 2,
   });
   const extent = 4096;

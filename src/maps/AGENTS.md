@@ -110,39 +110,74 @@
 
 ## Change the map style
 
-1. Change the roles' colours, opacities, widths, dashes, zooms, label sizes
-   or furniture in `src/maps/style.ts`. Put every colour there, under a
-   role. For a new kind of feature, add a role to `COLOURS` in
-   `src/maps/style.ts` and draw it from that role in `src/maps/svg.ts`.
-2. To change the typeface, put its TrueType files (regular, semibold and
-   italic) and its licence in `src/maps/fonts/`, then change the imports and
-   `FAMILY` in `src/maps/font.ts`. Subset each file first, with the same
-   ranges as the files there, using fontTools in a virtual environment:
+"Cairn map" in `docs/design-system.md` gives the roles, their tokens and the
+hierarchy the style keeps.
+
+1. Change the opacities, widths, dashes, zooms, label sizes, priorities or
+   furniture in `src/maps/style.ts`. A colour comes from a recipe in
+   `RECIPES`: a Cairn token, or a share of it mixed into another. For a new
+   kind of feature, add a role to `RECIPES` and draw it from that role in
+   `src/maps/svg.ts`.
+2. For each role whose colour you changed or added, print the colours the
+   recipes make and copy the role's line into the map group at the end of
+   `:root` in `public/assets/cairn/tokens.css`:
+
+   ```sh
+   npx tsx -e 'import("./src/maps/style.ts").then(({ COLOURS }) => { for (const [role, colour] of Object.entries(COLOURS)) console.log(`--map-${role.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase())}: ${colour};`); })'
+   ```
+
+   A new role also gets its swatch line at the end of
+   `public/assets/cairn/pages/styleguide.css`, an entry in
+   `MAP_ROLE_GROUPS` in `src/web/pages/styleguide-map.tsx` and a row in the
+   table of "Cairn map" in `docs/design-system.md`. If a Cairn colour the
+   recipes read changed in `tokens.css`, change it in `CAIRN` too. Check
+   that the style, the tokens and the contrast of trails and the pin agree:
+
+   ```sh
+   npx vitest run test/maps/style-tokens.test.ts
+   ```
+
+3. To change the typeface, put its TrueType files (regular, semibold and
+   italic) and its licence in `src/maps/fonts/`, then change the imports in
+   `src/maps/font.ts` and `FAMILY` in `src/maps/style.ts`. Subset each file
+   first, with the same ranges as the files there, using fontTools in a
+   virtual environment, and give a semibold file the typographic family
+   name, or the rasterizer does not find it for weight 600:
 
    ```sh
    python3 -m venv /tmp/fonttools && /tmp/fonttools/bin/pip install fonttools
    /tmp/fonttools/bin/pyftsubset <Font>-Regular.ttf --unicodes="U+0020-007E,U+00A0-024F,U+0250-02FF,U+0300-036F,U+1E00-1EFF,U+2010-2027,U+2030-205E,U+20AC,U+2116,U+2122,U+2190-2193,U+2212" --layout-features='kern,liga,ccmp,locl,mark,mkmk' --no-hinting --desubroutinize --output-file=src/maps/fonts/<Font>-Regular.ttf
+   /tmp/fonttools/bin/python -c 'import sys; from fontTools.ttLib import TTFont; f = TTFont(sys.argv[1]); f["name"].setName(sys.argv[2], 16, 3, 1, 0x409); f["name"].setName("SemiBold", 17, 3, 1, 0x409); f.save(sys.argv[1])' src/maps/fonts/<Font>-SemiBold.ttf "<Family>"
+   npx vitest run test/maps/font-metrics.test.ts
    ```
 
-3. Add 1 to `STYLE_VERSION` in `src/maps/style.ts`, so pictures drawn in the
+4. Add 1 to `STYLE_VERSION` in `src/maps/style.ts`, so pictures drawn in the
    old style are drawn again instead of served from the bucket.
-4. Draw the samples again and look at every file in `docs/maps/samples/`
-   at full size and at about 400 pixels wide on a dark (`#313338`) and a
-   white background, as Discord shows them. Check that the trails and the
-   pin stand out, that labels are legible and do not crowd, and that the
-   scale bar and the attribution read:
+5. Keep the samples from before the change, draw them again, and put each
+   one, before and after, at 400 pixels wide on Discord's dark (`#313338`)
+   and light (`#ffffff`) backgrounds, as Discord shows them on a phone. Look
+   at every file in `public/assets/maps/samples/` that way and at full size.
+   Check that the trail, the road to the trailhead, water and the summit's
+   name and height come first, that the pin stands out on forest, water and
+   snow, that labels are legible and do not crowd, and that the scale bar
+   and the attribution read:
 
    ```sh
+   mkdir -p /tmp/before && cp public/assets/maps/samples/*.png /tmp/before/
    npm run maps:samples
+   git status --short public/assets/maps/samples
    ```
 
-5. Run the map tests and commit the style, the fonts and the samples
-   together:
+6. Run the map tests, take the screenshots of `/styleguide/map` as "Take the
+   screenshots" in `src/web/AGENTS.md` says, and commit the style, the
+   tokens, the fonts and the samples together:
 
    ```sh
-   npx vitest run test/maps
-   git add src/maps docs/maps/samples
+   npx vitest run test/maps test/web
+   npm run screenshots
+   git add src/maps public/assets docs/screenshots
    ```
 
-6. Put the samples under `## Screenshots` in the pull request's description
-   and your findings under `## Design review`.
+7. Put the samples before and after under `## Screenshots` in the pull
+   request's description and your findings under `## Design review`, as
+   "Review your own UI change as a designer" in `src/web/AGENTS.md` says.

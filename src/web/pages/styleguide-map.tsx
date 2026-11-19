@@ -15,45 +15,55 @@ import { Section } from "./styleguide/section";
 export const MAP_SAMPLES_DIR = "maps/samples";
 
 /** The committed samples, in the order the page shows them. */
-export const MAP_SAMPLES: { file: string; alt: string }[] = [
+export const MAP_SAMPLES: { file: string; caption: string; alt: string }[] = [
   {
     file: "trailhead-z11.png",
+    caption: "The trailhead, zoom 11",
     alt: "Zoom 11: the pin at the Mount Si trailhead, North Bend to the west, the river below and Mount Si to the north.",
   },
   {
     file: "trailhead-z12.png",
+    caption: "The trailhead, zoom 12 (the default)",
     alt: "Zoom 12, the default: the pin at the trailhead with the trails up Mount Si, Little Si and Mount Teneriffe.",
   },
   {
     file: "trailhead-z12-imperial.png",
+    caption: "The trailhead, zoom 12, imperial units",
     alt: "Zoom 12 in imperial units: the same view with elevations in feet and a scale bar in miles.",
   },
   {
     file: "trailhead-z14.png",
+    caption: "The trailhead, zoom 14",
     alt: "Zoom 14: the pin on the trailhead parking, the road below it and the trail leaving north.",
   },
   {
     file: "peak-z13.png",
+    caption: "Mount Si's summit, zoom 13",
     alt: "Zoom 13: the pin on Mount Si's summit, its name and height beside it, the trails around it.",
   },
   {
     file: "lake-z14.png",
+    caption: "Crater Lake's shore, zoom 14",
     alt: "Zoom 14: the pin on the shore of Crater Lake, between Crater Lake Peak and Dixie Peak.",
   },
   {
     file: "town-z14.png",
+    caption: "North Bend's centre, zoom 14",
     alt: "Zoom 14: the pin in North Bend's centre, the densest view, with streets, buildings and the river.",
   },
   {
     file: "pin-on-forest.png",
+    caption: "The pin on forest",
     alt: "The pin on forest: the orange blaze with its white outline and dark keyline.",
   },
   {
     file: "pin-on-water.png",
+    caption: "The pin on water",
     alt: "The pin on water: the orange blaze with its white outline and dark keyline.",
   },
   {
     file: "pin-on-snow.png",
+    caption: "The pin on snow",
     alt: "The pin on a glacier: the orange blaze with its white outline and dark keyline.",
   },
 ];
@@ -146,18 +156,18 @@ export function StyleguideMapPage({ tokens }: { tokens: SchemeTokens }) {
           intro="The pictures a change to the map style is reviewed on, about 400 pixels wide, as Discord shows them on a phone. The trail, the road to the trailhead, water and the summit's name and height come first; the pin stands out on forest, water and snow."
         >
           <ul class="styleguide-maps list-reset">
-            {MAP_SAMPLES.map(({ file, alt }) => (
+            {MAP_SAMPLES.map(({ file, caption, alt }) => (
               <li key={file}>
                 <figure class="stack stack--tight">
                   <img
                     src={assetPath(`${MAP_SAMPLES_DIR}/${file}`)}
                     alt={alt}
-                    width={file.startsWith("pin-") ? 480 : 1200}
-                    height={file.startsWith("pin-") ? 320 : 800}
+                    width={1200}
+                    height={800}
                     loading="lazy"
                   />
-                  <figcaption class="u-small u-muted">
-                    <code>{file}</code>
+                  <figcaption class="u-small">
+                    {caption} <code class="u-muted">{file}</code>
                   </figcaption>
                 </figure>
               </li>

@@ -8,6 +8,7 @@ with the real stylesheet; this document says why it is the way it is.
 
 How to build with it is in `src/web/AGENTS.md`: "Build a page from the
 design system", "Add a token" and "Add a component to the design system".
+The map picture is part of it too: "Cairn map" below.
 
 ## Who it is for, and where
 
@@ -300,8 +301,9 @@ The one breakpoint is **48rem (768px)**, written out in media queries
 because they cannot read custom properties. Below it there is a single
 column; above it the gutters and the space above the content grow.
 `--width-index`, `--width-swatch`, `--width-pair`, `--width-pair-sample`,
-`--width-shape` and `--width-scale-label` size the style guide's own grids
-and are used nowhere else.
+`--width-shape`, `--width-scale-label`, `--width-map-sample` and
+`--width-map-swatch` size the style guide's own grids and are used nowhere
+else.
 
 ## The stylesheet
 
@@ -653,6 +655,164 @@ Cairn meets WCAG 2.2 AA:
 - **No emoji, no exclamation marks**, no jokes in error messages.
 - **Numbers** as digits, with tabular figures in tallies and tables;
   dates as the bot shows them.
+
+## Cairn map
+
+The map picture the bot posts with a hike (`src/maps/`, "Map pictures" in
+`docs/design.md`) is part of Cairn: the same palette, the same typeface and
+the blaze, drawn by the renderer from the style data in `src/maps/style.ts`.
+`/styleguide/map` shows the committed sample pictures and every colour role
+as a swatch; how to change it is "Change the map style" in
+`src/maps/AGENTS.md`.
+
+### One look in both schemes
+
+A picture is a PNG posted into Discord, where the dark and the light theme
+show the same image, so the map has one look: Cairn's light scheme, a paper
+map. It is judged at about 400 pixels wide, as Discord shows it on a phone,
+on Discord's dark (`#313338`) and light (`#ffffff`) backgrounds. The paper
+(`#faf8f3`) is 11.9:1 against the dark background and the frame
+(`--map-frame`) 3.4:1, so the picture keeps its edge there, and 3.7:1
+against white.
+
+### Colour roles and their tokens
+
+Each role of the map is a token, `--map-<role>`, in the map group at the end
+of `:root` in `tokens.css`. The roles need tints the palette does not have
+(a forest, a lake, a road's casing), so each is made from one palette
+colour by a recipe, as CSS `color-mix(in srgb, var(--<token>) <share>,
+var(--<into>))` would make it: the token itself, or a share of it mixed into
+the paper (`--color-bg`) or another colour. The map tokens have no dark
+values: the picture has one look. `RECIPES` in `src/maps/style.ts` holds the
+recipes and `CAIRN` the palette's light values they read;
+`test/maps/style-tokens.test.ts` reads `tokens.css` and fails when a palette
+value, a recipe's result and its map token disagree, so changing a palette
+colour means updating `CAIRN` and the map tokens it feeds.
+
+| Role                   | Token                          | Value     | Made from                                  | Draws                                                    |
+| ---------------------- | ------------------------------ | --------- | ------------------------------------------ | -------------------------------------------------------- |
+| `land`                 | `--map-land`                   | `#faf8f3` | `--color-bg`                               | The paper: everything that is not another fill.          |
+| `forest`               | `--map-forest`                 | `#cdd9c9` | `22% --color-success in --color-bg`        | Forest and woods.                                        |
+| `grass`                | `--map-grass`                  | `#e5eae0` | `10% --color-success in --color-bg`        | Grass, meadow, scrub and wetland.                        |
+| `bareRock`             | `--map-bare-rock`              | `#e6e0d5` | `70% --color-border in --color-bg`         | Bare rock, scree and sand.                               |
+| `ice`                  | `--map-ice`                    | `#f1f5f8` | `6% --color-info in --color-surface`       | Glaciers and permanent snow.                             |
+| `settled`              | `--map-settled`                | `#ede9e0` | `45% --color-border in --color-bg`         | Towns' built-up areas.                                   |
+| `park`                 | `--map-park`                   | `#dbe3d6` | `15% --color-success in --color-bg`        | Parks, gardens and pitches.                              |
+| `protectedArea`        | `--map-protected-area`         | `#1f5d45` | `--color-primary`                          | Protected areas, at 8 % over the fills.                  |
+| `protectedAreaOutline` | `--map-protected-area-outline` | `#82a393` | `55% --color-primary in --color-bg`        | Their dashed edge.                                       |
+| `water`                | `--map-water`                  | `#8eafc3` | `50% --color-info in --color-surface`      | Lakes, rivers and streams.                               |
+| `waterLabel`           | `--map-water-label`            | `#1d5e86` | `--color-info`                             | Names of water.                                          |
+| `path`                 | `--map-path`                   | `#8f411f` | `60% --color-accent in --color-text`       | Trails and footpaths: the first thing a hiker looks for. |
+| `track`                | `--map-track`                  | `#845c44` | `35% --color-accent in --color-text-muted` | Unpaved tracks and forest roads.                         |
+| `pathHalo`             | `--map-path-halo`              | `#faf8f3` | `--color-bg`                               | The light line under trails and tracks.                  |
+| `roadMajor`            | `--map-road-major`             | `#ffffff` | `--color-surface`                          | Major roads, such as the road to a trailhead.            |
+| `roadMajorCasing`      | `--map-road-major-casing`      | `#566059` | `--color-text-muted`                       | Their edges.                                             |
+| `roadMinor`            | `--map-road-minor`             | `#ffffff` | `--color-surface`                          | Minor roads and streets.                                 |
+| `roadMinorCasing`      | `--map-road-minor-casing`      | `#7d8781` | `--color-border-strong`                    | Their edges.                                             |
+| `roadMotorway`         | `--map-road-motorway`          | `#ced0cb` | `35% --color-border-strong in --color-bg`  | Motorways, kept quiet.                                   |
+| `roadMotorwayCasing`   | `--map-road-motorway-casing`   | `#7d8781` | `--color-border-strong`                    | Their edges.                                             |
+| `rail`                 | `--map-rail`                   | `#566059` | `--color-text-muted`                       | Railways.                                                |
+| `building`             | `--map-building`               | `#7d8781` | `--color-border-strong`                    | Buildings, at 40 %.                                      |
+| `label`                | `--map-label`                  | `#1f2421` | `--color-text`                             | Names of places and peaks.                               |
+| `labelHalo`            | `--map-label-halo`             | `#faf8f3` | `--color-bg`                               | The halo round every label.                              |
+| `peak`                 | `--map-peak`                   | `#1f2421` | `--color-text`                             | Peaks' triangles.                                        |
+| `pin`                  | `--map-pin`                    | `#d9541e` | `--color-accent`                           | The pin: the trail blaze.                                |
+| `pinOutline`           | `--map-pin-outline`            | `#ffffff` | `--color-surface`                          | The pin's light outline.                                 |
+| `pinKeyline`           | `--map-pin-keyline`            | `#1f2421` | `--color-text`                             | The dark line round it, for snow and pale fills.         |
+| `furniture`            | `--map-furniture`              | `#1f2421` | `--color-text`                             | The scale bar and the attribution.                       |
+| `furnitureBackground`  | `--map-furniture-background`   | `#ffffff` | `--color-surface`                          | Their backing, at 80 %.                                  |
+| `frame`                | `--map-frame`                  | `#7d8781` | `--color-border-strong`                    | The line round the picture.                              |
+
+Why these:
+
+- **Paper and greens.** Land is the page's paper. Forest, grass and parks
+  are the success green at 22, 10 and 15 per cent: greener than pine, which
+  turns grey when mixed this light. Built-up areas and bare rock are the
+  border colour, sandstone, at 45 and 70 per cent.
+- **Water** is lake blue at half strength in white, so lakes and rivers
+  read blue against both the paper and the forest; water names are lake
+  blue itself.
+- **Trails** are the blaze weathered: 60 per cent of the accent in the text
+  colour, a rust that is the strongest line on the map (4.9:1 on forest,
+  6.7:1 on the paper) without competing with the pin's pure orange. Tracks
+  are the accent at 35 per cent in the muted text colour, quieter.
+- **Roads** are white with granite casings; a major road, such as the road
+  to a trailhead, has the darker muted-text casing. Motorways are a pale
+  grey with a light casing, so a motorway across the picture does not pull
+  the eye from the trail.
+- **The pin** is the accent with a white outline (4.0:1 between them) and a
+  dark keyline outside it (10.8:1 on forest, 6.8:1 on water, 14.4:1 on
+  snow), so it stays visible on any fill, including snow, where the white
+  outline alone would vanish, and water, where orange alone is 1.7:1.
+- **Labels** are the text colour on a paper halo (14.9:1); water names are
+  lake blue on it (6.6:1).
+
+Fills are told apart by hue and by what is drawn on them, not by contrast:
+water on forest is 1.6:1. Lines and marks are checked: the test above also
+fails when a trail falls below 3:1 on any land fill, or the pin's keyline
+below 3:1 on any fill or water.
+
+### Typeface
+
+Labels, the scale bar and the attribution are set in **Public Sans**,
+regular, semibold and italic, from the static TrueType files of the Public
+Sans release 2.001 (the version the web font carries), subset with fontTools
+to Latin with its extensions and the punctuation in use, and unhinted; the
+rasterizer, resvg, takes TrueType or OpenType, not WOFF2. The files and the
+licence (`PublicSans-OFL.txt`, SIL Open Font License 1.1) are in
+`src/maps/fonts/`.
+
+Public Sans has no IPA and few combining marks, and OpenStreetMap names here
+use them (`Mount Si / q̓əlbc̓`). resvg would draw a missing mark from another
+font beside its letter rather than on it, so a label with any character
+Public Sans lacks is set wholly in **Noto Sans** (OFL, `NotoSans-OFL.txt`),
+subset to Latin, IPA and combining marks. Its semibold file carries the
+typographic family name "Noto Sans", so resvg finds it for weight 600.
+
+Italic marks water names only, as on every topographic map: there it names
+a kind of feature, not emphasis, which is why the map keeps it while the
+pages do not.
+
+### Hierarchy
+
+A hiker opens the picture to find the trail, the road to the trailhead,
+water, and the summit's name and height, in that order, at about 400 pixels
+wide. The style is tuned at zooms 11, 12 and 14 on the samples for that:
+
+1. **The pin** is the only orange shape and the largest mark: the blaze,
+   13 by 28 logical pixels on an 8-pixel pointer whose tip is on the point.
+2. **Trails** are the widest dashed lines, 2.3 logical pixels at zooms 11
+   and 12 and 2.6 at 14, over a paper halo, drawn above every road.
+3. **Summits** are labelled first: semibold, 15.5 to 17 logical pixels,
+   with the height on a second line, and they win every overlap with other
+   labels (`LABEL_PRIORITY`: peaks, then water, towns, villages,
+   neighbourhoods).
+4. **Water** is lake blue, its names italic in the same blue.
+5. **Roads** are white with casings; major roads are wider, with the darker
+   casing; minor roads 0.8 logical pixels from zoom 11.
+6. **Places** are regular weight, smaller than summits at the zooms a hike
+   is shown at.
+7. **Everything else** (built-up areas, buildings at 40 per cent,
+   protected areas at 8 per cent with a dashed edge, railways, the scale bar
+   and the attribution) stays quiet.
+
+### Do and don't
+
+- **Do** add a colour as a role: a recipe in `RECIPES`, its `--map-*` token
+  in `tokens.css`, its swatch line in `pages/styleguide.css`, and a row in
+  the table above.
+- **Do** judge a change on every sample at about 400 pixels wide on
+  Discord's dark and light backgrounds, not only at full size.
+- **Do** keep the trail, the pin and the summit the strongest marks.
+- **Don't** use the accent for anything but the pin: a second orange shape
+  would make the pin harder to find. Trails are the weathered blaze, not
+  the blaze.
+- **Don't** write a colour in the drawing code, or give the map a dark
+  variant: one picture serves both themes.
+- **Don't** add a typeface: a label Public Sans cannot set falls back to
+  Noto Sans, and nothing else.
+- **Don't** make a label bold or larger for emphasis beyond its role, or
+  add colours for kinds of feature that `src/maps/svg.ts` does not draw.
 
 ## Size budget
 
