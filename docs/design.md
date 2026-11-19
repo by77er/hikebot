@@ -383,7 +383,8 @@ jobs. `schedule(storage, job, dueAt)` stores a `job:<name>` key holding when
 the job is due; scheduling a job that is already scheduled keeps the earlier
 of the two times, and the object's alarm is moved earlier whenever a job is
 due before it. Because the schedule lives in storage, it survives a restart
-of the object.
+of the object. `unschedule(storage, job)` drops a job and keeps the alarm at
+the earliest job left, or clears it.
 
 The alarm's body, `runDueJobs`, runs every job due by the store's clock, and
 at least the earliest ones, which the alarm was set for. It removes each
@@ -707,27 +708,34 @@ nothing is decided.
 
 Each guild's settings are one row of `guild_settings` in its `GuildHike`
 database (migration `0002_guild_settings`, with `timezone` added by
-`0003_guild_timezone` and the home area by `0006_places`; read and written
-by `GuildConfig` in
+`0003_guild_timezone`, the home area by `0006_places` and the schedule's
+columns by `0007_guild_cadence`; read and written by `GuildConfig` in
 `src/guild/config.ts`):
 
-| Column                | Meaning                                                      |
-| --------------------- | ------------------------------------------------------------ |
-| `id`                  | Always 1: the table holds one row, created by the migration  |
-| `admin_role_id`       | Members with this role may use the admin panel               |
-| `vote_channel_id`     | Text channel where the location and date polls are posted    |
-| `announce_channel_id` | Text or announcement channel where results are announced     |
-| `forum_channel_id`    | Forum channel that gets a thread per hike                    |
-| `owner_id`            | The guild owner's user id, as `getGuild` last returned it    |
-| `owner_fetched_at`    | When `owner_id` was fetched, in milliseconds since the epoch |
-| `timezone`            | IANA time zone the group plans hikes in                      |
-| `home_area`           | The home area as an admin typed it (`Seattle, Washington`)   |
-| `home_name`           | The place name the geocoder found for it                     |
-| `home_lat`            | Latitude the geocoder found for it                           |
-| `home_lon`            | Longitude the geocoder found for it                          |
+| Column                   | Meaning                                                           |
+| ------------------------ | ----------------------------------------------------------------- |
+| `id`                     | Always 1: the table holds one row, created by the migration       |
+| `admin_role_id`          | Members with this role may use the admin panel                    |
+| `vote_channel_id`        | Text channel where the location and date polls are posted         |
+| `announce_channel_id`    | Text or announcement channel where results are announced          |
+| `forum_channel_id`       | Forum channel that gets a thread per hike                         |
+| `owner_id`               | The guild owner's user id, as `getGuild` last returned it         |
+| `owner_fetched_at`       | When `owner_id` was fetched, in milliseconds since the epoch      |
+| `timezone`               | IANA time zone the group plans hikes in                           |
+| `home_area`              | The home area as an admin typed it (`Seattle, Washington`)        |
+| `home_name`              | The place name the geocoder found for it                          |
+| `home_lat`               | Latitude the geocoder found for it                                |
+| `home_lon`               | Longitude the geocoder found for it                               |
+| `cadence_enabled`        | 1 while the weekly schedule is on (default 0)                     |
+| `cadence_weekday`        | The schedule's day, 0 (Sunday) to 6 (default 3, Wednesday)        |
+| `cadence_time`           | The schedule's time of day, `HH:MM` (default `09:00`)             |
+| `cadence_date_vote_days` | Days the date vote stays open on the schedule, 1 to 3 (default 2) |
+| `cadence_on_since`       | When the schedule was last turned on; null while it is off        |
 
-Every column but `id` is null until it is set. Setup is complete when the
-three channels are set.
+Every column but `id` and the schedule's is null until it is set; the
+schedule's have their defaults (`DEFAULT_CADENCE`; `cadence_on_since` is
+null), and `GuildConfig.get()` returns them as `cadence`. Setup is complete when the three channels are
+set.
 
 The time zone is the group's own: dates are wall-clock times there, "today"
 is judged there, and a hike's start instant is computed there. A null
@@ -793,6 +801,11 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   County · [map](…)", "being looked up on OpenStreetMap", or "none") and
   offers **Set map pin** (`hb:pin:set:<round id>`) after the Announce
   buttons; see "Locating hikes".
+  Under the time zone, the weekly schedule (see "Cadence"): "**Schedule:**
+  off", or "**Schedule:** on · Wednesdays at 09:00 (America/Los_Angeles) ·
+  date vote 2 days" and "**Next:** Opens a location vote <t:…:F>
+  (<t:…:R>)." with what the job does next and when, as Discord timestamps
+  (`nextScheduled` in `AdminPanelState`, from `nextCadenceAction`).
 - **Confirmation view**: Close and Cancel round first replace the status view
   with a question and a confirm button (`hb:poll:close-confirm:<poll id>`,
   `hb:round:cancel-confirm:<round id>`) next to Back; only the confirm button
@@ -823,7 +836,17 @@ in place. Its `custom_id`s are `hb:admin:<action>`, and nothing in it pings.
   ("**Home area:** Seattle, Washington (found as Seattle, King County,
   Washington)", or "not set (locations are looked up worldwide)") and **Set
   home area** (`hb:admin:home-area`), whose modal takes up to 100
-  characters (`hb:admin:home-area-name`); see "Locating hikes". Back
+  characters (`hb:admin:home-area-name`); see "Locating hikes". Under the home area, the
+  **Schedule** part: what the weekly schedule does, its line as in the
+  status view, a weekday select (`hb:admin:cadence-day`, Sunday to
+  Saturday), a date vote length select (`hb:admin:cadence-days`, 1 to 3
+  days), **Turn schedule on** or **Turn schedule off** (`hb:admin:cadence`)
+  and **Set schedule time** (`hb:admin:cadence-time`), whose modal of the
+  same `custom_id` takes `HH:MM` (`hb:admin:cadence-time-value`, `9:00` is
+  read as `09:00`; anything else is refused ephemerally with the time still
+  in force). Turning it on is refused, naming the missing channels, until
+  the voting, announcements and hike threads channels are set. Each change,
+  and a change of time zone, reschedules the job (see "Cadence"). Back
   returns to the status view.
 
 ## Polls
@@ -1106,7 +1129,15 @@ submitted, with the store's clock: a day before today ("…is in the past:
 today is <day> in <zone>. Propose a day from <today> to <last>.") and a day
 more than `MAX_PROPOSAL_DAYS_AHEAD` (31) days after today ("…is more than 31
 days away. Propose a day from <today> to <last>, or ask an admin to plan
-further ahead.") are refused; today and the 31st day are accepted. Text that
+further ahead.") are refused; today and the 31st day are accepted. While
+the weekly schedule is on, the window is the round's instead (see
+"Cadence"): the 14 days after the day the date vote is planned to close,
+from today at the latest (a vote held past its close keeps its window, whose
+first days pass), both named in the help text. A day before today is still
+"in the past", and a day outside the window gets "…is outside this round's
+dates. Propose a day from <first> to <last>: the 14 days after the date
+vote closes." (or, once the whole window has passed, "This round's dates,
+up to <last>, have passed."). Text that
 is not a date gets the accepted formats; the same date and time as an
 option gets "**X** is already on the vote. Vote for it instead, or propose
 another time that day." (the same day at another time is another option);
@@ -1193,7 +1224,10 @@ Once the location is decided, **Start date vote** opens a modal
 (`hb:date:start`) with one required paragraph, "Candidate dates (one per
 line)" (up to 1000 characters), prefilled with the next two weekends after
 today in the guild's time zone, one per line (`defaultDateCandidates`, see
-"Date options"), so starting the vote on them takes one click. The admin
+"Date options"), so starting the vote on them takes one click. While the
+weekly schedule is on, it is prefilled with the schedule's dates instead
+(`cadenceDateCandidates`, see "Cadence"), and starting the vote moves the
+schedule's next run to the vote's planned close. The admin
 can edit the list before submitting. Its placeholder shows both formats,
 `2026-12-05 (starts at 11:00) or 2026-12-05 09:00`, and its help text says
 the time defaults to 11:00. `parseCandidateDates` reads it with the store's
@@ -1333,6 +1367,86 @@ and a click after it was posted is told "The date vote's announcement is
 already posted." and posts nothing. It answers with a deferred update, posts
 the same announcement the close flow would have, and redraws the panel with
 "The date vote's result is announced in <#channel>." or the new reason.
+
+## Cadence
+
+A server can run its rounds on a weekly schedule, the cadence: on a set
+weekday and time in the server's time zone (default Wednesday 09:00) hikebot
+opens the location vote with no options, a week later closes it and opens
+the date vote, closes the date vote a set number of days after it opened
+(1 to 3, default 2), and opens the next location vote on the first schedule
+day after the hike. It is off by default; an admin turns it on and sets it
+under Settings → Schedule (see "Admin panel" and "Guild settings").
+
+| When                               | What the bot does                                                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Wednesday, week 0                  | Opens the location vote with no options. Members propose, or suggest a past location again.                                     |
+| Wednesday, week 1                  | Closes the location vote and opens the date vote on every Saturday and Sunday in the 14 days after the date vote's closing day. |
+| Friday, week 1                     | Closes the date vote: thread, event and announcement as on a manual close.                                                      |
+| The first Wednesday after the hike | Opens the next location vote.                                                                                                   |
+
+**One job, driven by state.** The scheduled job `cadence:tick`
+(`src/features/cadence.ts`) does it all. Each run reads the settings and the
+round with the store's clock, schedules its own next run first, so a step
+that throws does not end the schedule, then takes at most one step
+(`cadenceStep` in `src/features/cadence-state.ts`), and finally sets its
+next run again from the state the step left. The next run is the earlier
+of the next cadence instant and the open date vote's next closing attempt.
+A cadence instant is handled once: the last one handled is kept in the
+object's key-value storage (`cadence`, with the guild's id, recorded when
+an admin sets the schedule, since a job gets no interaction), and is
+written before the step, so a second run in the same week (an alarm that
+fires early, a step that threw) does not repeat it. The steps:
+
+- A date vote past its planned close, on any run: closed through
+  `closeVote` when anyone voted; when nobody did, held for another day
+  (one notice in the announcements channel for the whole vote, not one a
+  day: "**The date vote stays open.**"), until its earliest candidate is
+  less than 24 hours away, when the round is cancelled through
+  `cancelRound` with a notice ("**This round is cancelled.** … A new
+  location vote opens <t:…:F>."). The bot never announces a hike nobody
+  voted for.
+- On a cadence instant: a location vote open for at least six days is
+  closed (winner and tie-break as always, normal announcement) and the date
+  vote opened, unless it has no options or no votes, when it stays open
+  with one notice per instant ("**The location vote stays open another
+  week.**"); a round whose location is decided gets its date vote; with no
+  active round and no planned hike still ahead (the newest hike's start
+  plus `HIKE_DURATION_HOURS`), a location vote opens. Otherwise nothing.
+
+The steps call the round actions (see "Round actions") with the
+application's id as the actor, so the `*_by` columns hold it and messages
+say hikebot where they would name an admin; a refused action is logged.
+
+**Dates.** A date vote opened while the cadence is on, by the job or by an
+admin, closes at the cadence time, the configured number of days after the
+calendar day it opened (`cadenceDateVoteClose`). One opened before the
+cadence was last turned on (`cadence_on_since`, set when an admin turns it
+on and cleared when they turn it off) is left to the admins: the job does
+not close or hold it, and its members keep the usual month. The default
+dates of a cadence date vote are every Saturday and Sunday at the default
+hike time in the 14 days after its closing day (`cadenceDateCandidates`),
+so every candidate is still ahead when the vote closes, whatever weekday is
+set; a date a member adds must be inside the same 14 days (`cadenceWindow`),
+weekdays included, and not before today (`windowFrom`). These functions are
+in `src/polls/dates.ts`, beside the time zone helpers, with
+`nextCadenceInstant`, `previousCadenceInstant` and `nextDailyInstant`: all
+of them compute in the server's time zone through `hikeStart`, so 09:00
+local stays 09:00 local across daylight-saving changes.
+
+**Admins stay in control.** Every manual action still works while the
+cadence is on; the job only looks at the state it finds. An admin who
+closes the location vote early gets the date vote at the next cadence
+instant unless they start it first; a date vote an admin starts moves the
+job's next run to its planned close; a withdrawn date vote is opened again
+at the next instant; a cancelled round is followed by a new location vote
+at the next instant; a location vote an admin starts is closed at the
+first instant at least six days later. Turning the cadence off leaves open
+votes as they are and drops the job (`unschedule`); turning it on, or
+changing the weekday, time, date vote length or time zone, drops the job's
+run, marks the instants up to now as handled (so a time that has just
+passed is not acted on) and schedules the next run from the new settings.
+The panel shows the schedule and what it does next (see "Admin panel").
 
 ## Hike log
 

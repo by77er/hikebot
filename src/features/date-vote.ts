@@ -36,9 +36,9 @@ import {
   DEFAULT_HIKE_TIME,
   MAX_PROPOSAL_DAYS_AHEAD,
   addDays,
-  defaultDateCandidates,
   parseDateOption,
   todayIn,
+  windowFrom,
 } from "../polls/dates";
 import { isPollError, type PollError } from "../polls/errors";
 import {
@@ -48,6 +48,7 @@ import {
   type RoundView,
 } from "../polls/store";
 import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
+import { cadenceDateWindow, scheduleCadence } from "./cadence-state";
 import { planHikeDayStep } from "./hike-day";
 import { createHikeEventStep } from "./hike-event";
 import { createHikeThreadStep, whenLine } from "./hike-thread";
@@ -59,7 +60,7 @@ import {
   scheduleRefresh,
   type PollWording,
 } from "./poll-ui";
-import { dateVoteRefusal, startDateVote } from "./round-actions";
+import { dateVoteRefusal, defaultDates, startDateVote } from "./round-actions";
 
 export const DATE_IDS = {
   start: POLL_CONTROL_IDS.startDateVote,
@@ -196,10 +197,10 @@ function quoted(line: string): string {
 }
 
 /**
- * The Start date vote modal, its field prefilled with the default
- * candidates for `today` (`YYYY-MM-DD`), one per line.
+ * The Start date vote modal, its field prefilled with `dates`, one per
+ * line.
  */
-export function startModal(today: string): APIInteractionResponse {
+export function startModal(dates: readonly string[]): APIInteractionResponse {
   return modal(DATE_IDS.start, "Start date vote", [
     label(
       "Candidate dates (one per line)",
@@ -209,7 +210,7 @@ export function startModal(today: string): APIInteractionResponse {
         required: true,
         max_length: MAX_DATES_INPUT,
         placeholder: `2026-12-05 (starts at ${DEFAULT_HIKE_TIME}) or 2026-12-05 09:00`,
-        value: defaultDateCandidates(today).join("\n"),
+        value: dates.join("\n"),
       }),
       `${String(MIN_DATE_OPTIONS)} to ${String(MAX_OPTIONS)} dates, as YYYY-MM-DD or YYYY-MM-DD HH:MM (24-hour); the time defaults to ${DEFAULT_HIKE_TIME}.`,
     ),
@@ -218,48 +219,60 @@ export function startModal(today: string): APIInteractionResponse {
 
 /**
  * Start date vote: opens the modal for the candidate dates, prefilled with
- * the next two weekends after today in the guild's time zone, the dates
- * `startDateVote` starts on when none are given.
+ * `defaultDates`, the dates `startDateVote` starts on when none are given.
  */
-const openStartModal: ComponentHandler = adminOnly(
-  (_interaction, context, settings) => {
-    const refusal = dateVoteRefusal(context);
-    if (refusal !== null) return adminPanelUpdate(context, refusal.message);
-    const now = new PollStore(context.storage).now();
-    return { response: startModal(todayIn(settings.timezone, now)) };
-  },
-);
+const openStartModal: ComponentHandler = adminOnly((interaction, context) => {
+  const refusal = dateVoteRefusal(context);
+  if (refusal !== null) return adminPanelUpdate(context, refusal.message);
+  return {
+    response: startModal(defaultDates(roundContext(interaction, context))),
+  };
+});
 
 /**
  * The start modal: opens the date poll with `startDateVote` on the typed
- * lines, then in the follow-up posts the poll message and redraws the
- * panel. A refusal is answered ephemerally.
+ * lines, moves the weekly schedule's next run to the vote's planned close
+ * when the schedule is on, then in the follow-up posts the poll message
+ * and redraws the panel. A refusal is answered ephemerally.
  */
 const submitStart: ModalHandler = adminOnly(
-  (interaction: APIModalSubmitInteraction, context) =>
-    answerPanel(
-      interaction,
-      context,
-      startDateVote(roundContext(interaction, context), actorOf(interaction), {
+  async (interaction: APIModalSubmitInteraction, context, settings) => {
+    const store = new PollStore(context.storage);
+    const outcome = startDateVote(
+      { ...roundContext(interaction, context), store },
+      actorOf(interaction),
+      {
         dates: (textInputValue(interaction.data, DATE_IDS.dates) ?? "").split(
           /\r?\n/,
         ),
-      }),
-      (message) => ({ response: ephemeralNotice(message) }),
-    ),
+      },
+    );
+    if (outcome.ok) {
+      await scheduleCadence(context.storage, store, settings, store.now());
+    }
+    return answerPanel(interaction, context, outcome, (message) => ({
+      response: ephemeralNotice(message),
+    }));
+  },
 );
 
 const FULL = `This vote already has ${String(MAX_OPTIONS)} dates, the most it can hold. Vote for one of them instead.`;
 
 /**
- * The Propose a date modal for the poll; its help text names the last day
- * a member may propose, `MAX_PROPOSAL_DAYS_AHEAD` days after `today`.
+ * The Propose a date modal for the poll; its help text names the days a
+ * member may propose: `window` when given (a cadence round's), from today
+ * at the earliest, otherwise from `today` to `MAX_PROPOSAL_DAYS_AHEAD` days
+ * after it.
  */
 export function proposeModal(
   pollId: number,
   today: string,
+  window?: { first: string; last: string },
 ): APIInteractionResponse {
-  const last = addDays(today, MAX_PROPOSAL_DAYS_AHEAD);
+  const { first, last } =
+    window === undefined
+      ? { first: today, last: addDays(today, MAX_PROPOSAL_DAYS_AHEAD) }
+      : windowFrom(window, today);
   return modal(DATE_IDS.propose(pollId), "Propose a date", [
     label(
       "Date",
@@ -267,9 +280,9 @@ export function proposeModal(
         custom_id: DATE_IDS.day,
         required: true,
         max_length: 16,
-        placeholder: `${today} or ${today} 09:00`,
+        placeholder: `${first} or ${first} 09:00`,
       }),
-      `${today} to ${last}, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time defaults to ${DEFAULT_HIKE_TIME}.`,
+      `${first} to ${last}, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time defaults to ${DEFAULT_HIKE_TIME}.`,
     ),
   ]);
 }
@@ -293,9 +306,13 @@ const openPropose: ComponentHandler = (interaction, context) => {
   if (poll.options.length >= MAX_OPTIONS) {
     return { response: ephemeralNotice(FULL) };
   }
-  const timeZone = new GuildConfig(context.storage).get().timezone;
+  const settings = new GuildConfig(context.storage).get();
   return {
-    response: proposeModal(poll.id, todayIn(timeZone, store.now())),
+    response: proposeModal(
+      poll.id,
+      todayIn(settings.timezone, store.now()),
+      cadenceDateWindow(poll, settings) ?? undefined,
+    ),
   };
 };
 
@@ -329,12 +346,17 @@ const saveDateProposal: ModalHandler = async (interaction, context) => {
   }
   const store = new PollStore(context.storage);
   const typed = (textInputValue(interaction.data, DATE_IDS.day) ?? "").trim();
+  const settings = new GuildConfig(context.storage).get();
+  const poll = store.getPoll(pollId);
   try {
     const option = store.proposeDate(
       pollId,
       interaction.member?.user.id ?? interaction.user?.id ?? "",
       typed,
-      new GuildConfig(context.storage).get().timezone,
+      settings.timezone,
+      poll === null
+        ? undefined
+        : (cadenceDateWindow(poll, settings) ?? undefined),
     );
     await scheduleRefresh(context.storage, pollId, store.now());
     return {

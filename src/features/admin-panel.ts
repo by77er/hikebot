@@ -21,6 +21,7 @@ import {
   modal,
   roleSelect,
   separator,
+  stringSelect,
   textDisplay,
   textInput,
   textInputValue,
@@ -28,13 +29,22 @@ import {
 } from "../discord/components";
 import {
   GuildConfig,
+  MAX_DATE_VOTE_DAYS,
+  MIN_DATE_VOTE_DAYS,
   setupComplete,
+  type CadenceSettings,
   type GuildSettings,
   type SettingField,
 } from "../guild/config";
 import { ephemeralNotice } from "../discord/responses";
 import { adminOnly } from "../guild/permissions";
-import { DEFAULT_HIKE_TIME, clockIn, normalizeTimeZone } from "../polls/dates";
+import {
+  CADENCE_WINDOW_DAYS,
+  DEFAULT_HIKE_TIME,
+  WEEKDAY_NAMES,
+  clockIn,
+  normalizeTimeZone,
+} from "../polls/dates";
 import {
   PollStore,
   type PollKind,
@@ -56,6 +66,14 @@ import {
   announcementStatus,
   type AnnouncementStatus,
 } from "./announcement-state";
+import {
+  cadenceSnapshot,
+  changeCadence as changeSchedule,
+  discordTime,
+  nextCadenceAction,
+  rescheduleCadence,
+  type CadenceAction,
+} from "./cadence-state";
 import {
   hikeDayHours,
   hikeDayStatus,
@@ -93,6 +111,11 @@ export interface AdminPanelState {
   voteMessage?: VoteMessageStatus | null;
   /** The time the panel is drawn at, for the clock in the guild's zone. */
   now?: number;
+  /**
+   * What the weekly schedule does next, while it is on; null when it does
+   * nothing in the weeks it looks ahead.
+   */
+  nextScheduled?: CadenceAction | null;
 }
 
 /** Where a closed poll's announcement stands, for the panel. */
@@ -112,12 +135,17 @@ export const ADMIN_PANEL_IDS = {
   forumChannel: customId("admin", "forum-channel"),
   timezone: customId("admin", "timezone"),
   homeArea: customId("admin", "home-area"),
+  cadence: customId("admin", "cadence"),
+  cadenceDay: customId("admin", "cadence-day"),
+  cadenceDays: customId("admin", "cadence-days"),
+  cadenceTime: customId("admin", "cadence-time"),
 } as const;
 
 /** The fields of the panel's modals, read back from their submissions. */
 export const ADMIN_PANEL_FIELDS = {
   timezone: customId("admin", "timezone-name"),
   homeArea: customId("admin", "home-area-name"),
+  cadenceTime: customId("admin", "cadence-time-value"),
 } as const;
 
 /** The panel's poll controls; their handlers live with the poll features. */
@@ -201,6 +229,9 @@ export function loadAdminPanelState(
     announcements: pollAnnouncements(storage, round ?? finished, now),
     voteMessage: open === null ? null : voteMessageStatus(storage, open, now),
     now,
+    nextScheduled: settings.cadence.enabled
+      ? nextCadenceAction(settings, cadenceSnapshot(store, settings), now)
+      : null,
   };
 }
 
@@ -405,6 +436,7 @@ export function renderAdminPanel(
         `**${channel.name}:** ${channelMention(settings[channel.field])}`,
     ),
     timezoneLine(state),
+    ...scheduleLines(state),
   ];
   const buttons = actionButtons(state);
   const rows = [];
@@ -685,9 +717,87 @@ export function homeAreaLine(settings: GuildSettings): string {
 }
 
 /**
+ * `**Schedule:** on · Wednesdays at 09:00 (America/Los_Angeles)`, then
+ * what it does next with a Discord timestamp; `**Schedule:** off`.
+ */
+function scheduleLines({
+  settings,
+  round,
+  nextScheduled,
+}: AdminPanelState): string[] {
+  const { cadence } = settings;
+  if (!cadence.enabled) return ["**Schedule:** off"];
+  const next =
+    nextScheduled === null || nextScheduled === undefined
+      ? round?.status === "date_voting"
+        ? "**Next:** nothing until an admin closes the date vote, which was started before the schedule was turned on."
+        : "**Next:** nothing in the coming weeks."
+      : `**Next:** ${nextScheduled.what} ${discordTime(nextScheduled.at)} (${discordTime(nextScheduled.at, "R")}).`;
+  return [
+    `**Schedule:** on · ${WEEKDAY_NAMES[cadence.weekday] ?? "?"}s at ${cadence.time} (${settings.timezone}) · date vote ${dayCount(cadence.dateVoteDays)}`,
+    next,
+  ];
+}
+
+function dayCount(n: number): string {
+  return n === 1 ? "1 day" : `${String(n)} days`;
+}
+
+/** The Schedule part of the settings view: what it does and its controls. */
+function scheduleSettings(state: AdminPanelState) {
+  const { cadence } = state.settings;
+  return [
+    textDisplay(
+      [
+        "**Schedule**",
+        `When it is on, hikebot runs the rounds by itself on the weekday and time below: it opens a location vote, closes it a week later and opens the date vote for the ${String(CADENCE_WINDOW_DAYS)} days after that vote closes, closes the date vote after the days below, and opens the next location vote on the first schedule day after the hike. Admins can still do each step by hand.`,
+        ...scheduleLines(state),
+      ].join("\n"),
+    ),
+    actionRow(
+      stringSelect({
+        custom_id: ADMIN_PANEL_IDS.cadenceDay,
+        placeholder: "Pick the weekday",
+        options: WEEKDAY_NAMES.map((name, day) => ({
+          label: name,
+          value: String(day),
+          default: day === cadence.weekday,
+        })),
+      }),
+    ),
+    actionRow(
+      stringSelect({
+        custom_id: ADMIN_PANEL_IDS.cadenceDays,
+        placeholder: "Pick how long the date vote stays open",
+        options: Array.from(
+          { length: MAX_DATE_VOTE_DAYS - MIN_DATE_VOTE_DAYS + 1 },
+          (_, i) => MIN_DATE_VOTE_DAYS + i,
+        ).map((days) => ({
+          label: `Date vote open ${dayCount(days)}`,
+          value: String(days),
+          default: days === cadence.dateVoteDays,
+        })),
+      }),
+    ),
+    actionRow(
+      button({
+        custom_id: ADMIN_PANEL_IDS.cadence,
+        label: cadence.enabled ? "Turn schedule off" : "Turn schedule on",
+        style: cadence.enabled ? ButtonStyle.Danger : ButtonStyle.Primary,
+      }),
+      button({
+        custom_id: ADMIN_PANEL_IDS.cadenceTime,
+        label: "Set schedule time",
+        style: ButtonStyle.Secondary,
+      }),
+    ),
+  ];
+}
+
+/**
  * The settings view: one select per setting, each showing its value, the
- * time zone with its Set time zone button and the home area with its Set
- * home area button.
+ * time zone with its Set time zone button, the home area with its Set
+ * home area button, and the schedule's controls.
  */
 export function renderAdminSettings(
   state: AdminPanelState,
@@ -761,6 +871,8 @@ export function renderAdminSettings(
           style: ButtonStyle.Secondary,
         }),
       ),
+      separator(),
+      ...scheduleSettings(state),
     ]),
     actionRow(
       button({
@@ -888,7 +1000,7 @@ const openTimezoneModal: ComponentHandler = adminOnly(
  * was typed and what would work.
  */
 const saveTimezone: ModalHandler = adminOnly(
-  (interaction: APIModalSubmitInteraction, context, settings) => {
+  async (interaction: APIModalSubmitInteraction, context, settings) => {
     const typed =
       textInputValue(interaction.data, ADMIN_PANEL_FIELDS.timezone) ?? "";
     const zone = normalizeTimeZone(typed);
@@ -903,7 +1015,13 @@ const saveTimezone: ModalHandler = adminOnly(
         ),
       };
     }
-    new GuildConfig(context.storage).setTimezone(zone);
+    const changed = new GuildConfig(context.storage).setTimezone(zone);
+    await rescheduleCadence(
+      context.storage,
+      new PollStore(context.storage),
+      changed,
+      interaction.guild_id ?? "",
+    );
     const components = renderAdminSettings(
       loadAdminPanelState(context.storage),
       `Time zone set to ${zone}.`,
@@ -916,6 +1034,144 @@ const saveTimezone: ModalHandler = adminOnly(
     };
   },
 );
+
+/**
+ * Turn schedule on / off. Turning it on is refused, naming what is missing,
+ * until the voting, announcements and hike threads channels are set; it
+ * then acts from the next cadence instant on. Turning it off stops the job
+ * and leaves any open vote as it is.
+ */
+const toggleCadence: ComponentHandler = adminOnly(
+  async (interaction, context, settings) => {
+    const turnOn = !settings.cadence.enabled;
+    if (turnOn && !setupComplete(settings)) {
+      return settingsUpdate(
+        context,
+        `The schedule needs the ${listing(missingSettings(settings))}. Set them above, then turn it on.`,
+      );
+    }
+    await changeCadence(interaction, context, { enabled: turnOn });
+    const notice = turnOn
+      ? "The schedule is on."
+      : "The schedule is off. Open votes stay open until an admin closes them.";
+    return settingsUpdate(context, notice);
+  },
+);
+
+/** The weekday select: moves the schedule to the picked day. */
+const saveCadenceDay: ComponentHandler = adminOnly(
+  async (interaction, context) => {
+    const day = pickedNumber(interaction, 0, WEEKDAY_NAMES.length - 1);
+    if (day === null) return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
+    await changeCadence(interaction, context, { weekday: day });
+    return settingsUpdate(
+      context,
+      `The schedule's day is ${WEEKDAY_NAMES[day] ?? "?"}.`,
+    );
+  },
+);
+
+/** The date vote length select. */
+const saveCadenceDays: ComponentHandler = adminOnly(
+  async (interaction, context) => {
+    const days = pickedNumber(
+      interaction,
+      MIN_DATE_VOTE_DAYS,
+      MAX_DATE_VOTE_DAYS,
+    );
+    if (days === null) {
+      return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
+    }
+    await changeCadence(interaction, context, { dateVoteDays: days });
+    return settingsUpdate(
+      context,
+      `On the schedule, the date vote stays open ${dayCount(days)}.`,
+    );
+  },
+);
+
+/** Set schedule time: opens the modal, prefilled with the current time. */
+const openCadenceTimeModal: ComponentHandler = adminOnly(
+  (_interaction, _context, settings) => ({
+    response: modal(ADMIN_PANEL_IDS.cadenceTime, "Set schedule time", [
+      label(
+        "Time of day",
+        textInput({
+          custom_id: ADMIN_PANEL_FIELDS.cadenceTime,
+          required: true,
+          max_length: 5,
+          value: settings.cadence.time,
+          placeholder: "09:00",
+        }),
+        `HH:MM, 24-hour, in ${settings.timezone}.`,
+      ),
+    ]),
+  }),
+);
+
+/** The schedule time modal: stores a valid `HH:MM`, or says what works. */
+const saveCadenceTime: ModalHandler = adminOnly(
+  async (interaction: APIModalSubmitInteraction, context, settings) => {
+    const typed =
+      textInputValue(interaction.data, ADMIN_PANEL_FIELDS.cadenceTime) ?? "";
+    const time = parseTimeOfDay(typed);
+    if (time === null) {
+      return {
+        response: ephemeralNotice(
+          `\`${quotedInput(typed.trim())}\` is not a time, so the schedule's time is still ${settings.cadence.time}. Enter it as HH:MM, 24-hour, for example 09:00 or 18:30.`,
+        ),
+      };
+    }
+    await changeCadence(interaction, context, { time });
+    const components = renderAdminSettings(
+      loadAdminPanelState(context.storage),
+      `The schedule's time is ${time} (${settings.timezone}).`,
+    );
+    return {
+      response:
+        interaction.message === undefined
+          ? ephemeralReply(components)
+          : update(components),
+    };
+  },
+);
+
+/** `9:00` or `09:00` as `09:00`; null for anything else. */
+export function parseTimeOfDay(text: string): string | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return null;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+/** Stores the schedule change and reschedules the job from it. */
+function changeCadence(
+  interaction: APIMessageComponentInteraction | APIModalSubmitInteraction,
+  context: HandlerContext,
+  change: Partial<Omit<CadenceSettings, "onSince">>,
+): Promise<GuildSettings> {
+  return changeSchedule(
+    context.storage,
+    new PollStore(context.storage),
+    change,
+    interaction.guild_id ?? "",
+  );
+}
+
+/** The one value picked in a string select, as a whole number in range. */
+function pickedNumber(
+  interaction: APIMessageComponentInteraction,
+  min: number,
+  max: number,
+): number | null {
+  if (interaction.data.component_type !== ComponentType.StringSelect) {
+    return null;
+  }
+  const value = Number(interaction.data.values[0]);
+  return Number.isInteger(value) && value >= min && value <= max ? value : null;
+}
 
 /** Typed text to quote: shortened and without backticks. */
 function quotedInput(text: string): string {
@@ -968,5 +1224,10 @@ export function registerAdminPanel(router: Router): Router {
   }
   router.component(ADMIN_PANEL_IDS.timezone, openTimezoneModal);
   router.modal(ADMIN_PANEL_IDS.timezone, saveTimezone);
+  router.component(ADMIN_PANEL_IDS.cadence, toggleCadence);
+  router.component(ADMIN_PANEL_IDS.cadenceDay, saveCadenceDay);
+  router.component(ADMIN_PANEL_IDS.cadenceDays, saveCadenceDays);
+  router.component(ADMIN_PANEL_IDS.cadenceTime, openCadenceTimeModal);
+  router.modal(ADMIN_PANEL_IDS.cadenceTime, saveCadenceTime);
   return router;
 }

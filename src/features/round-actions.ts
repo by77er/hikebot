@@ -19,7 +19,12 @@ import { messageBody } from "../discord/components";
 import { GuildConfig, setupComplete } from "../guild/config";
 import type { HandlerContext } from "../guild/router";
 import { schedule } from "../guild/schedule";
-import { defaultDateCandidates, todayIn } from "../polls/dates";
+import {
+  cadenceDateCandidates,
+  cadenceDateVoteClose,
+  defaultDateCandidates,
+  todayIn,
+} from "../polls/dates";
 import { isPollError } from "../polls/errors";
 import { PollStore, type PollView, type RoundView } from "../polls/store";
 import { listing, missingSettings } from "./admin-panel";
@@ -502,13 +507,23 @@ export function dateVoteRefusal(
 }
 
 /**
- * The dates a date vote starts on when none are given: the next two
- * weekends after today in the guild's time zone, as the start modal is
- * prefilled.
+ * The dates a date vote starts on when none are given, as the start modal
+ * is prefilled: the next two weekends after today in the guild's time
+ * zone, or, with the weekly schedule on, every Saturday and Sunday in the
+ * window after the planned close of a date vote opened now
+ * (`cadenceDateCandidates`).
  */
 export function defaultDates(context: RoundContext): string[] {
-  const timeZone = new GuildConfig(context.storage).get().timezone;
-  return defaultDateCandidates(todayIn(timeZone, storeOf(context).now()));
+  const settings = new GuildConfig(context.storage).get();
+  const now = storeOf(context).now();
+  if (settings.cadence.enabled) {
+    const { time, dateVoteDays } = settings.cadence;
+    return cadenceDateCandidates(
+      cadenceDateVoteClose(now, time, dateVoteDays, settings.timezone),
+      settings.timezone,
+    );
+  }
+  return defaultDateCandidates(todayIn(settings.timezone, now));
 }
 
 /**

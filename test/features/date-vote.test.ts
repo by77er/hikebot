@@ -31,7 +31,9 @@ import {
   renderVoteSelect,
   type PollWording,
 } from "../../src/features/poll-ui";
+import { CADENCE_JOB } from "../../src/features/cadence-state";
 import { GuildConfig } from "../../src/guild/config";
+import { scheduledJobs } from "../../src/guild/schedule";
 import { defaultDateCandidates, todayIn } from "../../src/polls/dates";
 import { PollStore, type PollView } from "../../src/polls/store";
 import {
@@ -965,7 +967,7 @@ describe("the start modal's default dates", () => {
   });
 
   it("lists the next two weekends after a day, one per line", () => {
-    const form = startModal("2026-11-18") as {
+    const form = startModal(defaultDateCandidates("2026-11-18")) as {
       data: { components: Node[] };
     };
     expect(flatten(form.data.components)).toContainEqual(
@@ -1009,6 +1011,56 @@ describe("the start modal's default dates", () => {
     const round = await activeRound(guild);
     expect(round?.status).toBe("date_voting");
     expect(round?.datePoll?.options.map((o) => o.dateValue)).toEqual(defaults);
+  });
+
+  it("follow the planned close when the weekly schedule is on", async () => {
+    const guild = "date-start-defaults-cadence";
+    await decided(guild);
+    await runInDurableObject(stub(guild), (_i, state) => {
+      new GuildConfig(state.storage).setCadence({ enabled: true });
+    });
+    discord(guild, () => Response.json({}));
+    // Thursday 19 November, 10:00 in Los Angeles: a date vote opened now
+    // closes Saturday at 09:00, so its dates are the 14 days after that.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.UTC(2026, 10, 19, 18));
+    const click = componentInteraction(DATE_IDS.start, guild);
+    Object.assign(click, { member: { user: { id: OWNER }, roles: [] } });
+    const reply = await send(click);
+    expect(flatten(nodes(reply.data.components))).toContainEqual(
+      expect.objectContaining({
+        custom_id: DATE_IDS.dates,
+        value:
+          "2026-11-22 11:00\n2026-11-28 11:00\n2026-11-29 11:00\n2026-12-05 11:00",
+      }),
+    );
+  });
+
+  it("move the schedule's next run to the date vote's planned close when submitted", async () => {
+    const guild = "date-start-cadence-run";
+    await decided(guild);
+    await runInDurableObject(stub(guild), (_i, state) => {
+      // Turned on the day before.
+      new GuildConfig(state.storage).setCadence({
+        enabled: true,
+        onSince: Date.UTC(2030, 0, 2),
+      });
+    });
+    discord(guild, () =>
+      Response.json({ id: "900000000000000004", channel_id: TEXT }),
+    );
+    // Thursday 3 January 2030, 10:00 in Los Angeles: years ahead, so the
+    // alarm set here does not fire by itself.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.UTC(2030, 0, 3, 18));
+    const ctx = createExecutionContext();
+    await send(startSubmit(guild, "2030-01-12\n2030-01-13"), ctx);
+    await waitOnExecutionContext(ctx);
+    const jobs = await runInDurableObject(stub(guild), (_i, state) =>
+      scheduledJobs(state.storage),
+    );
+    // Saturday 5 January, 09:00 in Los Angeles.
+    expect(jobs.get(CADENCE_JOB)).toBe(Date.UTC(2030, 0, 5, 17));
   });
 
   it("do not limit the admin's list to a month ahead", async () => {
@@ -1175,6 +1227,92 @@ describe("proposing a date", () => {
     );
     expect(text(reply.data.components)).toBe(answer);
     expect(await options(guild, pollId)).toHaveLength(2);
+  });
+
+  it("takes only the 14 days after the planned close in a round on the weekly schedule", async () => {
+    const guild = "date-propose-cadence";
+    // Opened on Wednesday 18 November in Los Angeles: it closes Friday the
+    // 20th, so members may propose from Saturday 21 November to 4 December.
+    const pollId = await openDatePoll(guild);
+    await runInDurableObject(stub(guild), (_i, state) => {
+      // Turned on before the vote opened.
+      new GuildConfig(state.storage).setCadence({
+        enabled: true,
+        onSince: PROPOSE_NOW - 86_400_000,
+      });
+    });
+    const modal = await send(proposeClick(guild, pollId));
+    expect(modal.data.components).toMatchObject([
+      {
+        description:
+          "2026-11-21 to 2026-12-04, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time defaults to 11:00.",
+        component: { placeholder: "2026-11-21 or 2026-11-21 09:00" },
+      },
+    ]);
+    for (const [date, label] of [
+      ["2026-11-20", "Fri, 20 Nov 2026 · 11:00"],
+      ["2026-12-05", "Sat, 5 Dec 2026 · 11:00"],
+    ] as const) {
+      const reply = await send(proposeSubmit(guild, pollId, date));
+      expect(text(reply.data.components)).toBe(
+        `${label} is outside this round's dates. Propose a day from 2026-11-21 to 2026-12-04: the 14 days after the date vote closes.`,
+      );
+    }
+    for (const date of ["2026-11-21 08:00", "2026-12-02", "2026-12-04"]) {
+      const reply = await send(proposeSubmit(guild, pollId, date));
+      expect(text(reply.data.components)).toMatch(/^Added \*\*/);
+    }
+    expect(await options(guild, pollId)).toHaveLength(5);
+  });
+
+  it("names the window from today once a held vote's window has begun", async () => {
+    const guild = "date-propose-cadence-held";
+    const pollId = await openDatePoll(guild);
+    // Opened a week earlier, on Wednesday 11 November: it was to close on
+    // the 13th, so its window is 14 to 27 November, and today is the 18th.
+    await runInDurableObject(stub(guild), (_i, state) => {
+      new GuildConfig(state.storage).setCadence({
+        enabled: true,
+        onSince: PROPOSE_NOW - 8 * 86_400_000,
+      });
+      state.storage.sql.exec(
+        "UPDATE polls SET opened_at = opened_at - ? WHERE id = ?",
+        7 * 86_400_000,
+        pollId,
+      );
+    });
+    const modal = await send(proposeClick(guild, pollId));
+    expect(modal.data.components).toMatchObject([
+      {
+        description:
+          "2026-11-18 to 2026-11-27, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time defaults to 11:00.",
+      },
+    ]);
+    const reply = await send(proposeSubmit(guild, pollId, "2026-11-16"));
+    expect(text(reply.data.components)).toBe(
+      "Mon, 16 Nov 2026 · 11:00 is in the past: today is 2026-11-18 in America/Los_Angeles. Propose a day from 2026-11-18 to 2026-11-27: the 14 days after the date vote closes.",
+    );
+    expect(await options(guild, pollId)).toHaveLength(2);
+  });
+
+  it("keeps the usual month for a vote opened before the weekly schedule was turned on", async () => {
+    const guild = "date-propose-cadence-before";
+    const pollId = await openDatePoll(guild);
+    await runInDurableObject(stub(guild), (_i, state) => {
+      new GuildConfig(state.storage).setCadence({
+        enabled: true,
+        onSince: PROPOSE_NOW + 60_000,
+      });
+    });
+    const modal = await send(proposeClick(guild, pollId));
+    expect(modal.data.components).toMatchObject([
+      {
+        description:
+          "2026-11-18 to 2026-12-19, as YYYY-MM-DD or YYYY-MM-DD HH:MM; the time defaults to 11:00.",
+      },
+    ]);
+    const reply = await send(proposeSubmit(guild, pollId, "2026-11-19"));
+    expect(text(reply.data.components)).toMatch(/^Added \*\*/);
   });
 
   it("judges today in the guild's zone", async () => {

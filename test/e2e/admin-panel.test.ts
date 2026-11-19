@@ -33,6 +33,11 @@ const ID = {
   forum: "hb:admin:forum-channel",
   timezone: "hb:admin:timezone",
   timezoneName: "hb:admin:timezone-name",
+  cadence: "hb:admin:cadence",
+  cadenceDay: "hb:admin:cadence-day",
+  cadenceDays: "hb:admin:cadence-days",
+  cadenceTime: "hb:admin:cadence-time",
+  cadenceTimeValue: "hb:admin:cadence-time-value",
 };
 
 const CLOCK = / · now (?:Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d\d:\d\d/g;
@@ -319,5 +324,72 @@ describe("the admin panel", () => {
     const status = messageText(shown(panel));
     expect(status).toContain("Admin role:** not set");
     expect(status).toContain("Hike threads channel:** not set");
+  });
+});
+
+/** The weekday and HH:MM a Unix time in seconds reads as in `zone`. */
+function wallTime(seconds: number, zone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(seconds * 1000);
+}
+
+describe("the schedule", () => {
+  it("is refused until the channels are set, then turned on from Settings with its next action, and off", async () => {
+    const { owner, channels } = guild(7);
+    await owner.run("hike", [subcommand("admin")]);
+    const panel = owner.lastReply();
+    expect(messageText(panel)).toContain("**Schedule:** off");
+
+    await owner.click(panel, ID.settings);
+    await owner.select(panel, ID.vote, [channels.text]);
+    await owner.click(panel, ID.cadence);
+    expect(messageText(shown(panel))).toContain(
+      "The schedule needs the announcements channel and hike threads channel. Set them above, then turn it on.",
+    );
+    expect(messageText(shown(panel))).toContain("**Schedule:** off");
+
+    await owner.select(panel, ID.announce, [channels.news]);
+    await owner.select(panel, ID.forum, [channels.forum]);
+    await owner.select(panel, ID.cadenceDay, ["5"]);
+    expect(messageText(shown(panel))).toContain(
+      "The schedule's day is Friday.",
+    );
+    await owner.select(panel, ID.cadenceDays, ["3"]);
+    const form = await owner.click(panel, ID.cadenceTime);
+    await owner.submitModal(form, { [ID.cadenceTimeValue]: "18:30" }, panel);
+    expect(messageText(shown(panel))).toContain(
+      "The schedule's time is 18:30 (America/Los_Angeles).",
+    );
+
+    await owner.click(panel, ID.cadence);
+    expect(messageText(shown(panel))).toContain("The schedule is on.");
+    expect(getComponent(shown(panel).components, ID.cadence)).toMatchObject({
+      label: "Turn schedule off",
+    });
+
+    await owner.click(panel, ID.back);
+    const status = messageText(shown(panel));
+    const line =
+      /\*\*Schedule:\*\* on · Fridays at 18:30 \(America\/Los_Angeles\) · date vote 3 days\n\*\*Next:\*\* Opens a location vote <t:(\d+):F> \(<t:\1:R>\)\./.exec(
+        status,
+      );
+    expect(line, status).not.toBeNull();
+    const next = Number(line?.[1]);
+    expect(wallTime(next, "America/Los_Angeles")).toBe("Fri 18:30");
+    expect(next * 1000).toBeGreaterThan(Date.now());
+    expect(next * 1000).toBeLessThanOrEqual(Date.now() + 7 * 86_400_000);
+
+    await owner.click(panel, ID.settings);
+    await owner.click(panel, ID.cadence);
+    expect(messageText(shown(panel))).toContain(
+      "The schedule is off. Open votes stay open until an admin closes them.",
+    );
+    await owner.click(panel, ID.back);
+    expect(messageText(shown(panel))).toContain("**Schedule:** off");
   });
 });

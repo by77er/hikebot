@@ -2,6 +2,7 @@ import { evictDurableObject, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_CADENCE,
   GuildConfig,
   setupComplete,
   type GuildSettings,
@@ -20,6 +21,7 @@ const empty: GuildSettings = {
   ownerFetchedAt: null,
   timezone: "America/Los_Angeles",
   homeArea: null,
+  cadence: DEFAULT_CADENCE,
 };
 
 describe("GuildConfig", () => {
@@ -72,6 +74,45 @@ describe("GuildConfig", () => {
       new GuildConfig(state.storage).get(),
     );
     expect(settings.timezone).toBe("Europe/Berlin");
+  });
+
+  it("starts with the schedule off on Wednesdays at 09:00 with a 2-day date vote, and changes it", async () => {
+    await runInDurableObject(stubFor("config-cadence"), (_instance, state) => {
+      const config = new GuildConfig(state.storage);
+      expect(config.get().cadence).toEqual({
+        enabled: false,
+        weekday: 3,
+        time: "09:00",
+        dateVoteDays: 2,
+        onSince: null,
+      });
+      expect(
+        config.setCadence({
+          enabled: true,
+          weekday: 6,
+          onSince: 1_893_000_000_000,
+        }),
+      ).toEqual({
+        ...empty,
+        cadence: {
+          enabled: true,
+          weekday: 6,
+          time: "09:00",
+          dateVoteDays: 2,
+          onSince: 1_893_000_000_000,
+        },
+      });
+      config.setCadence({ time: "18:30", dateVoteDays: 3 });
+      expect(config.get().cadence.onSince).toBe(1_893_000_000_000);
+      config.setCadence({ enabled: false, onSince: null });
+      expect(config.get().cadence).toEqual({
+        enabled: false,
+        weekday: 6,
+        time: "18:30",
+        dateVoteDays: 3,
+        onSince: null,
+      });
+    });
   });
 
   it("caches the owner id with its fetch time", async () => {

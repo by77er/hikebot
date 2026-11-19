@@ -2,6 +2,7 @@ import type { HandlerContext, Router } from "../guild/router";
 import { runDueJobs } from "../guild/schedule";
 import { PollStore } from "../polls/store";
 import { registerAdminPanel } from "./admin-panel";
+import { registerCadence } from "./cadence";
 import { registerDateVote } from "./date-vote";
 import { hikeCommand } from "./hike";
 import { registerHikeDay } from "./hike-day";
@@ -49,6 +50,7 @@ export function registerFeatures(router: Router): Router {
   registerHomeArea(router);
   registerMapPin(router, MAP_PIN_HOOKS);
   router.job(LOCATE_JOB, locatePlaces);
+  registerCadence(router);
   return router;
 }
 

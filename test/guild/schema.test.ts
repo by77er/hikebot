@@ -31,6 +31,20 @@ function appliedNames(storage: DurableObjectStorage): string[] {
     .map((row) => row.name);
 }
 
+/** Takes the database back from 0007_guild_cadence to 0006_places. */
+function undoCadence(storage: DurableObjectStorage): void {
+  for (const column of [
+    "cadence_enabled",
+    "cadence_weekday",
+    "cadence_time",
+    "cadence_date_vote_days",
+    "cadence_on_since",
+  ]) {
+    storage.sql.exec(`ALTER TABLE guild_settings DROP COLUMN ${column}`);
+  }
+  storage.sql.exec("DELETE FROM _migrations WHERE name = '0007_guild_cadence'");
+}
+
 /** Takes the database back from 0006_places to 0005_round_day_of. */
 function undoPlaces(storage: DurableObjectStorage): void {
   storage.sql.exec("DROP INDEX poll_options_place_pending");
@@ -191,6 +205,11 @@ describe("migrations", () => {
           home_name: null,
           home_lat: null,
           home_lon: null,
+          cadence_enabled: 0,
+          cadence_weekday: 3,
+          cadence_time: "09:00",
+          cadence_date_vote_days: 2,
+          cadence_on_since: null,
         },
       ]);
       state.storage.sql.exec(
@@ -215,6 +234,7 @@ describe("migrations", () => {
       // Take the database back to 0002_guild_settings, with settings in it.
       state.storage.sql.exec("ALTER TABLE guild_settings DROP COLUMN timezone");
       state.storage.sql.exec("ALTER TABLE rounds DROP COLUMN event_id");
+      undoCadence(state.storage);
       undoPlaces(state.storage);
       dropDayOf(state.storage);
       state.storage.sql.exec(
@@ -258,6 +278,7 @@ describe("migrations", () => {
     await runInDurableObject(stub, (_instance, state) => {
       // Take the database back to 0003_guild_timezone, with a hike in it.
       state.storage.sql.exec("ALTER TABLE rounds DROP COLUMN event_id");
+      undoCadence(state.storage);
       undoPlaces(state.storage);
       dropDayOf(state.storage);
       state.storage.sql.exec(
@@ -299,6 +320,7 @@ describe("migrations", () => {
     const stub = stubFor("schema-round-day-of");
     await runInDurableObject(stub, (_instance, state) => {
       // Take the database back to 0004_round_event, with a hike in it.
+      undoCadence(state.storage);
       undoPlaces(state.storage);
       dropDayOf(state.storage);
       state.storage.sql.exec(
@@ -346,6 +368,7 @@ describe("migrations", () => {
   it("add the place columns to a database at 0005, keeping its options and settings", async () => {
     const stub = stubFor("schema-places");
     await runInDurableObject(stub, (_instance, state) => {
+      undoCadence(state.storage);
       undoPlaces(state.storage);
       state.storage.sql.exec(
         `INSERT INTO rounds (status, started_by, started_at)
@@ -412,6 +435,51 @@ describe("migrations", () => {
         place_lat: 47.5,
         place_name: "Ridge, King County",
       });
+    });
+  });
+
+  it("add the schedule columns to a database at 0006, keeping its settings", async () => {
+    const stub = stubFor("schema-guild-cadence");
+    await runInDurableObject(stub, (_instance, state) => {
+      undoCadence(state.storage);
+      state.storage.sql.exec(
+        "UPDATE guild_settings SET vote_channel_id = '12', timezone = 'UTC' WHERE id = 1",
+      );
+      expect(appliedNames(state.storage)).toEqual(
+        shipped.slice(0, shipped.indexOf("0007_guild_cadence")),
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(appliedNames(state.storage)).toEqual(shipped);
+      expect(
+        state.storage.sql.exec("SELECT * FROM guild_settings").toArray(),
+      ).toMatchObject([
+        {
+          vote_channel_id: "12",
+          timezone: "UTC",
+          cadence_enabled: 0,
+          cadence_weekday: 3,
+          cadence_time: "09:00",
+          cadence_date_vote_days: 2,
+          cadence_on_since: null,
+        },
+      ]);
+      state.storage.sql.exec(
+        "UPDATE guild_settings SET cadence_enabled = 1, cadence_weekday = 5 WHERE id = 1",
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(
+        state.storage.sql
+          .exec("SELECT cadence_enabled, cadence_weekday FROM guild_settings")
+          .one(),
+      ).toEqual({ cadence_enabled: 1, cadence_weekday: 5 });
     });
   });
 

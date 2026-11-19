@@ -29,6 +29,10 @@ export const ROUND_IDS = {
   startDate: "hb:date:start",
   dates: "hb:date:dates",
   day: "hb:date:day",
+  cadence: "hb:admin:cadence",
+  cadenceDay: "hb:admin:cadence-day",
+  cadenceTime: "hb:admin:cadence-time",
+  cadenceTimeValue: "hb:admin:cadence-time-value",
 };
 
 /** A guild with its owner, members and channels, as `RoundPlayer.guild` makes it. */
@@ -359,6 +363,57 @@ export class RoundPlayer {
         at,
       );
     }
+  }
+
+  /**
+   * Moves the guild `days` days back in time as the weekly schedule's job
+   * sees it: every poll's opening time, and when the schedule was turned
+   * on. The Worker's clock cannot be moved, so this ages what the job reads
+   * instead. Writes through the harness's access to the object's SQLite
+   * storage.
+   */
+  async backdateVotes(g: TestGuild, days: number): Promise<void> {
+    const sql = await this.e2e.harness
+      .getWorker()
+      .getDurableObjectStorage("GUILD_HIKE", { name: g.guildId });
+    const ms = days * 86_400_000;
+    await sql.exec("UPDATE polls SET opened_at = opened_at - ?", ms);
+    await sql.exec(
+      "UPDATE guild_settings SET cadence_on_since = cadence_on_since - ?",
+      ms,
+    );
+  }
+
+  /** Turns the weekly schedule on from Settings, then goes back. */
+  async turnScheduleOn(g: TestGuild, panel: FakeMessage): Promise<void> {
+    await g.owner.click(panel, ROUND_IDS.settings);
+    await g.owner.click(panel, ROUND_IDS.cadence);
+    expect(messageText(this.shown(panel))).toContain("The schedule is on.");
+    await g.owner.click(panel, ROUND_IDS.back);
+  }
+
+  /**
+   * Sets the weekly schedule to `weekday` (0 is Sunday) at `time` (`HH:MM`)
+   * from Settings, then goes back to the status view.
+   */
+  async setScheduleTime(
+    g: TestGuild,
+    panel: FakeMessage,
+    weekday: number,
+    time: string,
+  ): Promise<void> {
+    await g.owner.click(panel, ROUND_IDS.settings);
+    await g.owner.select(panel, ROUND_IDS.cadenceDay, [String(weekday)]);
+    const form = await g.owner.click(panel, ROUND_IDS.cadenceTime);
+    await g.owner.submitModal(
+      form,
+      { [ROUND_IDS.cadenceTimeValue]: time },
+      panel,
+    );
+    expect(messageText(this.shown(panel))).toContain(
+      `The schedule's time is ${time}`,
+    );
+    await g.owner.click(panel, ROUND_IDS.back);
   }
 
   /** Cancels the active round from the panel, confirming. */

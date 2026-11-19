@@ -27,6 +27,20 @@ export async function schedule(
   if (alarm === null || due < alarm) await storage.setAlarm(due);
 }
 
+/**
+ * Drops `job` from the schedule, if it is scheduled, and keeps the alarm at
+ * the earliest job still scheduled, or clears it when none is.
+ */
+export async function unschedule(
+  storage: DurableObjectStorage,
+  job: string,
+): Promise<void> {
+  await storage.delete(`${JOB_KEY_PREFIX}${job}`);
+  const later = await scheduledJobs(storage);
+  if (later.size > 0) await storage.setAlarm(Math.min(...later.values()));
+  else await storage.deleteAlarm();
+}
+
 /** When each scheduled job is due, by job name. */
 export async function scheduledJobs(
   storage: DurableObjectStorage,
