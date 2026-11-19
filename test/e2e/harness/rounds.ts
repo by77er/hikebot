@@ -35,6 +35,56 @@ export const ROUND_IDS = {
   cadenceTimeValue: "hb:admin:cadence-time-value",
 };
 
+/** One option of a seeded vote: for a date, its `YYYY-MM-DD HH:MM`. */
+export interface SeededOption {
+  label: string;
+  details?: string;
+  /** The user ids of the members who voted for it. */
+  voters?: string[];
+}
+
+/** A round as `RoundPlayer.seedRound` stores it. */
+export interface SeededRound {
+  status: "location_voting" | "location_decided" | "date_voting" | "complete";
+  /** When it started, in ms since the epoch; each vote lasts a day. */
+  startedAt: number;
+  locations: SeededOption[];
+  /** The winning location's label, once the location vote closed. */
+  location?: string;
+  dates?: SeededOption[];
+  /** The winning date's `YYYY-MM-DD HH:MM`, once the date vote closed. */
+  date?: string;
+  threadId?: string;
+  eventId?: string;
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/**
+ * A date option's label as the bot writes it, from its `YYYY-MM-DD HH:MM`:
+ * `Sat, 15 Jun 2030 · 11:00`.
+ */
+export function dateOptionLabel(value: string): string {
+  const [day = "", time = ""] = value.split(" ");
+  const [year = 0, month = 1, date = 1] = day.split("-").map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, date)).getUTCDay();
+  return `${WEEKDAYS[weekday] ?? ""}, ${String(date)} ${MONTHS[month - 1] ?? ""} ${String(year)} · ${time}`;
+}
+
 /** A guild with its owner, members and channels, as `RoundPlayer.guild` makes it. */
 export interface TestGuild {
   guildId: string;
@@ -253,27 +303,6 @@ export class RoundPlayer {
     return { form, response };
   }
 
-  /**
-   * Clicks Propose a location on the location `poll` and submits `name`
-   * with `details`; returns the answer to the submit.
-   */
-  async proposeLocation(
-    member: Member,
-    poll: FakeMessage,
-    name: string,
-    details = "",
-  ) {
-    const form = await member.click(
-      poll,
-      idStarting(this.shown(poll), "hb:location:propose:"),
-    );
-    return member.submitModal(
-      form,
-      { "hb:location:name": name, "hb:location:details": details },
-      poll,
-    );
-  }
-
   /** Clicks Vote, picks `labels` and returns the select message. */
   async vote(
     member: Member,
@@ -403,6 +432,122 @@ export class RoundPlayer {
   }
 
   /**
+   * Stores `round` in the guild's object as the bot would have stored it
+   * after members played it that far: its location vote, and from
+   * `date_voting` on its date vote, each option with the members who voted
+   * for it, the winners once a vote closed, and for a `complete` round its
+   * thread and event. The polls' messages are in the text channel, with
+   * made-up ids. Nothing is posted, so nothing waits: for the screenshots'
+   * seeds, which run outside Vitest and cannot wait with `eventually`.
+   * Open the panel first (`setUpPanel`), so the object has its tables.
+   * Writes through the harness's access to the object's SQLite storage.
+   */
+  async seedRound(g: TestGuild, round: SeededRound): Promise<void> {
+    const sql = await this.e2e.harness
+      .getWorker()
+      .getDurableObjectStorage("GUILD_HIKE", { name: g.guildId });
+    const owner = g.owner.actor.userId;
+    const at = round.startedAt;
+    const [row] = await sql.exec<{ id: number }>(
+      `INSERT INTO rounds (status, started_by, started_at)
+       VALUES (?, ?, ?) RETURNING id`,
+      round.status,
+      owner,
+      at,
+    );
+    const roundId = row?.id ?? 0;
+    const seedPoll = async (
+      kind: "location" | "date",
+      options: SeededOption[],
+      winner: string | undefined,
+      openedAt: number,
+    ): Promise<number | null> => {
+      const [poll] = await sql.exec<{ id: number }>(
+        `INSERT INTO polls (round_id, kind, status, channel_id, message_id,
+           opened_by, opened_at, closed_by, closed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        roundId,
+        kind,
+        winner === undefined ? "open" : "closed",
+        g.channels.text,
+        `9${g.guildId.slice(1, -3)}${String(roundId * 2 + (kind === "date" ? 1 : 0)).padStart(3, "0")}`,
+        owner,
+        openedAt,
+        winner === undefined ? null : owner,
+        winner === undefined ? null : openedAt + 86_400_000,
+      );
+      const pollId = poll?.id ?? 0;
+      let winnerId: number | null = null;
+      for (const option of options) {
+        const label =
+          kind === "date" ? dateOptionLabel(option.label) : option.label;
+        const [added] = await sql.exec<{ id: number }>(
+          `INSERT INTO poll_options (poll_id, label, label_key, details,
+             date_value, proposed_by, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+          pollId,
+          label,
+          label.toLowerCase(),
+          option.details ?? null,
+          kind === "date" ? option.label : null,
+          owner,
+          openedAt,
+        );
+        const optionId = added?.id ?? 0;
+        if (option.label === winner) winnerId = optionId;
+        for (const userId of option.voters ?? []) {
+          await sql.exec(
+            `INSERT INTO poll_votes (poll_id, option_id, user_id, voted_at)
+             VALUES (?, ?, ?, ?)`,
+            pollId,
+            optionId,
+            userId,
+            openedAt + 60_000,
+          );
+        }
+      }
+      if (winnerId !== null) {
+        await sql.exec(
+          "UPDATE polls SET winner_option_id = ? WHERE id = ?",
+          winnerId,
+          pollId,
+        );
+      }
+      return winnerId;
+    };
+    const location = await seedPoll(
+      "location",
+      round.locations,
+      round.location,
+      at,
+    );
+    await sql.exec(
+      "UPDATE rounds SET location_option_id = ? WHERE id = ?",
+      location,
+      roundId,
+    );
+    if (round.status !== "date_voting" && round.status !== "complete") return;
+    const date = await seedPoll(
+      "date",
+      round.dates ?? [],
+      round.date,
+      at + 2 * 86_400_000,
+    );
+    if (round.status !== "complete") return;
+    await sql.exec(
+      `UPDATE rounds SET date_option_id = ?, thread_id = ?, event_id = ?,
+         ended_by = ?, ended_at = ?
+       WHERE id = ?`,
+      date,
+      round.threadId ?? null,
+      round.eventId ?? null,
+      owner,
+      at + 3 * 86_400_000,
+      roundId,
+    );
+  }
+
+  /**
    * Moves the guild `days` days back in time as the weekly schedule's job
    * sees it: every poll's opening time, and when the schedule was turned
    * on. The Worker's clock cannot be moved, so this ages what the job reads
@@ -418,31 +563,6 @@ export class RoundPlayer {
     await sql.exec(
       "UPDATE guild_settings SET cadence_on_since = cadence_on_since - ?",
       ms,
-    );
-  }
-
-  /**
-   * Moves every date option of the guild from the year `from` to the year
-   * `to`, in its value and its label, so hikes played years ahead become
-   * past hikes. Give two years with the same calendar (2030 and 2019), so
-   * every weekday in the labels stays right. The Worker's clock cannot be
-   * moved, and the date vote takes only dates ahead, so this rewrites what
-   * the log reads instead, through the harness's access to the object's
-   * SQLite storage.
-   */
-  async moveHikeYears(g: TestGuild, from: string, to: string): Promise<void> {
-    const sql = await this.e2e.harness
-      .getWorker()
-      .getDurableObjectStorage("GUILD_HIKE", { name: g.guildId });
-    await sql.exec(
-      `UPDATE poll_options
-       SET date_value = replace(date_value, ? || '-', ? || '-'),
-           label = replace(label, ' ' || ? || ' · ', ' ' || ? || ' · ')
-       WHERE date_value IS NOT NULL`,
-      from,
-      to,
-      from,
-      to,
     );
   }
 

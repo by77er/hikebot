@@ -7,9 +7,11 @@
  * years ahead, so every run renders the same page. Avatars and server icons
  * are hashes `discord-cdn.ts` answers with fixed pictures.
  */
-import type { FakeMessage } from "../e2e/harness/fake-discord";
-import { Member } from "../e2e/harness/helpers";
-import { RoundPlayer, type TestGuild } from "../e2e/harness/rounds";
+import {
+  RoundPlayer,
+  type SeededOption,
+  type TestGuild,
+} from "../e2e/harness/rounds";
 import type { E2E } from "../e2e/harness/start";
 import { MISSING_PICTURE, picture } from "./discord-cdn";
 
@@ -61,13 +63,8 @@ const guildId = (n: number) => String(200000000000000100n + BigInt(n));
 /** The server of the server's page's seeds, as `RoundPlayer.guild(1)` makes it. */
 export const SERVER = { name: "Ridge Walkers", icon: picture(2) };
 
-/** What a seed of a server's page does once the server is set up. */
-type ServerSteps = (
-  play: RoundPlayer,
-  g: TestGuild,
-  panel: FakeMessage,
-  viewer: Member,
-) => Promise<void>;
+/** What a seed of a server's page stores once the server is set up. */
+type ServerSteps = (play: RoundPlayer, g: TestGuild) => Promise<void>;
 
 /**
  * The server SERVER, id 220000000000000101, with its panel set up and then
@@ -86,12 +83,8 @@ function server(
       ...(as === "admin" && { ownerId: MEMBER_ID }),
     });
     e2e.discord.addMember(g.guildId, MEMBER_ID);
-    const viewer = new Member(e2e.client, {
-      guildId: g.guildId,
-      channelId: g.channels.text,
-      userId: MEMBER_ID,
-    });
-    await steps(play, g, await play.setUpPanel(g), viewer);
+    await play.setUpPanel(g);
+    await steps(play, g);
     e2e.discord.addUser({
       id: MEMBER_ID,
       username: "ana.hikes",
@@ -103,86 +96,94 @@ function server(
   };
 }
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
-
-/** A date option's label as the bot writes it: `Sat, 15 Jun 2030 · 11:00`. */
-function dateLabel(value: string): string {
-  const [year = 0, month = 1, day = 1] = value.split("-").map(Number);
-  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  return `${WEEKDAYS[weekday] ?? ""}, ${String(day)} ${MONTHS[month - 1] ?? ""} ${String(year)} · 11:00`;
+/** The user ids of the guild's members at the indexes `picks`. */
+function voters(g: TestGuild, ...picks: number[]): string[] {
+  return picks.map((i) => g.members[i]?.actor.userId ?? "");
 }
 
 const SNOW_LAKE_DETAILS =
   "6.7 miles round trip, 1,800 ft of gain. Meet at the Alpental lot at 8:30; bring a Northwest Forest Pass and microspikes.";
 
+/** A round started on Sunday 2 June 2030, 18:00 UTC. */
+const STARTED = Date.UTC(2030, 5, 2, 18);
+
 /**
- * An open location vote of four locations, one with details, that six
- * members have voted on; with `viewerVotes`, MEMBER_ID votes too.
+ * The location vote of the seeds: four locations, one with details, that
+ * six members voted on, and MEMBER_ID for `viewer`.
  */
-function locationVote(viewerVotes: string[] = []): ServerSteps {
-  return async (play, g, panel, viewer) => {
-    const poll = await play.startLocationVote(
-      g,
-      panel,
-      ["Mailbox Peak", "Rattlesnake Ledge", "Lake Serene"].join("\n"),
-    );
-    const [a, b, c, d, e, f] = g.members as [
-      Member,
-      Member,
-      Member,
-      Member,
-      Member,
-      Member,
-    ];
-    await play.proposeLocation(a, poll, "Snow Lake", SNOW_LAKE_DETAILS);
-    await play.vote(a, poll, ["Snow Lake", "Mailbox Peak"]);
-    await play.vote(b, poll, ["Snow Lake"]);
-    await play.vote(c, poll, ["Snow Lake", "Lake Serene"]);
-    await play.vote(d, poll, ["Mailbox Peak"]);
-    await play.vote(e, poll, ["Rattlesnake Ledge", "Snow Lake"]);
-    await play.vote(f, poll, ["Mailbox Peak"]);
-    if (viewerVotes.length > 0) await play.vote(viewer, poll, viewerVotes);
-  };
+function locations(g: TestGuild, viewer: string[] = []): SeededOption[] {
+  const mine = (label: string) => (viewer.includes(label) ? [MEMBER_ID] : []);
+  return [
+    {
+      label: "Snow Lake",
+      details: SNOW_LAKE_DETAILS,
+      voters: [...voters(g, 0, 1, 2, 4), ...mine("Snow Lake")],
+    },
+    {
+      label: "Mailbox Peak",
+      voters: [...voters(g, 0, 3, 5), ...mine("Mailbox Peak")],
+    },
+    {
+      label: "Rattlesnake Ledge",
+      voters: [...voters(g, 4), ...mine("Rattlesnake Ledge")],
+    },
+    { label: "Lake Serene", voters: [...voters(g, 2), ...mine("Lake Serene")] },
+  ];
 }
 
-/** The location vote above, closed: Snow Lake won. */
-const locationDecided: ServerSteps = async (play, g, panel, viewer) => {
-  await locationVote(["Snow Lake"])(play, g, panel, viewer);
-  await play.closeVote(g.owner, panel, "location vote");
-};
+/** An open location vote; MEMBER_ID voted for `viewer`. */
+function locationVote(viewer: string[] = []): ServerSteps {
+  return (play, g) =>
+    play.seedRound(g, {
+      status: "location_voting",
+      startedAt: STARTED,
+      locations: locations(g, viewer),
+    });
+}
 
-const DATES = ["2030-06-08", "2030-06-09", "2030-06-15"];
+/** The location vote closed: Snow Lake won; no date vote yet. */
+const locationDecided: ServerSteps = (play, g) =>
+  play.seedRound(g, {
+    status: "location_decided",
+    startedAt: STARTED,
+    locations: locations(g, ["Snow Lake"]),
+    location: "Snow Lake",
+  });
 
-/** The date vote after it, on three dates, with MEMBER_ID's votes. */
-const dateVote: ServerSteps = async (play, g, panel, viewer) => {
-  await locationDecided(play, g, panel, viewer);
-  const poll = await play.startDateVote(g, panel, DATES.join("\n"));
-  const [a, b, c] = g.members as [Member, Member, Member];
-  await play.vote(a, poll, [dateLabel("2030-06-08"), dateLabel("2030-06-15")]);
-  await play.vote(b, poll, [dateLabel("2030-06-15")]);
-  await play.vote(c, poll, [dateLabel("2030-06-09"), dateLabel("2030-06-15")]);
-  await play.vote(viewer, poll, [dateLabel("2030-06-15")]);
-};
+/** The date vote on three days, MEMBER_ID voting for the 15th. */
+function dates(g: TestGuild): SeededOption[] {
+  return [
+    { label: "2030-06-08 11:00", voters: voters(g, 0) },
+    { label: "2030-06-09 09:00", voters: voters(g, 2) },
+    {
+      label: "2030-06-15 11:00",
+      voters: [...voters(g, 0, 1, 2), MEMBER_ID],
+    },
+  ];
+}
 
-/** The date vote above, closed: Snow Lake on Sat, 15 Jun 2030 is planned. */
-const hikePlanned: ServerSteps = async (play, g, panel, viewer) => {
-  await dateVote(play, g, panel, viewer);
-  await play.closeVote(g.owner, panel, "date vote");
-};
+/** The date vote open, for Snow Lake. */
+const dateVote: ServerSteps = (play, g) =>
+  play.seedRound(g, {
+    status: "date_voting",
+    startedAt: STARTED,
+    locations: locations(g, ["Snow Lake"]),
+    location: "Snow Lake",
+    dates: dates(g),
+  });
+
+/** The round complete: Snow Lake on Sat, 15 Jun 2030 at 11:00 is planned. */
+const hikePlanned: ServerSteps = (play, g) =>
+  play.seedRound(g, {
+    status: "complete",
+    startedAt: STARTED,
+    locations: locations(g, ["Snow Lake"]),
+    location: "Snow Lake",
+    dates: dates(g),
+    date: "2030-06-15 11:00",
+    threadId: "320000000000000101",
+    eventId: "330000000000000101",
+  });
 
 const LOG_HIKES = [
   "Mailbox Peak",
@@ -199,21 +200,21 @@ const LOG_HIKES = [
   "Twin Falls",
 ];
 
-/**
- * Twelve hikes, one a month of 2030, then moved to 2019 (the same
- * calendar), so all twelve are past: the log has two pages.
- */
-const hikeLog: ServerSteps = async (play, g, panel) => {
+/** Twelve past hikes, one a month of 2019: two pages of the log. */
+const hikeLog: ServerSteps = async (play, g) => {
   for (const [index, location] of LOG_HIKES.entries()) {
     const month = String(index + 1).padStart(2, "0");
-    const dates: [string, string] = [`2030-${month}-05`, `2030-${month}-12`];
-    await play.playHike(g, panel, {
+    await play.seedRound(g, {
+      status: "complete",
+      startedAt: Date.UTC(2019, index, 1, 18),
+      locations: [{ label: location, voters: voters(g, 0) }],
       location,
-      dates,
-      date: dateLabel(dates[1]),
+      dates: [{ label: `2019-${month}-12 10:00`, voters: voters(g, 0) }],
+      date: `2019-${month}-12 10:00`,
+      threadId: `3200000000000002${month}`,
+      ...(index % 3 !== 0 && { eventId: `3300000000000002${month}` }),
     });
   }
-  await play.moveHikeYears(g, "2030", "2019");
 };
 
 export const SEEDS: Record<string, Seed> = {
