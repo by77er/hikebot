@@ -252,6 +252,20 @@ permission", with the roles from their membership.
 - `calendar` (`calendarSection`, `src/features/calendar-feed.ts`): `url`,
   the guild's signed feed address (see "Calendar feed"), which the view
   gives only to members, as `/hike log` does.
+- `admin` (`adminSection`, `src/features/web-admin.ts`): null unless the
+  viewer is an admin. `actions`, the round controls the admin panel offers
+  in the current state (`panelActions` in `src/features/admin-panel.ts`,
+  which also draws the panel's buttons), with the panel's labels and
+  order, but Set map pin, and with Withdraw date vote before Cancel round
+  while a date vote is open. Each has its `kind`, `label`, `target` (the
+  poll or round it acts on), `style` (`primary` for the round's next step,
+  `danger` for Cancel round, `quiet` for Withdraw date vote), `note` (for
+  a retry, the panel's line on what failed) and `confirm` (for Close,
+  Withdraw and Cancel round, the panel's question and what it does).
+  `setupMissing` is the panel's sentence while setup is not complete;
+  `locationsField` and `datesField` are the start modals' fields (label,
+  hint, placeholder, limit), the latter with the default dates the modal is
+  filled with.
 
 **Caches.** The guild object keeps, in memory only (`WebViewCache`):
 
@@ -284,7 +298,7 @@ path under a server is the 404 page.
   named for dates, and Vote in Discord linking to the poll's message; a
   decided location waiting for its date vote; with no round and no planned
   hike an empty state, telling an admin to start a vote from `/hike admin`
-  in Discord); the planned hike as a full hike card (location, details,
+  in Discord); for an admin, the Admin card (below); the planned hike as a full hike card (location, details,
   date and time in the server's time zone with the zone named, links to the
   thread and the event); the hike log's five latest hikes, with a link to
   the whole log when it has more; and the calendar address in a read-only
@@ -294,6 +308,61 @@ path under a server is the 404 page.
   (`HIKES_PER_PAGE`), as compact hike cards with Newer and Older; a page
   that is not a number is the first, and the read clamps one past either
   end, as the bot's log buttons are.
+
+**Admin controls.** For an admin, the server's page also has, right under
+the heading, the notice of the action they just took, and after the
+current step the **Admin** card (`admin-controls.tsx`) with the view's
+`admin.actions`: the round's next step as the card's primary button
+(Start location vote, Close location vote, Start date vote, Close date
+vote), each retry after the panel's line on what failed, and Withdraw date
+vote and Cancel round apart at the card's foot. A member who is not an
+admin sees neither. The admin's routes live under
+`/g/<guild id>/admin/` (`src/web/admin/routes.tsx`), a page and a POST per
+control, by its `kind`:
+
+- `GET …/admin/start-location-vote` and `…/admin/start-date-vote`: the
+  start modal as a form, with the same field, label, hint and limit; the
+  date form is filled with the default dates. A start the round action
+  refuses for its input (`invalid_labels`, `resting`, `invalid_dates`,
+  `refused`) comes back as the form, status 400, with the typed text and
+  the panel's sentence.
+- `GET …/admin/close-vote?target=<poll>`, `…/withdraw-date-vote?target=<poll>`
+  and `…/cancel-round?target=<round>`: the confirmation page, with the
+  panel's question, what the control does, and the open vote's current
+  tally (or the decided location). A control the view no longer offers
+  sends the admin back to the server's page with a notice that says so.
+- `POST …/admin/<kind>` for every control, with the CSRF token, `target`
+  and, for a start, `text`; the retries and Post vote message post straight
+  from the page.
+
+Every POST goes through `adminAction` (`src/web/admin/action.tsx`): the
+guard below (signed out: 403), `checkPost` (the CSRF token and the same
+origin: else the 403 refused page), the view's admin flag (else the 403
+page "Only admins can do this", with the panel's refusal), then
+`actOnGuild` (`src/web/guild.ts`), which calls the RPC method
+`adminAction` of the guild's object. There `runWebAction`
+(`src/guild/web-action.ts`) asks Discord for the user's membership and
+roles again, past the 60-second cache, decides with `decideAdmin` whether
+they are an admin at this moment, and only then runs the control with
+`runWebAdminAction` (`src/features/web-admin.ts`): the round action the
+panel's button calls, with the signed-in user as the actor, so the stored
+`*_by` columns and the messages name them as after a button press. Nothing
+under `src/web/` decides what a control may do or calls Discord for it.
+The object awaits the action's Discord work for up to 20 seconds
+(`WEB_WORK_WAIT_MS`); past that it answers "finishing" and the work goes
+on in the object (a close in its durable flow, see "Durable close"). The
+answer, `forbidden`, `not_member`, `unavailable`, a refusal with its code
+and the panel's sentence, or done with the panel's notes and the retries
+offered once the work is done, becomes a 303 back to the server's page
+carrying a notice in the cookie `__Host-hikebot_notice` (sealed with
+purpose `notice` for the user and the server, for a minute; `notice.ts`).
+The server's page reads it once and clears it, and shows a success banner
+titled with the first note; a warning, "Done, but a step failed.", with
+the notes and each failed step's line and its retry; "Done. Discord is
+still finishing it." while the work goes on; or "Nothing was changed."
+with the refusal's sentence. A control submitted after the round moved on
+is refused by the round action with the panel's sentence, so nothing
+changes.
 
 In a log, the hike that is the view's planned hike is drawn as planned and
 every other as a past hike.
@@ -436,9 +505,12 @@ Scheduled jobs are registered the same way, by name:
 (`src/features/index.ts`), which runs the jobs that are due, as "Deferred
 work" describes.
 
-Besides `handleInteraction` and `runFollowUp`, the object has one read for
-the web: `calendarFeed(guildId)`, a one-line call into
-`src/features/calendar-feed.ts` (see "Calendar feed").
+Besides `handleInteraction` and `runFollowUp`, the object has the web's
+calls, each a one-line call into the code that owns it:
+`calendarFeed(guildId)` into `src/features/calendar-feed.ts` (see
+"Calendar feed"), `webView(request)` into `src/guild/web-view.ts` and
+`adminAction(request)` into `src/guild/web-action.ts` (see "Web pages for
+a server").
 
 ## Deferred work
 
@@ -513,8 +585,10 @@ the poll message, the close flow, the retries) and resolves to the panel's
 notes.
 
 The actions do not check who the actor is. The caller does: every Discord
-handler goes through `adminOnly` (see "Admin permission"), the web pages
-check in their own way, and the bot's schedule needs no check. A handler
+handler goes through `adminOnly` (see "Admin permission"), the web page's
+admin controls through `runWebAction`, which applies the same rule in the
+guild object at the moment of the action ("Web pages for a server"), and
+the bot's schedule needs no check. A handler
 parses the interaction (the id in the `custom_id`, the modal's fields),
 calls the action with `roundContext(interaction, context)` and
 `actorOf(interaction)`, and answers with `answerPanel`

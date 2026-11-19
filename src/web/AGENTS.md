@@ -304,6 +304,67 @@ The example adds the hike's map to the server's page,
    screenshots" says, and follow "Review your own UI change as a
    designer".
 
+## Add an admin action to a server's page
+
+The example adds Reopen vote, a control that acts on a poll and asks
+first; use your control's kind, round action and words. "Web pages for a
+server" in `docs/design.md` says what every admin action checks.
+
+1. Write the round action in `src/features/round-actions.ts` and its
+   button on the Discord panel, as "Add a round action" in
+   `src/features/AGENTS.md` says, adding the kind to `PanelActionKind` and
+   the control to `panelActions` in `src/features/admin-panel.ts` in the
+   states where the panel offers it. The view's `admin.actions` then offer
+   it too. A control only the web page has goes in `webAdminActions` in
+   `src/features/web-admin.ts` instead.
+2. In `src/features/web-admin.ts`, add a case to `act` that calls the
+   round action with the request's `target` (or `text`, one line per item),
+   and, for a control that asks first, give it a `confirm` in
+   `webAdminActions` with the panel's question and what it does:
+
+   ```ts
+       case "reopen-vote":
+         return reopenVote(context, actor, { pollId: target });
+   ```
+
+3. In `src/web/admin/routes.tsx`, add one line for its POST to
+   `ADMIN_ACTIONS`, through `action`, which answers with `adminAction`
+   from `action.tsx`, and, for a control that asks first, one for its
+   confirmation page to `ADMIN_PAGES`. For a control that takes input,
+   write a form page like `startPage` and pass `adminAction` a `refused`
+   hook that shows the form again for the refusals of its input, as
+   `startAction` does:
+
+   ```tsx
+     ["/admin/reopen-vote", confirmPage("reopen-vote")],
+   ```
+
+   ```tsx
+     ["/admin/reopen-vote", action("reopen-vote")],
+   ```
+
+4. Check the Admin card (`src/web/pages/server/admin-controls.tsx`) in
+   each state that offers the control: a control with `confirm` must be a
+   link to its confirmation page, a start a link to its form page, any
+   other a button that posts. For another kind of page, add its case to
+   `pageOf` there.
+5. Test it: in `test/features/web-admin.test.ts`, that the view offers it
+   in the panel's states and that `runWebAdminAction` runs it as the actor
+   and refuses it, with the panel's sentence, once the state changed; in
+   `test/web/admin/routes.test.tsx`, that its POST reaches `adminAction`
+   with the target and is refused without the token; and in
+   `test/e2e/admin-web.test.ts`, the admin doing it from the page with
+   `client.submitForm` while members act in Discord:
+
+   ```sh
+   npx vitest run test/features/web-admin.test.ts test/web/admin
+   npx vitest run --project e2e test/e2e/admin-web.test.ts
+   ```
+
+6. Add its confirmation page to the screenshots, and the server's page
+   after it with a `submit` entry, as "Add a page to the screenshots"
+   says, then follow "Review your own UI change as a designer".
+
 ## Add a form that changes something
 
 The example adds a trail from a form on `/trails`; "Sign-in and sessions"
@@ -907,16 +968,29 @@ Here the component is `pill`; use your component's name.
    ),
    ```
 
-3. A `GET` route that is not a page (a file, a redirect, a plain-text
+3. For a page that shows what a form did, such as the server's page after
+   an admin's action, give the entry `"submit"`: the page whose form to
+   submit, the form's `action` and the `fields` over its own. The script
+   submits it once, signed in as `user`, and opens `path` with the
+   cookies that leaves:
+
+   ```json
+   "submit": {
+     "from": "/g/220000000000000101/admin/close-vote?target=2",
+     "action": "/g/220000000000000101/admin/close-vote"
+   }
+   ```
+
+4. A `GET` route that is not a page (a file, a redirect, a plain-text
    answer) goes under `"excluded"` with its `route` as registered and the
    `reason` it has no screenshot.
-4. Run the test that compares the list with the web router's `GET` routes:
+5. Run the test that compares the list with the web router's `GET` routes:
 
    ```sh
    npx vitest run test/web/screenshot-pages.test.ts
    ```
 
-5. Follow "Take the screenshots", then "Review your own UI change as a
+6. Follow "Take the screenshots", then "Review your own UI change as a
    designer".
 
 ## Review your own UI change as a designer

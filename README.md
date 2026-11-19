@@ -36,6 +36,23 @@ does next, and when. Admins can still start, close, withdraw or cancel a
 vote by hand at any time; hikebot carries on from whatever it finds.
 **Turn schedule off** stops it and leaves any open vote as it is.
 
+## Running a round from the web page
+
+Everything the round buttons of `/hike admin` do can also be done on the
+server's web page: sign in with Discord at the bot's address, choose the
+server, and the **Admin** card under the current step offers the same
+controls, with the same names, in the same states: **Start location vote**
+(with initial locations, one per line), **Close location vote**, **Start
+date vote** (the default dates filled in), **Withdraw date vote**, **Close
+date vote**, **Cancel round**, and the retries the panel offers when
+something failed in Discord (**Create hike thread**, **Create hike event**,
+**Show map picture**, **Post hike-day announcement**, **Announce …**,
+**Post vote message**). Closing, withdrawing and cancelling ask first on a
+page of their own. The page says what happened as the panel does, and
+Discord messages name the admin who did it. Only the server owner and
+members with the admin role see the card; hikebot checks with Discord
+again at every click. **Set map pin** and the settings stay in Discord.
+
 ## Local development
 
 Requires Node.js 22.13 or later. To set up a checkout, run the bot locally,
