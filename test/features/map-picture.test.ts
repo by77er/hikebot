@@ -368,6 +368,10 @@ describe("the map picture close step", () => {
     expect(galleryUrls(upload?.body.components)).toEqual([MAP_PICTURE_URL]);
     expect(gallery).toBeGreaterThan(-1);
     expect(links).toBeGreaterThan(gallery);
+    // The edit keeps the weather block the thread shows.
+    expect(text(upload?.body.components)).toContain(
+      "### Weather\nThe forecast appears 16 days before the hike.",
+    );
 
     const [cover, ...moreCovers] = eventEdits(guild, sent);
     expect(moreCovers).toEqual([]);
