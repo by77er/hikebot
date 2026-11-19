@@ -476,12 +476,19 @@ function textPaint(role: LabelRole) {
   };
 }
 
-/** A label's own first zoom (`min_zoom`), brought forward by its lead. */
+/**
+ * A feature with a name, from its own first zoom (`min_zoom`) brought
+ * forward by its role's lead, as the picture labels it.
+ */
 function shown(role: LabelRole): ExpressionSpecification {
   return [
-    "<=",
-    ["coalesce", ["to-number", ["get", "min_zoom"]], 0],
-    ["+", ["zoom"], LABEL_ZOOM_LEAD[role]],
+    "all",
+    ["has", "name"],
+    [
+      "<=",
+      ["coalesce", ["to-number", ["get", "min_zoom"]], 0],
+      ["+", ["zoom"], LABEL_ZOOM_LEAD[role]],
+    ],
   ];
 }
 
