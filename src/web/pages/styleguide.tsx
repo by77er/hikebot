@@ -102,7 +102,7 @@ export function StyleguidePage({ tokens }: { tokens: SchemeTokens }) {
           </p>
         </div>
         <nav class="styleguide-index stack" aria-label="Style guide">
-          <h2>On this page</h2>
+          <h2>Contents</h2>
           <Index title="Foundations" sections={FOUNDATIONS} />
           <Index title="Components" sections={COMPONENTS} />
         </nav>
@@ -129,8 +129,11 @@ export function StyleguideSectionPage({
     <Layout title={`${title} · Style guide · hikebot`} width="overview">
       <div class="stack stack--section">
         <div class="page-heading">
-          <p class="page-heading__eyebrow">Cairn style guide</p>
-          <h1>{title}</h1>
+          <p class="page-heading__eyebrow">Cairn design system</p>
+          <h1>Style guide</h1>
+          <p class="page-heading__lead">
+            {title}, on a page of its own, in every state.
+          </p>
         </div>
         <Render tokens={tokens} />
       </div>

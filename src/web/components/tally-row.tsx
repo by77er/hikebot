@@ -10,7 +10,7 @@
 import { useId } from "preact/hooks";
 import { Blaze } from "./blaze";
 import type { Preview } from "./button";
-import { CheckIcon } from "./icons";
+import { CheckIcon, ChevronRightIcon } from "./icons";
 
 export interface TallyOption {
   /** The option's id, the value its checkbox sends. */
@@ -120,16 +120,26 @@ export function TallyRow({
         </p>
       )}
       {tieNote && <p class="tally-row__tie">{tieNote}</p>}
-      {details &&
-        (collapseDetails ? (
-          <details class="tally-row__more">
-            <summary class="tally-row__summary">Details</summary>
-            <p class="tally-row__details">{details}</p>
-          </details>
-        ) : (
-          <p class="tally-row__details">{details}</p>
-        ))}
-      {proposer && <p class="tally-row__proposer">Proposed by {proposer}</p>}
+      {details && !collapseDetails && (
+        <p class="tally-row__details">{details}</p>
+      )}
+      {(proposer || (details && collapseDetails)) && (
+        <div class="tally-row__foot">
+          {proposer && (
+            <p class="tally-row__proposer">Proposed by {proposer}</p>
+          )}
+          {details && collapseDetails && (
+            <details class="tally-row__more">
+              <summary class="tally-row__summary">
+                <ChevronRightIcon class="tally-row__chevron" size="small" />
+                Details
+                <span class="u-visually-hidden"> of {label}</span>
+              </summary>
+              <p class="tally-row__details">{details}</p>
+            </details>
+          )}
+        </div>
+      )}
     </div>
   );
 }

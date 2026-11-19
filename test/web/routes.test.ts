@@ -326,9 +326,54 @@ describe("GET /styleguide", () => {
     expect(ids).toEqual(
       expect.arrayContaining(["colour", "contrast", "typography", "button"]),
     );
-    for (const id of ids) {
+    for (const { id, ownPage } of STYLEGUIDE_SECTIONS) {
+      if (ownPage) {
+        expect(html).not.toContain(`id="${id}"`);
+        expect(html).toContain(`<a href="/styleguide/${id}">`);
+      } else {
+        expect(html).toContain(
+          `<section class="styleguide-section" id="${id}"`,
+        );
+        expect(html).toContain(`<a href="#${id}">`);
+      }
+    }
+  });
+
+  it("shows each section that has a page of its own on that page", async () => {
+    const own = STYLEGUIDE_SECTIONS.filter(({ ownPage }) => ownPage);
+    expect(own.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([
+        "empty-state",
+        "hike-card",
+        "round-stepper",
+        "status-pill",
+        "tally-list",
+        "tally-row",
+        "tally-vote",
+      ]),
+    );
+    for (const { id, title } of own) {
+      const response = await get(`/styleguide/${id}`);
+      expect(response.status, id).toBe(200);
+      expect(pageHeaders(response)).toEqual(EXPECTED_PAGE_HEADERS);
+      const html = await response.text();
+      const page = await outline(html);
+      expect(page).toMatchObject({
+        title: `${title} · Style guide · hikebot`,
+        scripts: 0,
+        styleAttributes: 0,
+      });
       expect(html).toContain(`<section class="styleguide-section" id="${id}"`);
-      expect(html).toContain(`<a href="#${id}">`);
+    }
+  });
+
+  it("answers 404 for a section without a page of its own, or none", async () => {
+    for (const path of [
+      "/styleguide/colour",
+      "/styleguide/nothing",
+      "/styleguide/",
+    ]) {
+      expect((await get(path)).status, path).toBe(404);
     }
   });
 

@@ -110,47 +110,53 @@ export function HikeCard({
       class={`hike-card hike-card--${size} hike-card--${when}`}
       aria-labelledby={titleId}
     >
-      <p class="hike-card__leaf" aria-hidden="true">
-        <span class="hike-card__weekday">{weekday}</span>
-        <span class="hike-card__day">{day}</span>
-        <span class="hike-card__month">{month}</span>
-      </p>
-      <div class="hike-card__body">
-        <Heading class="hike-card__title" id={titleId}>
-          {location}
-        </Heading>
-        <p class="hike-card__time">
-          <ClockIcon class="hike-card__icon" size="small" />
-          <span>
-            <time datetime={`${start.date}T${start.time}`}>
-              {`${weekday}, ${day} ${month} ${year} · ${start.time}`}
-            </time>{" "}
-            <span class="hike-card__zone">{start.timeZone}</span>
-          </span>
+      <div class="hike-card__head">
+        <p class="hike-card__leaf" aria-hidden="true">
+          <span class="hike-card__weekday">{weekday}</span>
+          <span class="hike-card__day">{day}</span>
+          <span class="hike-card__month">{month}</span>
         </p>
-        <p class="hike-card__state">
-          {when === "upcoming" ? <StatusPill status="planned" /> : "Past hike"}
-        </p>
-        {full && details && <p class="hike-card__details">{details}</p>}
-        {full && proposer && (
-          <p class="hike-card__proposer">Proposed by {proposer}</p>
-        )}
-        {full && picture !== undefined && (
-          <div class="hike-card__picture">{picture}</div>
-        )}
-        {shown.length > 0 && (
-          <ul class="hike-card__links">
-            {shown.map(({ key, label, icon: LinkIcon }) => (
-              <li key={key}>
-                <a class="hike-card__link" href={links[key] ?? undefined}>
-                  <LinkIcon class="hike-card__icon" size="small" />
-                  {label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div class="hike-card__headline">
+          <Heading class="hike-card__title" id={titleId}>
+            {location}
+          </Heading>
+          <p class="hike-card__time">
+            <ClockIcon class="hike-card__icon" size="small" />
+            <span>
+              <time datetime={`${start.date}T${start.time}`}>
+                {`${weekday}, ${day} ${month} ${year} · ${start.time}`}
+              </time>{" "}
+              <span class="hike-card__zone">{start.timeZone}</span>
+            </span>
+          </p>
+          <p class="hike-card__state">
+            {when === "upcoming" ? (
+              <StatusPill status="planned" />
+            ) : (
+              "Past hike"
+            )}
+          </p>
+        </div>
       </div>
+      {full && details && <p class="hike-card__details">{details}</p>}
+      {full && proposer && (
+        <p class="hike-card__proposer">Proposed by {proposer}</p>
+      )}
+      {full && picture !== undefined && (
+        <div class="hike-card__picture">{picture}</div>
+      )}
+      {shown.length > 0 && (
+        <ul class="hike-card__links">
+          {shown.map(({ key, label, icon: LinkIcon }) => (
+            <li key={key}>
+              <a class="hike-card__link" href={links[key] ?? undefined}>
+                <LinkIcon class="hike-card__icon" size="small" />
+                {label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </article>
   );
 }

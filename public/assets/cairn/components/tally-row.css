@@ -99,15 +99,40 @@
   overflow-wrap: anywhere;
 }
 
+/* The proposer and, in a long list, the folded details share a line. */
+.tally-row__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-4);
+}
+
+.tally-row__more[open] {
+  flex-basis: 100%;
+}
+
 .tally-row__summary {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1);
   min-height: var(--target-min);
   color: var(--color-link);
   font-size: var(--font-size-small);
   line-height: var(--line-height-small);
   font-weight: var(--font-weight-semibold);
   cursor: pointer;
+}
+
+.tally-row__summary::-webkit-details-marker {
+  display: none;
+}
+
+.tally-row__chevron {
+  transition: transform var(--duration-quick) var(--easing-standard);
+}
+
+.tally-row__more[open] .tally-row__chevron {
+  transform: rotate(90deg);
 }
 
 .tally-row__summary:where(:hover, [data-preview="hover"]) {

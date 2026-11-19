@@ -9,7 +9,7 @@ import {
   LOCATION_VOTERS,
   LOCATIONS,
 } from "./samples";
-import { Section, StateList, type StyleguideSection } from "./section";
+import { Section, type StyleguideSection } from "./section";
 
 const STATES: { state: string; checked: boolean; preview?: Preview }[] = [
   { state: "Not voted", checked: false },
@@ -29,10 +29,9 @@ function TallyVoteSection() {
       intro="The votable tally: each option's label is a real checkbox's label, checked for the viewer's saved votes, in a form whose Vote button posts them without JavaScript. The checkbox replaces the row's own Your vote mark."
     >
       <h3>A votable row in each state</h3>
-      <StateList
-        examples={STATES.map(({ state, checked, preview }) => ({
-          state,
-          example: (
+      <ul class="stack list-reset">
+        {STATES.map(({ state, checked, preview }) => (
+          <li key={state} class="stack stack--tight">
             <TallyRow
               option={{
                 id: state,
@@ -45,9 +44,10 @@ function TallyVoteSection() {
               choice={{ name: "option" }}
               preview={preview}
             />
-          ),
-        }))}
-      />
+            <span class="styleguide-states__label">{state}</span>
+          </li>
+        ))}
+      </ul>
       <h3>Date vote, one vote saved</h3>
       <TallyVote
         action={ACTION}

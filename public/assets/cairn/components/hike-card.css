@@ -1,15 +1,14 @@
 /*
- * Hike card: a calendar leaf beside the hike's location, time, state,
- * details and links. An upcoming hike's leaf is filled in pine; a past
+ * Hike card: a calendar leaf beside the hike's location, time and state,
+ * then its details and links across the card. An upcoming hike's leaf is filled in pine; a past
  * hike's is sandstone with muted figures, so a list of hikes shows at a
  * glance which are still to come. The links are as tall as a tap target.
  */
 
 .hike-card {
-  display: grid;
-  grid-template-columns: var(--width-date-leaf) minmax(0, 1fr);
-  gap: var(--space-4);
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
   min-width: 0;
   padding: var(--space-5);
   background: var(--color-surface);
@@ -20,6 +19,18 @@
 
 .hike-card--compact {
   padding: var(--space-4);
+  gap: var(--space-2);
+}
+
+/* The leaf beside the headline; everything after runs the full width. */
+.hike-card__head {
+  display: grid;
+  grid-template-columns: var(--width-date-leaf) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.hike-card--compact .hike-card__head {
   gap: var(--space-3);
 }
 
@@ -52,7 +63,7 @@
   font-weight: var(--font-weight-bold);
 }
 
-.hike-card__body {
+.hike-card__headline {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);

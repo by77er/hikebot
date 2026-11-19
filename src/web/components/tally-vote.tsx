@@ -5,7 +5,9 @@
  * works without JavaScript: the form sends every checked option's id under
  * `name`, and the route replaces the member's votes with them, as the
  * bot's vote select does. Put the CSRF field and any other hidden fields
- * in `hidden`. The instructions are the group's legend.
+ * in `hidden`. The instructions are the group's legend. With no options
+ * there is nothing to vote for: it shows the list's `empty` sentence and
+ * no form.
  */
 import type { ComponentChildren } from "preact";
 import { Button } from "./button";
@@ -33,6 +35,9 @@ export function TallyVote({
   hidden,
   ...list
 }: TallyVoteProps) {
+  if (list.options.length === 0) {
+    return <TallyList {...list} />;
+  }
   return (
     <form class="tally-vote" method="post" action={action}>
       {hidden}
@@ -40,13 +45,11 @@ export function TallyVote({
         <legend class="tally-vote__legend">{instructions}</legend>
         <TallyList {...list} choice={{ name }} />
       </fieldset>
-      {list.options.length > 0 && (
-        <div class="tally-vote__actions">
-          <Button variant="primary" icon={VoteIcon}>
-            Vote
-          </Button>
-        </div>
-      )}
+      <div class="tally-vote__actions">
+        <Button variant="primary" icon={VoteIcon}>
+          Vote
+        </Button>
+      </div>
     </form>
   );
 }

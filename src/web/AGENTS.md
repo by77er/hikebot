@@ -447,9 +447,19 @@ Here the component is `pill`; use your component's name.
    node -e 'const b = require("fs").readFileSync(process.argv[1]); console.log(b.readUInt32BE(16), b.readUInt32BE(20))' docs/screenshots/styleguide--phone--light.png
    ```
 
-   If it is taller, give your component a page of its own at
-   `/styleguide/<component>`, built like `StyleguidePage`, linked from the
-   style guide's index, with its own entry in the screenshot page list.
+   If it is taller, or your section is long (a list of 25 rows), give the
+   component a page of its own at `/styleguide/<component>`: add
+   `ownPage: true` to its `StyleguideSection`, so the style guide's index
+   links to that page and the route `/styleguide/*` shows the section
+   there, then add the page to the screenshots as "Add a page to the
+   screenshots" says, named `styleguide-<component>`, with
+   `"seed": "empty"` and `"user": null`, after the other `styleguide`
+   entries in alphabetical order, and take the screenshots again:
+
+   ```sh
+   npx vitest run test/web/screenshot-pages.test.ts test/web/routes.test.ts
+   npm run screenshots
+   ```
 
 ## Add an icon
 
