@@ -75,7 +75,7 @@ describe("TallyRow", () => {
     expect(await spokenText(html)).toContain("11 votes Winner Your vote");
   });
 
-  it("says when the winner was drawn from a tie, in the bot's words", async () => {
+  it("says when the winner was drawn from a tie, in the bot's words", () => {
     const html = render(
       <TallyRow
         option={{ ...MAILBOX, votes: 4 }}
