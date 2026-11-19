@@ -160,22 +160,35 @@ export function restingRefusal(
   return `Nothing was started. Remove ${what} and try again:\n${refused.join("\n")}`;
 }
 
+/**
+ * The start modal's one field: its label, hint, placeholder and limit. The
+ * web page's Start location vote form shows the same.
+ */
+export const START_LOCATIONS_FIELD = {
+  label: "Initial locations (one per line)",
+  hint: `Up to ${String(MAX_OPTIONS)}, each up to ${String(MAX_LABEL_LENGTH)} characters. Members can propose more.`,
+  placeholder: "Leave empty to let members propose them",
+  maxLength: 4000,
+  required: false,
+};
+
 /** Start location vote: opens the modal for the initial locations. */
 const openStartModal: ComponentHandler = adminOnly((_interaction, context) => {
   const refusal = locationVoteRefusal(context);
   if (refusal !== null) return adminPanelUpdate(context, refusal.message);
+  const field = START_LOCATIONS_FIELD;
   return {
     response: modal(LOCATION_IDS.start, "Start location vote", [
       label(
-        "Initial locations (one per line)",
+        field.label,
         textInput({
           custom_id: LOCATION_IDS.initial,
           style: TextInputStyle.Paragraph,
-          required: false,
-          max_length: 4000,
-          placeholder: "Leave empty to let members propose them",
+          required: field.required,
+          max_length: field.maxLength,
+          placeholder: field.placeholder,
         }),
-        `Up to ${String(MAX_OPTIONS)}, each up to ${String(MAX_LABEL_LENGTH)} characters. Members can propose more.`,
+        field.hint,
       ),
     ]),
   };

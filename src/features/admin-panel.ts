@@ -285,19 +285,67 @@ function pollAnnouncements(
   });
 }
 
+/** A round control the panel offers, named by what it does. */
+export type PanelActionKind =
+  | "start-location-vote"
+  | "create-hike-thread"
+  | "create-hike-event"
+  | "show-map-picture"
+  | "post-hike-day"
+  | "announce"
+  | "set-map-pin"
+  | "start-date-vote"
+  | "post-vote-message"
+  | "close-vote"
+  | "cancel-round";
+
+/**
+ * One of the panel's round controls, as plain data, so the Discord panel
+ * and the web page offer the same controls in the same states.
+ */
+export interface PanelAction {
+  kind: PanelActionKind;
+  /** The button's label: "Close location vote". */
+  label: string;
+  /** The poll or round it acts on; null for a start. */
+  target: number | null;
+  /** `primary` for the round's next step, `danger` for Cancel round. */
+  style: "primary" | "secondary" | "danger";
+  /** For a retry, the panel's line on what failed: "**Hike thread:** …". */
+  note?: string;
+}
+
+const BUTTON_STYLES = {
+  primary: ButtonStyle.Primary,
+  secondary: ButtonStyle.Secondary,
+  danger: ButtonStyle.Danger,
+} as const;
+
+const PANEL_IDS: Record<PanelActionKind, (target: number) => string> = {
+  "start-location-vote": () => POLL_CONTROL_IDS.startLocationVote,
+  "create-hike-thread": POLL_CONTROL_IDS.createHikeThread,
+  "create-hike-event": POLL_CONTROL_IDS.createHikeEvent,
+  "show-map-picture": POLL_CONTROL_IDS.showMapPicture,
+  "post-hike-day": POLL_CONTROL_IDS.postHikeDay,
+  announce: POLL_CONTROL_IDS.announce,
+  "set-map-pin": POLL_CONTROL_IDS.setMapPin,
+  "start-date-vote": () => POLL_CONTROL_IDS.startDateVote,
+  "post-vote-message": POLL_CONTROL_IDS.postVoteMessage,
+  "close-vote": POLL_CONTROL_IDS.closePoll,
+  "cancel-round": POLL_CONTROL_IDS.cancelRound,
+};
+
 /** Announce <vote> for each announcement that failed or was cut off. */
-function announceButtons(
-  state: AdminPanelState,
-): APIButtonComponentWithCustomId[] {
+function announceActions(state: AdminPanelState): PanelAction[] {
   return (state.announcements ?? [])
     .filter(({ status }) => status.state !== "posting")
-    .map(({ pollId, kind }) =>
-      button({
-        custom_id: POLL_CONTROL_IDS.announce(pollId),
-        label: `Announce ${POLL_NAMES[kind]}`,
-        style: ButtonStyle.Secondary,
-      }),
-    );
+    .map((announcement) => ({
+      kind: "announce",
+      label: `Announce ${POLL_NAMES[announcement.kind]}`,
+      target: announcement.pollId,
+      style: "secondary",
+      note: announcementLines([announcement])[0],
+    }));
 }
 
 /**
@@ -308,20 +356,35 @@ function announceButtons(
 export function actionButtons(
   state: AdminPanelState,
 ): APIButtonComponentWithCustomId[] {
-  return [...pollButtons(state), ...settingsButtons(state)];
+  return [
+    ...panelActions(state).map((action) =>
+      button({
+        custom_id: PANEL_IDS[action.kind](action.target ?? 0),
+        label: action.label,
+        style: BUTTON_STYLES[action.style],
+      }),
+    ),
+    ...settingsButtons(state),
+  ];
 }
 
-function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
+/**
+ * The round controls the panel offers in `state`, in display order, before
+ * Settings and Refresh. The web page offers the same ones.
+ */
+export function panelActions(state: AdminPanelState): PanelAction[] {
   const { round } = state;
   if (round === null) {
     const { finished, thread, event } = state;
     return [
       ...(setupComplete(state.settings)
         ? [
-            button({
-              custom_id: POLL_CONTROL_IDS.startLocationVote,
+            {
+              kind: "start-location-vote",
               label: "Start location vote",
-            }),
+              target: null,
+              style: "primary",
+            } as const,
           ]
         : []),
       // Only while the last round is complete without a thread.
@@ -330,11 +393,13 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
         thread?.state === "failed" ||
         thread?.state === "unconfirmed")
         ? [
-            button({
-              custom_id: POLL_CONTROL_IDS.createHikeThread(finished.id),
+            {
+              kind: "create-hike-thread",
               label: "Create hike thread",
-              style: ButtonStyle.Secondary,
-            }),
+              target: finished.id,
+              style: "secondary",
+              note: threadLines(thread)[0],
+            } as const,
           ]
         : []),
       // Only while the last round is complete without an event, and its
@@ -344,11 +409,13 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
         event?.state === "failed" ||
         event?.state === "unconfirmed")
         ? [
-            button({
-              custom_id: POLL_CONTROL_IDS.createHikeEvent(finished.id),
+            {
+              kind: "create-hike-event",
               label: "Create hike event",
-              style: ButtonStyle.Secondary,
-            }),
+              target: finished.id,
+              style: "secondary",
+              note: eventLines(event)[0],
+            } as const,
           ]
         : []),
       // Only while the map picture failed, was cut off or was never shown
@@ -358,11 +425,13 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
         state.mapPicture?.state === "failed" ||
         state.mapPicture?.state === "unconfirmed")
         ? [
-            button({
-              custom_id: POLL_CONTROL_IDS.showMapPicture(finished.id),
+            {
+              kind: "show-map-picture",
               label: "Show map picture",
-              style: ButtonStyle.Secondary,
-            }),
+              target: finished.id,
+              style: "secondary",
+              note: mapPictureLines(state.mapPicture)[0],
+            } as const,
           ]
         : []),
       // Only while the hike-day announcement failed or was cut off, and
@@ -371,15 +440,17 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
       (state.hikeDay?.status.state === "failed" ||
         state.hikeDay?.status.state === "unconfirmed")
         ? [
-            button({
-              custom_id: POLL_CONTROL_IDS.postHikeDay(finished.id),
+            {
+              kind: "post-hike-day",
               label: "Post hike-day announcement",
-              style: ButtonStyle.Secondary,
-            }),
+              target: finished.id,
+              style: "secondary",
+              note: hikeDayLines(state)[0],
+            } as const,
           ]
         : []),
-      ...announceButtons(state),
-      ...(finished ? [pinButton(finished)] : []),
+      ...announceActions(state),
+      ...(finished ? [pinAction(finished)] : []),
     ];
   }
   const open = openPoll(round);
@@ -390,47 +461,55 @@ function pollButtons(state: AdminPanelState): APIButtonComponentWithCustomId[] {
   return [
     ...(round.status === "location_decided"
       ? [
-          button({
-            custom_id: POLL_CONTROL_IDS.startDateVote,
+          {
+            kind: "start-date-vote",
             label: "Start date vote",
-          }),
+            target: null,
+            style: "primary",
+          } as const,
         ]
       : []),
     // Only while the open poll has no message and none is being posted.
     ...(open !== null && unposted
       ? [
-          button({
-            custom_id: POLL_CONTROL_IDS.postVoteMessage(open.id),
+          {
+            kind: "post-vote-message",
             label: "Post vote message",
-            style: ButtonStyle.Secondary,
-          }),
+            target: open.id,
+            style: "secondary",
+            note: openLine(open, state.voteMessage),
+          } as const,
         ]
       : []),
     ...(open === null
       ? []
       : [
-          button({
-            custom_id: POLL_CONTROL_IDS.closePoll(open.id),
+          {
+            kind: "close-vote",
             label: `Close ${POLL_NAMES[open.kind]}`,
-          }),
+            target: open.id,
+            style: "primary",
+          } as const,
         ]),
-    ...announceButtons(state),
-    ...(round.locationOptionId === null ? [] : [pinButton(round)]),
-    button({
-      custom_id: POLL_CONTROL_IDS.cancelRound(round.id),
+    ...announceActions(state),
+    ...(round.locationOptionId === null ? [] : [pinAction(round)]),
+    {
+      kind: "cancel-round",
       label: "Cancel round",
-      style: ButtonStyle.Danger,
-    }),
+      target: round.id,
+      style: "danger",
+    },
   ];
 }
 
 /** Set map pin, for the round's decided location. */
-function pinButton(round: RoundView): APIButtonComponentWithCustomId {
-  return button({
-    custom_id: POLL_CONTROL_IDS.setMapPin(round.id),
+function pinAction(round: RoundView): PanelAction {
+  return {
+    kind: "set-map-pin",
     label: "Set map pin",
-    style: ButtonStyle.Secondary,
-  });
+    target: round.id,
+    style: "secondary",
+  };
 }
 
 function settingsButtons(

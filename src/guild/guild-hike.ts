@@ -9,6 +9,11 @@ import { loadCalendarFeed } from "../features/calendar-feed";
 import { Router } from "./router";
 import { applyMigrations } from "./schema";
 import {
+  runWebAction,
+  type WebActionRequest,
+  type WebActionResult,
+} from "./web-action";
+import {
   readWebView,
   WebViewCache,
   type WebViewRequest,
@@ -91,6 +96,18 @@ export class GuildHike extends DurableObject<Env> {
    */
   webView(request: WebViewRequest): Promise<WebViewResult> {
     return readWebView(
+      { env: this.env, storage: this.ctx.storage },
+      this.webViewCache,
+      request,
+    );
+  }
+
+  /**
+   * An admin's round control posted from the web page: checks that the user
+   * is an admin now, then runs it. See `runWebAction`.
+   */
+  adminAction(request: WebActionRequest): Promise<WebActionResult> {
+    return runWebAction(
       { env: this.env, storage: this.ctx.storage },
       this.webViewCache,
       request,
