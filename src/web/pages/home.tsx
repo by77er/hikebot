@@ -1,11 +1,13 @@
 /**
- * The landing page at `/` for someone signed out: what hikebot does, how a
- * round goes, and its one action, Sign in with Discord. A signed-in visitor
- * is sent to `/servers` instead.
+ * The landing page at `/` for someone signed out: what hikebot does, its one
+ * action, Sign in with Discord, with what signing in tells hikebot, how a
+ * round goes, and, quietly, how a server admin adds the bot. A signed-in
+ * visitor is sent to `/servers` instead.
  */
 import { Button } from "../components/button";
 import { Card } from "../components/card";
-import { ArrowRightIcon } from "../components/icons";
+import { DiscordSignIn } from "../components/discord-sign-in";
+import { ExternalLinkIcon } from "../components/icons";
 import { Layout } from "../layout";
 
 const STEPS = [
@@ -23,7 +25,7 @@ const STEPS = [
   },
 ];
 
-export function HomePage() {
+export function HomePage({ inviteUrl }: { inviteUrl: string }) {
   return (
     <Layout title="hikebot">
       <div class="stack stack--section">
@@ -39,13 +41,7 @@ export function HomePage() {
           </div>
           <div class="stack stack--tight">
             <div class="cluster">
-              <Button
-                variant="primary"
-                href="/login"
-                iconAfter={ArrowRightIcon}
-              >
-                Sign in with Discord
-              </Button>
+              <DiscordSignIn />
             </div>
             <p class="u-small u-muted">
               Signing in tells hikebot your Discord name and avatar, and which
@@ -64,6 +60,22 @@ export function HomePage() {
               </li>
             ))}
           </ol>
+        </section>
+        <section class="stack stack--tight" aria-labelledby="add-hikebot">
+          <h2 id="add-hikebot">Add hikebot to your server</h2>
+          <p>
+            A server admin adds hikebot once; then members plan hikes with{" "}
+            <code>/hike</code> in Discord and here.
+          </p>
+          <div class="cluster">
+            <Button
+              variant="quiet"
+              href={inviteUrl}
+              iconAfter={ExternalLinkIcon}
+            >
+              Add hikebot to a server
+            </Button>
+          </div>
         </section>
       </div>
     </Layout>

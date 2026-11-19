@@ -1,0 +1,11 @@
+/*
+ * Sign in with Discord: a primary button whose icon is Discord's mark. The
+ * mark is drawn exactly white on the light scheme's pine and exactly black
+ * on the dark scheme's light pine, the two plain colours Discord's brand
+ * guidelines allow besides its own blurple. The button's states are the
+ * primary button's.
+ */
+
+.discord-sign-in__mark {
+  color: var(--color-discord-mark);
+}

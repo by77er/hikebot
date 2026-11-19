@@ -73,7 +73,9 @@ The Worker (`src/index.ts`) handles the rest:
     `image/png`, cacheable for an hour; the HTML 404 page while there is no
     map data there.
   - `GET /styleguide` (or `HEAD`): the style guide, every token and
-    component of the design system (`docs/design-system.md`).
+    component of the design system (`docs/design-system.md`);
+    `GET /styleguide/<component>` is the page of its own of a component
+    too large for that page (the HTML 404 page for any other name).
   - `GET /assets/*`: the file from `public/` through the `ASSETS` binding,
     for a request that reaches the Worker.
   - `GET /assets/v/<version>/*`: the same files under the deployed
@@ -134,7 +136,8 @@ so a name or title from Discord or a form cannot inject markup.
   the viewport meta, the `<title>`, the preloaded font and the stylesheet, a
   skip link to `<main id="main">`, and the header, main and footer
   landmarks), and the components are in `src/web/components/`.
-  `GET /styleguide` shows every token and component.
+  `GET /styleguide` shows every token and component, or links the
+  component's own page.
 - **Static files.** `public/` is the Workers Static Assets directory
   declared under `assets` in `wrangler.jsonc`, so
   `public/assets/cairn/cairn.css` is served at `/assets/cairn/cairn.css`,
@@ -282,6 +285,28 @@ session: everything it remembers is in one sealed cookie.
    60 seconds. It sorts them by name, keeps 25 at most, starts the session
    and redirects (303) to `next` or `/servers`.
 
+The pages of signing in, built from Cairn:
+
+- **The landing page** (`/`, signed out) says what hikebot is in one
+  sentence, offers **Sign in with Discord** (a link to `/login` with
+  Discord's mark) as its one primary action, says in one sentence what
+  signing in tells hikebot (the Discord name and avatar, and which of the
+  user's servers hikebot is in), and, as a quiet secondary, how a server
+  admin adds hikebot: **Add hikebot to a server**, Discord's authorize page
+  with the scopes `bot applications.commands`, the application's id and the
+  bot permissions `README.md` lists (`src/web/invite.ts`).
+- **The server list** (`/servers`, "Choose a server") shows a tile per
+  server in the session, with its icon or initials, linking to
+  `/g/<guild id>`, then **Refresh servers** with a sentence on when to use
+  it. With no servers an empty state says hikebot is not in any of them
+  and that a server admin can add it, with **Add hikebot to a server**;
+  **Refresh servers** follows as before.
+- **Sign-in was cancelled** says in one sentence that Discord told hikebot
+  nothing, with **Try again** (`/login`) and **Go to the home page**.
+- **Every signed-in page** has the user's avatar (from Discord's CDN, with
+  their initial behind it) and name in the header; they open a menu that
+  says who is signed in and holds **Sign out**.
+
 The session is the cookie `__Host-hikebot_session` (`HttpOnly`, `Secure`,
 `SameSite=Lax`, `Path=/`, `Max-Age` seven days), sealed with purpose
 `session`. It holds the user's id, display name (global name, else
@@ -306,8 +331,8 @@ refused with 403 unless the token opens for the session's user and the
 browser says the request came from this site: `Sec-Fetch-Site:
 same-origin` when sent, and an `Origin` equal to the request's origin when
 sent; a request with neither is refused. `POST /logout` is the first such
-form: the **Sign out** button `Layout` shows next to the user's name. It
-clears the cookie and redirects to `/`.
+form: the **Sign out** button in the user menu of the header `Layout`
+shows. It clears the cookie and redirects to `/`.
 
 The helpers later pages and forms use, each documented in its module:
 `readSession` and `requireSession` (which redirects to

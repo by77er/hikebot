@@ -1,7 +1,7 @@
 /**
  * The Worker's web pages as a browser gets them from the real bundle: the
- * landing page and the stylesheet it links, the health line, and the HTML
- * 404 page.
+ * landing page and the stylesheet it links, a style guide page of its own,
+ * the health line, and the HTML 404 page.
  */
 import { describe, expect, it } from "vitest";
 import { PageClient, stylesheetLinks } from "./harness/web";
@@ -54,6 +54,36 @@ describe("the landing page", () => {
       "public, max-age=31536000, immutable",
     );
     expect(css.body).toContain("@layer reset, tokens");
+  });
+});
+
+describe("adding hikebot to a server", () => {
+  it("is linked from the landing page, through Discord's authorize page", async () => {
+    const page = await new PageClient(e2e.url).get("/");
+    const href = /<a class="button button--quiet" href="([^"]+)">/
+      .exec(page.body)?.[1]
+      ?.replaceAll("&amp;", "&");
+    expect(page.body).toContain("<span>Add hikebot to a server</span>");
+    const invite = new URL(href ?? "");
+    expect(invite.pathname).toBe("/oauth2/authorize");
+    expect(invite.searchParams.get("scope")).toBe("bot applications.commands");
+    expect(invite.searchParams.get("client_id")).toMatch(/^\d+$/);
+    expect(invite.searchParams.get("permissions")).toMatch(/^\d+$/);
+  });
+});
+
+describe("a component's style guide page", () => {
+  it("shows the component on a page of its own, linked from the style guide", async () => {
+    const client = new PageClient(e2e.url);
+    const index = await client.get("/styleguide");
+    expect(index.body).toContain('<a href="/styleguide/avatar">Avatar</a>');
+    const page = await client.get("/styleguide/avatar");
+    expect(page.status).toBe(200);
+    expectPageHeaders(page.headers);
+    expect(page.body).toContain(
+      '<section class="styleguide-section" id="avatar"',
+    );
+    expect((await client.get("/styleguide/nothing")).status).toBe(404);
   });
 });
 

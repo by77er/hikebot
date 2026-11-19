@@ -7,18 +7,22 @@
  */
 import { Layout } from "../layout";
 import type { SchemeTokens } from "../tokens";
+import { appHeaderSection } from "./styleguide/app-header";
+import { avatarSection } from "./styleguide/avatar";
 import { bannerSection } from "./styleguide/banner";
 import { blazeSection } from "./styleguide/blaze";
 import { buttonSection } from "./styleguide/button";
 import { cardSection } from "./styleguide/card";
 import { colourSection } from "./styleguide/colour";
 import { contrastSection } from "./styleguide/contrast";
+import { discordSignInSection } from "./styleguide/discord-sign-in";
 import { emptyStateSection } from "./styleguide/empty-state";
 import { hikeCardSection } from "./styleguide/hike-card";
 import { iconsSection } from "./styleguide/icons";
 import { layoutMotionSection } from "./styleguide/layout-motion";
 import { roundStepperSection } from "./styleguide/round-stepper";
 import type { StyleguideSection } from "./styleguide/section";
+import { serverTileSection } from "./styleguide/server-tile";
 import { shapeSection } from "./styleguide/shape";
 import { spaceSection } from "./styleguide/space";
 import { statusPillSection } from "./styleguide/status-pill";
@@ -39,14 +43,18 @@ const FOUNDATIONS: StyleguideSection[] = [
 
 /** The components, in alphabetical order, one per line. */
 const COMPONENTS: StyleguideSection[] = [
+  appHeaderSection,
+  avatarSection,
   bannerSection,
   blazeSection,
   buttonSection,
   cardSection,
+  discordSignInSection,
   emptyStateSection,
   hikeCardSection,
   iconsSection,
   roundStepperSection,
+  serverTileSection,
   statusPillSection,
   tallyListSection,
   tallyRowSection,

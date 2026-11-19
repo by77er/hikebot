@@ -8,6 +8,7 @@
  * shows the whole pattern.
  */
 import { open, seal } from "../../signing";
+import { userAvatarUrl } from "../components/avatar";
 import type { LayoutUser } from "../layout";
 import { ForbiddenPage } from "../pages/forbidden";
 import { htmlResponse } from "../response";
@@ -41,15 +42,19 @@ export function CsrfField({ token }: { token: string }) {
 }
 
 /**
- * The signed-in user as `Layout` shows them: their name, and a CSRF token
- * for the Sign out form.
+ * The signed-in user as `Layout` shows them: their name, their avatar's
+ * address, and a CSRF token for the Sign out form.
  */
 export async function layoutUser(
   env: { SIGNING_SECRET: string },
   session: Session,
   now: number,
 ): Promise<LayoutUser> {
-  return { name: session.name, csrf: await csrfToken(env, session, now) };
+  return {
+    name: session.name,
+    avatar: userAvatarUrl(session.userId, session.avatar, "small"),
+    csrf: await csrfToken(env, session, now),
+  };
 }
 
 /**

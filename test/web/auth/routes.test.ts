@@ -58,17 +58,17 @@ describe("GET /servers", () => {
     expect(response.status).toBe(200);
     expect(pageHeaders(response)).toEqual(EXPECTED_PAGE_HEADERS);
     const html = await response.text();
-    expect(html).toContain(
-      '<a class="card__link" href="/g/200000000000000001">Alpine Club</a>',
+    expect(html).toMatch(
+      /<a class="server-tile" href="\/g\/200000000000000001">.*<span class="server-tile__name">Alpine Club<\/span>/,
+    );
+    expect(html).toMatch(
+      /<a class="server-tile" href="\/g\/200000000000000002">.*<span class="server-tile__name">Ridge Walkers<\/span>/,
     );
     expect(html).toContain(
-      '<a class="card__link" href="/g/200000000000000002">Ridge Walkers</a>',
-    );
-    expect(html).toContain(
-      '<a class="button button--secondary" href="/login?next=/servers"><span>Refresh servers</span></a>',
+      '<a class="button button--quiet" href="/login?next=/servers"><span>Refresh servers</span></a>',
     );
     const page = await outline(html);
-    expect(page.title).toBe("Your servers · hikebot");
+    expect(page.title).toBe("Choose a server · hikebot");
     expect(page.text).toContain("Signed in as Ana.");
     expect(page.text).not.toContain("not in any of your servers");
   });
@@ -78,9 +78,8 @@ describe("GET /servers", () => {
       headers: { Cookie: await cookieFor({ ...ana, guilds: [] }) },
     });
     const page = await outline(await response.text());
-    expect(page.text).toContain(
-      "hikebot is not in any of your servers. A server admin can add it to their server.",
-    );
+    expect(page.text).toContain("hikebot is not in any of your servers");
+    expect(page.text).toContain("A server admin can add it to their server");
     expect(page.elements).not.toContain("ul");
   });
 

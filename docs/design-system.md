@@ -98,6 +98,7 @@ value.
 | `--color-primary-hover`  | `#174a37` | `#97d3b5` | The primary button under the pointer.                                                                          |
 | `--color-primary-active` | `#103627` | `#b1e0c8` | The primary button while pressed.                                                                              |
 | `--color-on-primary`     | `#ffffff` | `#0d1a13` | Text and icons on a primary fill.                                                                              |
+| `--color-discord-mark`   | `#ffffff` | `#000000` | Discord's mark on Sign in with Discord: exactly white or black, as Discord's brand guidelines allow.           |
 | `--color-accent`         | `#d9541e` | `#f07f4a` | Trail-blaze orange: the blaze only (brand mark, "you are here", "winner"). Never text, never a fill for areas. |
 | `--color-link`           | `#1d5e86` | `#8ec5ec` | Lake blue: links in running text.                                                                              |
 | `--color-info`           | `#1d5e86` | `#8ec5ec` | Information: the info banner's icon and edge; status text.                                                     |
@@ -134,6 +135,7 @@ its ratio. "Surfaces" are `bg`, `surface`, `surface-raised` and
 | `text`, `text-muted`, `link`, `primary`, `danger`, `info`, `success`, `warning` as text on every surface | 4.5:1 (1.4.3)           |
 | Headings (`text`) on every surface                                                                       | 3:1 (1.4.3, large text) |
 | `on-primary` on `primary`, `primary-hover`, `primary-active`                                             | 4.5:1                   |
+| `discord-mark` on `primary`, `primary-hover`, `primary-active` (Discord's mark)                          | 3:1 (1.4.11, graphic)   |
 | `on-danger` on `danger`, `danger-hover`, `danger-active`                                                 | 4.5:1                   |
 | `text` and `link` on each `*-subtle` banner background                                                   | 4.5:1                   |
 | Each tone (`info`, `success`, `warning`, `danger`) on its `*-subtle` background                          | 3:1 (1.4.11, icon)      |
@@ -288,6 +290,11 @@ only; nothing moves on its own.
 | `--icon-size-small`               | 16px                           | Icons next to small text.                                                                                                        |
 | `--blaze-width`, `--blaze-height` | 8px by 18px                    | The blaze.                                                                                                                       |
 | `--width-date-leaf`               | 64px                           | The hike card's calendar leaf: room for a two-digit day at h2 size and "Wed" or "Sep" in small semibold, with space either side. |
+| `--avatar-size`                   | 48px                           | An avatar or server icon in a list, such as a server tile.                                                                       |
+| `--avatar-size-small`             | 32px                           | The user's avatar in the header.                                                                                                 |
+| `--width-tile-min`                | 288px                          | The narrowest a server tile gets in its grid before it wraps.                                                                    |
+| `--width-header-name`             | 128px                          | The most of the user's name the header shows before "…".                                                                         |
+| `--width-menu`                    | 256px                          | The user menu's panel (narrower on a narrow screen).                                                                             |
 
 The one breakpoint is **48rem (768px)**, written out in media queries
 because they cannot read custom properties. Below it there is a single
@@ -356,10 +363,11 @@ Block, element, modifier, in lower case with hyphens:
   stylesheet;
 - a **skip link**, the first focusable element, hidden until focused, to
   `<main id="main" tabindex="-1">`;
-- the **header**: the brand mark (blaze and "hikebot", linking home) on
-  the contour pattern, then room for navigation (`nav`, a `<ul>` of links
-  with the current one marked `aria-current="page"`, which draws a blaze
-  under it) and for the signed-in member (`user`);
+- the **header**, the App header component: the brand mark (blaze and
+  "hikebot", linking home) on the contour pattern, then room for the
+  server the page is about (`context`), for navigation (`nav`, a `<ul>` of
+  links with the current one marked `aria-current="page"`, which draws a
+  blaze under it) and for the signed-in member's menu (`user`);
 - **main**, at the task width or, with `width="overview"`, the overview
   width;
 - the **footer**: the project link and the style guide.
@@ -378,6 +386,36 @@ its styles in `public/assets/cairn/components/`, its unit test in
 `test/web/components/` and its style guide section in
 `src/web/pages/styleguide/`, one file each. In alphabetical order:
 
+- **App header** (`app-header.tsx`, its own style guide page): the band at
+  the top of every page, which `Layout` renders. The brand mark links home;
+  then the server a page is about (`context`; on a phone a row of its own
+  under the brand) and the navigation (`nav`); at the end, for a signed-in
+  member, the **user menu**: a `<details>` whose summary is their small
+  avatar and their name (shortened with "…" past `--width-header-name`),
+  named "Your account: <name>", opening a panel (an overlay, with
+  `--elevation-overlay`) that says "Signed in as <name>." and holds **Sign
+  out**, a quiet button in a form posting to `/logout` with the CSRF token.
+  States of the summary: default, hover, focus-visible, active, open.
+  **Why a menu and not an always-visible Sign out:** on the screenshots at
+  390px both fit a short name, but the always-visible form (avatar, name,
+  Sign out) left about 70px for the name, and a 32-character name (the
+  longest Discord allows) pushed it onto a second header row, with the
+  server's name to come on a third; the menu keeps the header one row for
+  any name, leaves room for the server and navigation, and keeps a
+  rarely-used, session-ending action one deliberate tap away. A
+  `<details>` opens and closes without script and from the keyboard.
+- **Avatar** (`avatar.tsx`, its own style guide page): a member's picture
+  (round) or a server's icon (a rounded square), 48px or 32px (`small`),
+  from Discord's CDN at twice that size, asked for without a referrer.
+  Behind it are the initials (one for a member, two for a server) in
+  `primary` on `surface-subtle`; they show when there is no picture, and
+  when the picture fails to load an `::after` that browsers draw only on a
+  broken image covers the broken-image mark with them, so no script is
+  needed. Decorative (`aria-hidden`, empty `alt`) because the name is next
+  to it; with a `label` (only where no name is beside it) it is an image
+  named by that label. The style guide's sample pictures are
+  `public/assets/cairn/samples/picture.svg` and `broken.svg` (deliberately
+  not a valid picture), made in this repository.
 - **Banner** (`banner.tsx`): a message about the page or what just
   happened, in four tones: `info` and `success` (`role="status"`),
   `warning` and `danger` (`role="alert"`). The tone is said by the icon's
@@ -396,6 +434,17 @@ its styles in `public/assets/cairn/components/`, its unit test in
   heading (level 2 to 4). With `href` the heading's link covers the card,
   which gets hover, active and focus states; links and buttons in its
   footer stay separately clickable.
+- **Discord sign-in** (`discord-sign-in.tsx`, its own style guide page):
+  **Sign in with Discord**, a variant of Button: the primary button,
+  linking to `/login` (with `next` when given), with Discord's mark before
+  the label, drawn in `--color-discord-mark`. Discord's brand guidelines
+  (https://discord.com/branding) allow its logo in colour, black or white,
+  unedited, and the mark only where the Discord brand is clearly visible:
+  here the mark is unchanged, exactly white on the light scheme's pine and
+  exactly black on the dark scheme's light pine, next to the word
+  "Discord". It is an SVG in the icon set, not a file from Discord. States:
+  the primary button's (default, hover, focus-visible, active); `block`
+  fills the width. Its accessible name is its label.
 - **Empty state** (`empty-state.tsx`): what a page or section shows when
   it has nothing yet.
   - _Purpose_: say there is nothing, why, and what happens next, so an
@@ -436,7 +485,11 @@ its styles in `public/assets/cairn/components/`, its unit test in
   a 2-unit round stroke in the current text colour, at 20px or 16px. They
   are the shapes of **Lucide** (lucide.dev) 1.75.0, under the **ISC
   licence**, whose notice is in `icons.tsx`. Decorative (`aria-hidden`)
-  unless given a `label`, which names them.
+  unless given a `label`, which names them. The one exception is
+  `DiscordIcon`, Discord's mark, filled rather than stroked, for **Sign in
+  with Discord** only: its shape is Discord's own, as published in the
+  `simple-icons` package (16.38.0, CC0; the mark itself is Discord's
+  trademark, used as its brand guidelines say, see Discord sign-in).
 - **Round stepper** (`round-stepper.tsx`): where a hike round is.
   - _Purpose_: the page's "where are we": which of the round's steps are
     done, which is now and which are to come.
@@ -456,6 +509,16 @@ its styles in `public/assets/cairn/components/`, its unit test in
   - _Do_: put one near the top of a round's page. _Don't_: use it for
     anything but a round, or rely on the marker's colour: the word is the
     state.
+- **Server tile** (`server-tile.tsx`, its own style guide page): one server
+  to choose, as one link to `/g/<id>` with one focus ring: the server's
+  icon or initials (Avatar, decorative), its name and a chevron, at least
+  44px high. The name wraps over two lines and then ends with "…" (the
+  whole name stays in the markup, and is the link's accessible name); a
+  long word breaks rather than widening the tile. States: default, hover
+  (stronger edge, underlined name), focus-visible, active.
+  `ServerTileList` lays tiles out in one column below the breakpoint and
+  in a grid of tiles at least `--width-tile-min` wide from it, each row as
+  tall as its tallest tile.
 - **Status pill** (`status-pill.tsx`): a state in one word with an icon.
   - _Purpose_: the honest state of a vote, round or hike, in the bot's
     words.
