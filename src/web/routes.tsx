@@ -18,7 +18,11 @@ import { readSession } from "./auth/session";
 import { calendarRoute } from "./calendar";
 import { MethodNotAllowedPage, NotFoundPage } from "./pages/errors";
 import { HomePage } from "./pages/home";
-import { StyleguidePage } from "./pages/styleguide";
+import {
+  ownPageSection,
+  StyleguidePage,
+  StyleguideSectionPage,
+} from "./pages/styleguide";
 import { seeOther } from "./redirect";
 import { htmlResponse } from "./response";
 import { WebRouter } from "./router";
@@ -44,6 +48,18 @@ export const webRouter = new WebRouter({
     );
     const tokens = parseTokens(await tokensCss.text());
     return htmlResponse(<StyleguidePage tokens={tokens} />);
+  })
+  .get("/styleguide/*", async (request, env) => {
+    const id = new URL(request.url).pathname.slice("/styleguide/".length);
+    const section = ownPageSection(id);
+    if (!section) return notFound();
+    const tokensCss = await env.ASSETS.fetch(
+      new URL("/assets/cairn/tokens.css", request.url),
+    );
+    const tokens = parseTokens(await tokensCss.text());
+    return htmlResponse(
+      <StyleguideSectionPage section={section} tokens={tokens} />,
+    );
   })
   .get("/assets/*", async (request, env) => {
     const asset = await env.ASSETS.fetch(request);

@@ -1,0 +1,101 @@
+/*
+ * Round stepper: the three steps of a hike round side by side, each with
+ * a marker, its name and its state in words. A line joins the markers; it
+ * is drawn in the success colour up to the step the round has reached.
+ * The current step has the blaze; done steps a check, steps to come an
+ * open circle, a cancelled step a cross. Not interactive.
+ */
+
+.round-stepper {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 0;
+  list-style: none;
+}
+
+.round-stepper__step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding-inline: var(--space-1);
+  text-align: center;
+}
+
+.round-stepper li + li {
+  margin: 0;
+}
+
+/* The line from the previous step's marker to this one's. */
+.round-stepper__step + .round-stepper__step::before {
+  content: "";
+  position: absolute;
+  inset-block-start: calc(var(--icon-size) / 2 - var(--border-width));
+  inset-inline: calc(-50% + var(--icon-size)) calc(50% + var(--icon-size));
+  border-block-start: var(--border-width-strong) solid var(--color-border);
+}
+
+.round-stepper__step:where(
+    .round-stepper__step--done,
+    .round-stepper__step--current,
+    .round-stepper__step--cancelled
+  )::before {
+  border-block-start-color: var(--color-success);
+}
+
+.round-stepper__step--skipped::before {
+  border-block-start-style: dashed;
+}
+
+.round-stepper__marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--icon-size);
+}
+
+.round-stepper__label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.round-stepper__state {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  color: var(--color-text-muted);
+}
+
+.round-stepper__step--done .round-stepper__icon {
+  color: var(--color-success);
+}
+
+.round-stepper__step--current .round-stepper__state {
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.round-stepper__step:where(
+    .round-stepper__step--upcoming,
+    .round-stepper__step--skipped
+  )
+  .round-stepper__icon {
+  color: var(--color-border-strong);
+}
+
+.round-stepper__step:where(
+    .round-stepper__step--upcoming,
+    .round-stepper__step--skipped
+  )
+  .round-stepper__label {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-regular);
+}
+
+.round-stepper__step--cancelled
+  :where(.round-stepper__icon, .round-stepper__state) {
+  color: var(--color-danger);
+  font-weight: var(--font-weight-semibold);
+}

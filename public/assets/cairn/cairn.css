@@ -16,7 +16,14 @@
 @import url("components/blaze.css") layer(components);
 @import url("components/button.css") layer(components);
 @import url("components/card.css") layer(components);
+@import url("components/empty-state.css") layer(components);
+@import url("components/hike-card.css") layer(components);
 @import url("components/icon.css") layer(components);
+@import url("components/round-stepper.css") layer(components);
+@import url("components/status-pill.css") layer(components);
+@import url("components/tally-list.css") layer(components);
+@import url("components/tally-row.css") layer(components);
+@import url("components/tally-vote.css") layer(components);
 /* Page styles, one file each, in alphabetical order, one line each. */
 @import url("pages/styleguide.css") layer(components);
 

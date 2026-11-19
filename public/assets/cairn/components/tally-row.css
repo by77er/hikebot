@@ -1,0 +1,143 @@
+/*
+ * Tally row: one option of a vote. The label and the count share the
+ * first line (the count in tabular figures, so a column of counts lines
+ * up); the bar of votes runs the full width under them; the marks, the
+ * tie-break note, the details and the proposer follow in small text. In a
+ * votable row the label is a checkbox's label as tall as a tap target.
+ */
+
+.tally-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-block: var(--space-3);
+}
+
+.tally-row__head {
+  display: flex;
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.tally-row__label {
+  flex: 1;
+  min-width: 0;
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.tally-row__count {
+  flex: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-body);
+  white-space: nowrap;
+}
+
+.tally-row__number {
+  color: var(--color-text);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The bar: a native meter, so its length needs no inline style. */
+.tally-row__bar {
+  display: block;
+  width: 100%;
+  height: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-subtle);
+  appearance: none;
+}
+
+.tally-row__bar::-webkit-meter-bar {
+  height: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-subtle);
+}
+
+.tally-row__bar::-webkit-meter-optimum-value {
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+}
+
+.tally-row__bar::-moz-meter-bar {
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+}
+
+.tally-row__marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  font-weight: var(--font-weight-semibold);
+}
+
+.tally-row__winner,
+.tally-row__mine {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tally-row__mine {
+  color: var(--color-primary);
+}
+
+.tally-row__tie,
+.tally-row__details,
+.tally-row__proposer {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  overflow-wrap: anywhere;
+}
+
+.tally-row__summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-min);
+  color: var(--color-link);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.tally-row__summary:where(:hover, [data-preview="hover"]) {
+  text-decoration-line: underline;
+  text-underline-offset: var(--underline-offset);
+}
+
+/* Votable: the whole label, checkbox and text, is the tap target. */
+.tally-row__choice {
+  display: flex;
+  align-items: start;
+  gap: var(--space-3);
+  min-height: var(--target-min);
+  padding-block: var(--space-2);
+  margin-block: calc(-1 * var(--space-2));
+  cursor: pointer;
+}
+
+.tally-row__choice:where(:hover, [data-preview="hover"]) {
+  color: var(--color-primary);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--border-width);
+  text-underline-offset: var(--underline-offset);
+}
+
+.tally-row__check {
+  flex: none;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  margin: calc((var(--line-height-body) - var(--icon-size)) / 2) 0 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}

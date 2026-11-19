@@ -56,6 +56,55 @@
       "status": 200,
       "seed": "empty",
       "user": null
+    },
+    {
+      "name": "styleguide-empty-state",
+      "path": "/styleguide/empty-state",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-hike-card",
+      "path": "/styleguide/hike-card",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-round-stepper",
+      "path": "/styleguide/round-stepper",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-status-pill",
+      "path": "/styleguide/status-pill",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-tally-list",
+      "path": "/styleguide/tally-list",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-tally-row",
+      "path": "/styleguide/tally-row",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-tally-vote",
+      "path": "/styleguide/tally-vote",
+      "status": 200,
+      "seed": "empty",
+      "user": null
     }
   ],
   "excluded": [

@@ -1,0 +1,47 @@
+/*
+ * Status pill: a state in one word with an icon. Each state has its own
+ * icon and colour pair; Planned, the end of a round, is the one filled
+ * pill. Not interactive, so it has no hover or focus state.
+ */
+
+.status-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-3) 0 var(--space-2);
+  border: var(--border-width) solid var(--pill-color);
+  border-radius: var(--radius-pill);
+  background: var(--pill-bg);
+  color: var(--pill-color);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.status-pill--open {
+  --pill-color: var(--color-info);
+  --pill-bg: var(--color-info-subtle);
+}
+
+.status-pill--closed {
+  --pill-color: var(--color-text-muted);
+  --pill-bg: var(--color-surface-subtle);
+}
+
+.status-pill--decided {
+  --pill-color: var(--color-success);
+  --pill-bg: var(--color-success-subtle);
+}
+
+.status-pill--planned {
+  --pill-color: var(--color-on-primary);
+  --pill-bg: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.status-pill--cancelled {
+  --pill-color: var(--color-danger);
+  --pill-bg: var(--color-danger-subtle);
+}

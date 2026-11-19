@@ -216,6 +216,18 @@ export const PAIRINGS: Pairing[] = [
   ]),
   ...onSurfaces("color-focus", "non-text", "Focus ring"),
   ...onSurfaces("color-accent", "non-text", "Trail blaze"),
+  ...["info", "success", "danger"].map((tone): Pairing => ({
+    foreground: `color-${tone}`,
+    background: `color-${tone}-subtle`,
+    kind: "text",
+    use: "Status pill",
+  })),
+  {
+    foreground: "color-primary",
+    background: "color-surface-subtle",
+    kind: "non-text",
+    use: "Tally bar",
+  },
 ];
 
 export interface PairingResult extends Pairing {
