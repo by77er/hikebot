@@ -6,6 +6,7 @@ import type {
   RESTGetAPICurrentUserGuildsResult,
   RESTGetAPICurrentUserResult,
   RESTGetAPIGuildChannelsResult,
+  RESTGetAPIGuildRolesResult,
   RESTGetAPIGuildMemberResult,
   RESTGetAPIGuildResult,
   RESTPatchAPIChannelJSONBody,
@@ -360,6 +361,18 @@ export class DiscordApi {
     return this.call({
       method: "GET",
       path: `/guilds/${guildId}/channels`,
+      auth: true,
+    });
+  }
+
+  /**
+   * The guild's roles, `@everyone` among them (its id is the guild's).
+   * https://docs.discord.com/developers/resources/guild#get-guild-roles
+   */
+  getGuildRoles(guildId: string): Promise<RESTGetAPIGuildRolesResult> {
+    return this.call({
+      method: "GET",
+      path: `/guilds/${guildId}/roles`,
       auth: true,
     });
   }

@@ -32,6 +32,16 @@ import {
 } from "../features/planned-hike-section";
 import { roundSection, type WebRoundSection } from "../features/round-section";
 import { adminSection, type WebAdminSection } from "../features/web-admin";
+import {
+  saveSettingsGroup,
+  settingsFormSection,
+  type SettingRefusal,
+  type SettingsDirectory,
+  type SettingsFields,
+  type WebSettingsForm,
+} from "../features/settings-form";
+import type { Notice } from "../features/settings";
+import type { SettingGroupId } from "../features/settings-catalogue";
 import { PollStore } from "../polls/store";
 import { GuildConfig, type GuildSettings } from "./config";
 import { decideAdmin, OWNER_CACHE_MS } from "./permissions";
@@ -39,6 +49,9 @@ import type { HandlerContext } from "./router";
 
 /** How long a member's membership and roles are trusted, in ms. */
 export const MEMBER_CACHE_MS = 60_000;
+
+/** How long the roles and channels the settings page offers are kept, in ms. */
+export const SETTINGS_DIRECTORY_CACHE_MS = 60_000;
 
 /** The most hikes one page of the web view's log may hold. */
 export const MAX_LOG_PAGE_SIZE = 50;
@@ -51,6 +64,8 @@ export interface WebViewRequest {
   page?: number;
   /** Defaults to `HIKES_PER_PAGE`; at most `MAX_LOG_PAGE_SIZE`. */
   pageSize?: number;
+  /** True for the settings page: an admin's view then has `settingsForm`. */
+  settingsForm?: boolean;
 }
 
 /**
@@ -73,6 +88,11 @@ export interface WebView {
   calendar: WebCalendarSection;
   /** The round controls an admin may use now; null for everyone else. */
   admin: WebAdminSection | null;
+  /**
+   * The settings page's forms: only in an admin's view, and only when the
+   * read asked for them.
+   */
+  settingsForm: WebSettingsForm | null;
 }
 
 export interface WebServerSection {
@@ -122,6 +142,11 @@ export interface WebViewSource {
   /** The store's clock, read once for the whole view. */
   now: number;
   log: { page: number; pageSize: number };
+  /**
+   * The roles and channels to pick from, when the read asked for them; left
+   * out, or null, otherwise.
+   */
+  settingsDirectory?: SettingsDirectory | null;
 }
 
 /** Builds the view, one section per function. */
@@ -135,6 +160,7 @@ export async function buildWebView(source: WebViewSource): Promise<WebView> {
     log: hikeLogSection(source),
     calendar: await calendarSection(source),
     admin: adminSection(source),
+    settingsForm: settingsFormSection(source),
   };
 }
 
@@ -177,6 +203,8 @@ interface MemberEntry {
 export class WebViewCache {
   private readonly members = new Map<string, MemberEntry>();
   private directory: { fetchedAt: number; value: GuildDirectory } | null = null;
+  private settings: { fetchedAt: number; value: SettingsDirectory } | null =
+    null;
 
   /**
    * The user's role ids, null when they are not a member (Discord answered
@@ -254,6 +282,47 @@ export class WebViewCache {
       return null;
     }
   }
+
+  /**
+   * The guild's roles and channels for the settings page, kept for
+   * `SETTINGS_DIRECTORY_CACHE_MS`, or null when Discord could not be asked.
+   */
+  async settingsDirectory(
+    api: DiscordApi,
+    guildId: string,
+    now: number,
+  ): Promise<SettingsDirectory | null> {
+    if (
+      this.settings !== null &&
+      fresh(this.settings.fetchedAt, now, SETTINGS_DIRECTORY_CACHE_MS)
+    ) {
+      return this.settings.value;
+    }
+    try {
+      const [roles, channels] = await Promise.all([
+        api.getGuildRoles(guildId),
+        api.getGuildChannels(guildId),
+      ]);
+      const value: SettingsDirectory = {
+        roles: roles.map(({ id, name, position }) => ({ id, name, position })),
+        channels: channels.map((channel) => ({
+          id: channel.id,
+          name: channel.name,
+          type: channel.type,
+          parentId: "parent_id" in channel ? (channel.parent_id ?? null) : null,
+          position:
+            "position" in channel && typeof channel.position === "number"
+              ? channel.position
+              : 0,
+        })),
+      };
+      this.settings = { fetchedAt: now, value };
+      return value;
+    } catch (error) {
+      logFailure(guildId, error);
+      return null;
+    }
+  }
 }
 
 function fresh(fetchedAt: number, now: number, maxAge: number): boolean {
@@ -298,6 +367,11 @@ export async function readWebView(
     logFailure(guildId, decision.error);
     return { kind: "unavailable" };
   }
+  let settingsDirectory: SettingsDirectory | null = null;
+  if (request.settingsForm === true && decision.isAdmin) {
+    settingsDirectory = await cache.settingsDirectory(api, guildId, now);
+    if (settingsDirectory === null) return { kind: "unavailable" };
+  }
 
   const view = await buildWebView({
     env: context.env,
@@ -310,8 +384,73 @@ export async function readWebView(
     storage: context.storage,
     now,
     log: logPage(request),
+    settingsDirectory,
   });
   return { kind: "view", view };
+}
+
+/** A save of one group of settings from the settings page. */
+export interface WebSettingsRequest {
+  guildId: string;
+  userId: string;
+  group: SettingGroupId;
+  fields: SettingsFields;
+}
+
+/**
+ * What the save did. Like the read, only an admin's answer says anything
+ * about the guild: `forbidden` for a member who is not an admin.
+ */
+export type WebSettingsResult =
+  | { kind: "not_member" }
+  | { kind: "unavailable" }
+  | { kind: "forbidden" }
+  | { kind: "saved"; notices: Notice[] }
+  | { kind: "refused"; errors: SettingRefusal[] };
+
+/**
+ * The settings page's save: asks Discord again, past the cache, whether the
+ * user is a member and with which roles, decides with `decideAdmin` whether
+ * they are an admin at this moment, then saves the group with
+ * `saveSettingsGroup`, against the roles and channels the page offered.
+ */
+export async function saveWebSettings(
+  context: HandlerContext,
+  cache: WebViewCache,
+  request: WebSettingsRequest,
+  options: { api?: DiscordApi; now?: number } = {},
+): Promise<WebSettingsResult> {
+  const { guildId, userId } = request;
+  const store = new PollStore(context.storage);
+  const now = options.now ?? store.now();
+  const api = options.api ?? discordApi(context.env);
+
+  const roleIds = await cache.member(api, guildId, userId, now, {
+    ask: true,
+  });
+  if (roleIds === "error") return { kind: "unavailable" };
+  if (roleIds === null) return { kind: "not_member" };
+  const decision = await decideAdmin(
+    context.storage,
+    api,
+    { guildId, userId, roleIds },
+    now,
+  );
+  if (!decision.ok) {
+    logFailure(guildId, decision.error);
+    return { kind: "unavailable" };
+  }
+  if (!decision.isAdmin) return { kind: "forbidden" };
+  const directory = await cache.settingsDirectory(api, guildId, now);
+  if (directory === null) return { kind: "unavailable" };
+  return saveSettingsGroup(
+    context,
+    guildId,
+    decision.settings,
+    directory,
+    request.group,
+    request.fields,
+  );
 }
 
 function logPage(request: WebViewRequest): { page: number; pageSize: number } {

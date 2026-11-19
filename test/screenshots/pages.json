@@ -166,6 +166,50 @@
       }
     },
     {
+      "name": "server-settings",
+      "path": "/g/220000000000000101/settings",
+      "status": 200,
+      "seed": "server-settings",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-settings-empty",
+      "path": "/g/220000000000000101/settings",
+      "status": 200,
+      "seed": "server-settings-empty",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-settings-refused",
+      "path": "/g/220000000000000101/settings",
+      "status": 400,
+      "seed": "server-settings-empty",
+      "user": "400000000000000001",
+      "post": {
+        "form": "#schedule form",
+        "fields": {
+          "cadence.enabled": "on"
+        }
+      }
+    },
+    {
+      "name": "server-settings-saved",
+      "path": "/g/220000000000000101/settings",
+      "status": 200,
+      "seed": "server-settings-empty",
+      "user": "400000000000000001",
+      "submit": {
+        "from": "/g/220000000000000101/settings",
+        "action": "/g/220000000000000101/settings",
+        "fields": {
+          "group": "channels",
+          "voteChannelId": "300000000000030101",
+          "announceChannelId": "300000000000030102",
+          "forumChannelId": "300000000000030103"
+        }
+      }
+    },
+    {
       "name": "server-with-log",
       "path": "/g/220000000000000101",
       "status": 200,

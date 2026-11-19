@@ -27,7 +27,7 @@ import {
 } from "../polls/dates";
 import { isPollError } from "../polls/errors";
 import { PollStore, type PollView, type RoundView } from "../polls/store";
-import { listing, missingSettings } from "./admin-panel";
+import { listing, missingSettings } from "./settings";
 import {
   announcementContent,
   announcementStatus,
