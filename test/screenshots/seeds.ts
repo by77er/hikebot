@@ -479,7 +479,7 @@ export const SEEDS: Record<string, Seed> = {
   /** The date vote open for its owner, and Discord refusing the forum. */
   "server-date-vote-forum-refused-admin": (e2e) =>
     server(async (play, g) => {
-      await dateVote(play, g);
+      await dateVote(play, g, e2e);
       e2e.discord.failChannel(g.channels.forum, "missing-permissions");
     }, "admin")(e2e),
   "server-hike-planned": server(hikePlanned),
