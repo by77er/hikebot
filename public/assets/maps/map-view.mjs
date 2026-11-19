@@ -9,9 +9,10 @@
  * places all lie outside the map data, keeps its picture, or is hidden
  * when it has none.
  *
- * `data-map-state` on the figure says where it is: `loading`, `idle` once
- * the map has drawn everything it shows (screenshots wait for it), or
- * `failed`; `data-map-zoom` is the zoom it shows. Loaded as a module, so a
+ * `data-map-state` on the figure says where it is: `loading` until it has
+ * first drawn, `idle` once it has drawn everything it shows (screenshots
+ * wait for it), `drawing` while it draws again after its frame was
+ * resized, or `failed`; `data-map-zoom` is the zoom it shows. Loaded as a module, so a
  * page with two maps runs it once.
  */
 import {
@@ -77,11 +78,10 @@ async function start(figure) {
   map.addControl(new AttributionControl({ compact: false }), "bottom-left");
   // Tiles outside the archives answer 404; the map shows paper there.
   map.on("error", () => undefined);
-  map.on("styleimagemissing", ({ id }) => {
-    if (id === style.metadata?.["hikebot:peak"]?.image) {
-      addPeakImage(map, style.metadata["hikebot:peak"]);
-    }
-  });
+  // The peaks' triangle is there before any tile is laid out, so every
+  // peak gets it whichever tile arrives first.
+  const peak = style.metadata?.["hikebot:peak"];
+  if (peak) map.once("style.load", () => addPeakImage(map, peak));
 
   for (const marker of markers) addMarker(map, marker, single !== null);
 
@@ -102,6 +102,13 @@ async function start(figure) {
     zoom.hidden = false;
     showZoom();
     figure.dataset.mapState = "idle";
+  });
+  map.on("resize", () => {
+    if (figure.dataset.mapState !== "idle") return;
+    figure.dataset.mapState = "drawing";
+    map.once("idle", () => {
+      figure.dataset.mapState = "idle";
+    });
   });
 }
 

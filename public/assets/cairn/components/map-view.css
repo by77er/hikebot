@@ -52,8 +52,8 @@
 }
 
 /* Until the map has drawn, the picture shows and the map stays out of sight. */
-.map-view__figure:not([data-map-state="idle"]) .maplibregl-canvas-container,
-.map-view__figure:not([data-map-state="idle"]) .maplibregl-control-container {
+.map-view__figure[data-map-state="loading"] .maplibregl-canvas-container,
+.map-view__figure[data-map-state="loading"] .maplibregl-control-container {
   visibility: hidden;
 }
 

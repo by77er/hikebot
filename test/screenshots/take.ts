@@ -238,6 +238,8 @@ async function capture(
     await page.evaluate(CSS_IMAGES_READY);
     if (entry.javascript !== false) {
       await page.waitForFunction(MAPS_SETTLED, { timeout: 60_000 });
+      // Two frames more, so the maps' last drawing has reached the screen.
+      await page.evaluate(TWO_FRAMES);
       const failed = Number(await page.evaluate(MAPS_FAILED));
       if (failed > 0) failures.push(`${String(failed)} map(s) failed to draw`);
     }
@@ -377,6 +379,8 @@ const NO_SCRIPT = { status: 200, contentType: "text/javascript", body: "" };
  */
 const MAPS_SETTLED = `[...document.querySelectorAll("figure[data-map]")].every((figure) =>
   figure.dataset.mapState === "idle" || figure.dataset.mapState === "failed")`;
+
+const TWO_FRAMES = `new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`;
 
 /** How many map views gave up. */
 const MAPS_FAILED = `document.querySelectorAll('figure[data-map][data-map-state="failed"]').length`;
