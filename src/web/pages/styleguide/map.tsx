@@ -1,15 +1,18 @@
 /**
- * The Cairn map at `/styleguide/map`: the committed sample pictures the map
- * style is reviewed on, shown about as wide as Discord shows them, and each
- * colour role of `src/maps/style.ts` as a swatch with its token and the
- * recipe that makes it from Cairn's colours. "Cairn map" in
- * docs/design-system.md explains the roles and the hierarchy.
+ * Style guide: the Cairn map, on a page of its own at `/styleguide/map`.
+ * The committed sample pictures the map style is reviewed on, shown about
+ * as wide as Discord shows them, and each colour role of
+ * `src/maps/style.ts` as a swatch with its token and the recipe that makes
+ * it from Cairn's colours. "Cairn map" in docs/design-system.md explains
+ * the roles and the hierarchy.
  */
-import { RECIPES, type ColourRecipe, type ColourRole } from "../../maps/style";
-import { assetPath } from "../assets";
-import { Layout } from "../layout";
-import type { SchemeTokens } from "../tokens";
-import { Section } from "./styleguide/section";
+import {
+  RECIPES,
+  type ColourRecipe,
+  type ColourRole,
+} from "../../../maps/style";
+import { assetPath } from "../../assets";
+import { Section, type SectionProps, type StyleguideSection } from "./section";
 
 /** Where `npm run maps:samples` writes the samples, under `public/assets/`. */
 export const MAP_SAMPLES_DIR = "maps/samples";
@@ -133,73 +136,74 @@ export function recipeText(recipe: ColourRecipe): string {
   return `${share}% --${recipe.token} in --${recipe.into ?? "color-bg"}`;
 }
 
-export function StyleguideMapPage({ tokens }: { tokens: SchemeTokens }) {
+function MapSection({ tokens }: SectionProps) {
   return (
-    <Layout title="Cairn map · Style guide · hikebot" width="overview">
-      <div class="stack stack--section">
-        <div class="page-heading">
-          <p class="page-heading__eyebrow">Cairn design system</p>
-          <h1>Cairn map</h1>
-          <p class="page-heading__lead">
-            The map picture the bot posts with a hike: Cairn's colours and
-            typeface on paper, with the trail blaze as the pin. It has one look
-            in both colour schemes, because Discord shows the same image in
-            both.
-          </p>
-          <p>
-            <a href="/styleguide">Back to the style guide</a>
-          </p>
-        </div>
-        <Section
-          id="samples"
-          title="Samples"
-          intro="The pictures a change to the map style is reviewed on, about 400 pixels wide, as Discord shows them on a phone. The trail, the road to the trailhead, water and the summit's name and height come first; the pin stands out on forest, water and snow."
-        >
-          <ul class="styleguide-maps list-reset">
-            {MAP_SAMPLES.map(({ file, caption, alt }) => (
-              <li key={file}>
-                <figure class="stack stack--tight">
-                  <img
-                    src={assetPath(`${MAP_SAMPLES_DIR}/${file}`)}
-                    alt={alt}
-                    width={1200}
-                    height={800}
-                    loading="lazy"
-                  />
-                  <figcaption class="u-small">
-                    {caption} <code class="u-muted">{file}</code>
-                  </figcaption>
-                </figure>
-              </li>
-            ))}
-          </ul>
-        </Section>
-        <Section
-          id="roles"
-          title="Colour roles"
-          intro="Each role's token, its value, and how it is made from Cairn's light-scheme colours: a token itself, or a share of one mixed into another, as CSS color-mix in sRGB makes it."
-        >
-          {MAP_ROLE_GROUPS.map(({ title, roles }) => (
-            <div key={title} class="stack stack--tight">
-              <h3>{title}</h3>
-              <ul class="styleguide-swatches styleguide-swatches--wide">
-                {roles.map(([role, use]) => (
-                  <li key={role} class="styleguide-swatch">
-                    <span class="styleguide-sample" data-bg={mapToken(role)} />
-                    <code>--{mapToken(role)}</code>
-                    <span class="u-muted">
-                      <span class="u-numeric">
-                        {tokens.light[mapToken(role)]}
-                      </span>
-                      , {recipeText(RECIPES[role])}. {use}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+    <Section
+      id="map"
+      title="Cairn map"
+      intro="The map picture the bot posts with a hike: Cairn's colours and typeface on paper, with the trail blaze as the pin. It has one look in both colour schemes, because Discord shows the same image in both."
+    >
+      <div class="stack stack--tight">
+        <h3>Samples</h3>
+        <p>
+          The pictures a change to the map style is reviewed on, about 400
+          pixels wide, as Discord shows them on a phone. The trail, the road to
+          the trailhead, water and the summit's name and height come first; the
+          pin stands out on forest, water and snow.
+        </p>
+        <ul class="styleguide-maps list-reset">
+          {MAP_SAMPLES.map(({ file, caption, alt }) => (
+            <li key={file}>
+              <figure class="stack stack--tight">
+                <img
+                  src={assetPath(`${MAP_SAMPLES_DIR}/${file}`)}
+                  alt={alt}
+                  width={1200}
+                  height={800}
+                  loading="lazy"
+                />
+                <figcaption class="u-small">
+                  {caption} <code class="u-muted">{file}</code>
+                </figcaption>
+              </figure>
+            </li>
           ))}
-        </Section>
+        </ul>
       </div>
-    </Layout>
+      <div class="stack stack--tight">
+        <h3>Colour roles</h3>
+        <p>
+          Each role's token, its value, and how it is made from Cairn's
+          light-scheme colours: a token itself, or a share of one mixed into
+          another, as CSS color-mix in sRGB makes it.
+        </p>
+        {MAP_ROLE_GROUPS.map(({ title, roles }) => (
+          <div key={title} class="stack stack--tight">
+            <h4>{title}</h4>
+            <ul class="styleguide-swatches styleguide-swatches--wide">
+              {roles.map(([role, use]) => (
+                <li key={role} class="styleguide-swatch">
+                  <span class="styleguide-sample" data-bg={mapToken(role)} />
+                  <code>--{mapToken(role)}</code>
+                  <span class="u-muted">
+                    <span class="u-numeric">
+                      {tokens.light[mapToken(role)]}
+                    </span>
+                    , {recipeText(RECIPES[role])}. {use}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </Section>
   );
 }
+
+export const mapSection: StyleguideSection = {
+  id: "map",
+  title: "Cairn map",
+  render: MapSection,
+  ownPage: true,
+};

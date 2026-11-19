@@ -7,7 +7,7 @@ import {
   type CairnToken,
   type ColourRole,
 } from "../../src/maps/style";
-import { mapToken } from "../../src/web/pages/styleguide-map";
+import { mapToken } from "../../src/web/pages/styleguide/map";
 import { contrastRatio, parseTokens } from "../../src/web/tokens";
 import { publicText, TOKENS_FILE } from "../web/design-files";
 

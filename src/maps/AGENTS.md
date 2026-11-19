@@ -128,7 +128,7 @@ hierarchy the style keeps.
 
    A new role also gets its swatch line at the end of
    `public/assets/cairn/pages/styleguide.css`, an entry in
-   `MAP_ROLE_GROUPS` in `src/web/pages/styleguide-map.tsx` and a row in the
+   `MAP_ROLE_GROUPS` in `src/web/pages/styleguide/map.tsx` and a row in the
    table of "Cairn map" in `docs/design-system.md`. If a Cairn colour the
    recipes read changed in `tokens.css`, change it in `CAIRN` too. Check
    that the style, the tokens and the contrast of trails and the pin agree:

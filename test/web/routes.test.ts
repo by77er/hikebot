@@ -11,7 +11,7 @@ import {
   MAP_SAMPLES,
   MAP_SAMPLES_DIR,
   mapToken,
-} from "../../src/web/pages/styleguide-map";
+} from "../../src/web/pages/styleguide/map";
 import { webRouter } from "../../src/web/routes";
 import {
   clearBucket,

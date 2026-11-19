@@ -20,6 +20,7 @@ import { emptyStateSection } from "./styleguide/empty-state";
 import { hikeCardSection } from "./styleguide/hike-card";
 import { iconsSection } from "./styleguide/icons";
 import { layoutMotionSection } from "./styleguide/layout-motion";
+import { mapSection } from "./styleguide/map";
 import { roundStepperSection } from "./styleguide/round-stepper";
 import type { StyleguideSection } from "./styleguide/section";
 import { serverTileSection } from "./styleguide/server-tile";
@@ -61,8 +62,11 @@ const COMPONENTS: StyleguideSection[] = [
   tallyVoteSection,
 ];
 
+/** The map picture's style. */
+const MAP: StyleguideSection[] = [mapSection];
+
 /** Every section, in the order the index lists them. */
-export const STYLEGUIDE_SECTIONS = [...FOUNDATIONS, ...COMPONENTS];
+export const STYLEGUIDE_SECTIONS = [...FOUNDATIONS, ...COMPONENTS, ...MAP];
 
 /** Where a section is shown: on the style guide, or on a page of its own. */
 export function sectionHref({ id, ownPage }: StyleguideSection): string {
@@ -113,14 +117,7 @@ export function StyleguidePage({ tokens }: { tokens: SchemeTokens }) {
           <h2>Contents</h2>
           <Index title="Foundations" sections={FOUNDATIONS} />
           <Index title="Components" sections={COMPONENTS} />
-          <div class="stack stack--tight">
-            <h3>Pages of their own</h3>
-            <ol>
-              <li>
-                <a href="/styleguide/map">Cairn map</a>
-              </li>
-            </ol>
-          </div>
+          <Index title="Map picture" sections={MAP} />
         </nav>
         {STYLEGUIDE_SECTIONS.filter(({ ownPage }) => !ownPage).map(
           ({ id, render: Render }) => (
