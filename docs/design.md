@@ -244,6 +244,35 @@ permission", with the roles from their membership.
   links to its thread and its Discord event (null when there is none); and
   `mapPictureKey`, the `MAPS` bucket key of the map picture its thread and
   event show (null while they show none), for a page to serve.
+- `hikePlace` (`hikePlaceSection`, `src/features/hike-place-section.ts`):
+  where the planned hike is, null with no planned hike. Its round, the
+  decided location's map pin (null without one) as `lat`, `lon`, `text`
+  (`47.4875, -121.7234`), the geocoder's short place `name` (null for
+  coordinates someone gave) and links to it on OpenStreetMap and Google
+  Maps (`src/geo/links.ts`, as the thread links them); `lookingUp` while
+  the pin is still being looked up; and `pinnable`, whether Set map pin
+  can still change it (false once a newer round has decided its location,
+  as in the panel). An open vote's location options carry the same pin as
+  `place` (`webMapPin`).
+- `hikeForecast` (`hikeForecastSection`,
+  `src/features/hike-forecast-section.ts`): the planned hike's forecast,
+  null with no planned hike. Built from the forecast the `weather:refresh`
+  job stored with the round (`hikeWeather` in `weather-state.ts`), so the
+  read makes no weather request: either `{ kind: "none", reason, text }`,
+  the reason (`no_pin`, `too_far`, `pending`) and the thread's words for
+  it, or the thread's hours (the time in the server's zone, the WMO code
+  and the conditions in words, temperature and feels-like, chance and
+  amount of precipitation, wind and gusts), the units and how they are
+  written, the hike day's sunrise and sunset, the thread's notes, and the
+  updated time as an instant and written in the server's zone.
+- `schedule` (`scheduleSection`, `src/features/schedule-section.ts`): the
+  weekly schedule while it is on, else null. Its weekday, time, time zone
+  and date vote length, and `next`, what it does next as the panel finds it
+  (`nextCadenceAction`): the step's kind, its instant and `when`, written
+  in the server's zone (`Wednesday 09:00` within the coming week,
+  `Wednesday 2 Dec 09:00` further ahead); with nothing in the coming weeks,
+  `waiting` says why (a date vote started before the schedule, or a planned
+  hike further ahead than it looks).
 - `log` (`hikeLogSection`, `src/features/hike-log.ts`): one page of the
   hike log as "Hike log" defines it, newest first: entries (location, date,
   thread and event links, when it completed), `page` (clamped to
@@ -300,10 +329,26 @@ path under a server is the 404 page.
   hike an empty state, telling an admin to start a vote from `/hike admin`
   in Discord); for an admin, the Admin card (below); the planned hike as a full hike card (location, details,
   date and time in the server's time zone with the zone named, links to the
-  thread and the event); the hike log's five latest hikes, with a link to
-  the whole log when it has more; and the calendar address in a read-only
-  field, with the bot's sentence on it and Subscribe, the address as a
-  `webcal:` link. The read asks for a log page of five.
+  thread and the event); where the planned hike is (Where: the place name,
+  or the pin's coordinates, with Open in OpenStreetMap and Open in Google
+  Maps and OpenStreetMap's credit; or, in the panel's words, that the pin
+  is being looked up or that there is none; an admin gets the Set map pin
+  form while there is none and Change map pin when there is one); its
+  weather (the hourly forecast as a table of the thread's rows in the
+  server's units and time zone, each hour with the conditions in words and
+  a weather icon, then sunrise and sunset, the thread's notes, the updated
+  time and Open-Meteo's credit with its link; without a forecast, the
+  thread's words for why); the weekly schedule while it is on (what the bot
+  does next by itself and when, such as "The location vote closes
+  Wednesday 09:00, and the date vote opens.", then its weekday and time,
+  and for an admin where to change it); the hike log's five latest hikes,
+  with a link to the whole log when it has more; and the calendar address
+  in a read-only field, with the bot's sentence on it and Subscribe, the
+  address as a `webcal:` link. The read asks for a log page of five. An
+  open location vote's located options show their short place name and a
+  Map link, as the poll message does, and the tally ends with
+  OpenStreetMap's credit. Map links are plain links: the page loads no map
+  tile, script or image from another site.
 - `GET /g/<guild id>/log?page=<n>`: the hike log, newest first, ten a page
   (`HIKES_PER_PAGE`), as compact hike cards with Newer and Older; a page
   that is not a number is the first, and the read clamps one past either
@@ -363,6 +408,23 @@ still finishing it." while the work goes on; or "Nothing was changed."
 with the refusal's sentence. A control submitted after the round moved on
 is refused by the round action with the panel's sentence, so nothing
 changes.
+
+**Set map pin** is an admin control of the same kind, `set-map-pin`, but
+the Where section offers it rather than the Admin card: the form (the
+panel's modal: map link or coordinates, empty to remove the pin) while the
+planned hike has no pin, and Change map pin, a link to
+`GET …/admin/set-map-pin` (`src/web/admin/map-pin.tsx`), the form filled
+with the current pin under where it is now, while it has one. A hike whose
+pin can no longer be set sends the admin back with the "no longer offered"
+notice. `POST …/admin/set-map-pin` posts `target` (the hike's round) and
+`text` through `adminAction`; in the object `runWebAdminAction` calls
+`setMapPinAction` (`src/features/map-pin.ts`), which reads the input with
+the modal's `readPinInput`, stores it with `storeMapPin` and runs the
+panel's hooks (`MAP_PIN_HOOKS`: the thread, the event, the map picture and
+the forecast) as its work, so the notice carries the panel's sentence ("The
+map pin of **Snow Lake** is set to …") and any hook's failure. Input with
+no coordinates comes back as the form, status 400, with what was typed and
+the panel's sentence.
 
 In a log, the hike that is the view's planned hike is drawn as planned and
 every other as a past hike.
@@ -2169,6 +2231,10 @@ hour beyond the block on each side.
 within them when the last day of its block (two hours after its end) is at
 most 15 days after today in the server's time zone; the forecast of a hike
 further ahead appears at midnight 15 days before that day.
+
+**On the web**, the server's page shows the same forecast from what the
+round stores ("Web pages for a server"), as a table with the thread's
+hours, notes and credit; it never asks Open-Meteo itself.
 
 **What the thread shows**, under `### Weather` after the head of its first
 message: one row per hour from two hours before the start to two hours
