@@ -15,6 +15,90 @@
       "user": null
     },
     {
+      "name": "server-date-vote",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-date-vote",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-empty",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-empty",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-empty-admin",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-empty-admin",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-hike-planned",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-hike-planned",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-location-decided",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-location-decided",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-location-decided-admin",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-location-decided-admin",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-location-vote",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-location-vote",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-location-vote-voted",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-location-vote-voted",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-log",
+      "path": "/g/220000000000000101/log",
+      "status": 200,
+      "seed": "server-hike-log",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-log-page-2",
+      "path": "/g/220000000000000101/log?page=2",
+      "status": 200,
+      "seed": "server-hike-log",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-not-member",
+      "path": "/g/220000000000000101",
+      "status": 403,
+      "seed": "server-not-member",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-with-log",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-hike-log",
+      "user": "400000000000000001"
+    },
+    {
       "name": "servers",
       "path": "/servers",
       "status": 200,

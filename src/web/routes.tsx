@@ -27,6 +27,7 @@ import {
 import { seeOther } from "./redirect";
 import { htmlResponse } from "./response";
 import { WebRouter } from "./router";
+import { addServerRoutes } from "./server-routes";
 import { parseTokens } from "./tokens";
 
 export const HEALTH_LINE = "hikebot is running";
@@ -107,3 +108,4 @@ export const webRouter = new WebRouter({
   );
 
 addSignInRoutes(webRouter);
+addServerRoutes(webRouter, notFound);

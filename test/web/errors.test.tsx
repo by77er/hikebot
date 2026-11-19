@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MethodNotAllowedPage, NotFoundPage } from "../../src/web/pages/errors";
 import { ForbiddenPage } from "../../src/web/pages/forbidden";
+import { MessagePage } from "../../src/web/pages/message";
 import { htmlResponse } from "../../src/web/response";
 import { outline } from "./helpers";
 
@@ -50,5 +51,22 @@ describe("the error pages", () => {
       ].map(([, href]) => href),
     ).toEqual(["/"]);
     expect(page.text).toContain("Go to the home page");
+  });
+
+  it("show the signed-in user's menu only on a message page given the user", async () => {
+    const props = {
+      title: "Discord could not be reached",
+      lead: "Try again.",
+      action: { href: "/", label: "Try again" },
+    };
+    const signedIn = await render(
+      <MessagePage
+        {...props}
+        user={{ name: "Ana", avatar: null, csrf: "t" }}
+      />,
+    );
+    expect(signedIn.page.text).toContain("Signed in as Ana.");
+    const signedOut = await render(<MessagePage {...props} />);
+    expect(signedOut.page.text).not.toContain("Signed in as");
   });
 });

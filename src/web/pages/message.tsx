@@ -7,7 +7,7 @@
 import { Button } from "../components/button";
 import type { IconComponent } from "../components/icon";
 import { ArrowLeftIcon } from "../components/icons";
-import { Layout } from "../layout";
+import { Layout, type LayoutUser } from "../layout";
 
 /** The way back from a page that went wrong. */
 export const HOME_ACTION = {
@@ -24,6 +24,8 @@ export interface MessagePageProps {
   action: MessageAction;
   /** Another way on, a link drawn as a quiet button. */
   secondary?: MessageAction;
+  /** The signed-in user, for the header's menu, as on their other pages. */
+  user?: LayoutUser;
 }
 
 export interface MessageAction {
@@ -38,9 +40,10 @@ export function MessagePage({
   lead,
   action,
   secondary,
+  user,
 }: MessagePageProps) {
   return (
-    <Layout title={`${title} · hikebot`}>
+    <Layout title={`${title} · hikebot`} user={user}>
       <div class="stack stack--loose">
         <div class="page-heading">
           {eyebrow !== undefined && (
