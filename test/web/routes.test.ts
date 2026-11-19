@@ -3,7 +3,15 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { assetPath, FONT, STYLESHEET } from "../../src/web/assets";
 import { sessionCookie } from "../../src/web/auth/session";
+import { PIN_FILLS, SAMPLE_VIEWS } from "../../scripts/map-samples";
+import { COLOURS } from "../../src/maps/style";
 import { STYLEGUIDE_SECTIONS } from "../../src/web/pages/styleguide";
+import {
+  MAP_ROLE_GROUPS,
+  MAP_SAMPLES,
+  MAP_SAMPLES_DIR,
+  mapToken,
+} from "../../src/web/pages/styleguide/map";
 import { webRouter } from "../../src/web/routes";
 import {
   clearBucket,
@@ -299,6 +307,55 @@ describe("versioned assets", () => {
     expect(html).toContain(
       `<link rel="preload" href="${assetPath(FONT)}" as="font" type="font/woff2" crossorigin="anonymous"/>`,
     );
+  });
+});
+
+describe("GET /styleguide/map", () => {
+  it("is a public page in the page shell, linked from the style guide", async () => {
+    const response = await get("/styleguide/map");
+    expect(response.status).toBe(200);
+    expect(pageHeaders(response)).toEqual(EXPECTED_PAGE_HEADERS);
+    const page = await outline(await response.text());
+    expect(page).toMatchObject({
+      title: "Cairn map · Style guide · hikebot",
+      scripts: 0,
+      styleElements: 0,
+      styleAttributes: 0,
+    });
+    expect(await (await get("/styleguide")).text()).toContain(
+      '<a href="/styleguide/map">Cairn map</a>',
+    );
+  });
+
+  it("shows every committed sample picture, each served, with its text alternative", async () => {
+    const files = [
+      ...SAMPLE_VIEWS.map(({ file }) => file),
+      ...PIN_FILLS.map(({ file }) => file),
+    ];
+    expect(MAP_SAMPLES.map(({ file }) => file).sort()).toEqual(files.sort());
+    const html = await (await get("/styleguide/map")).text();
+    for (const { file, alt } of MAP_SAMPLES) {
+      const src = assetPath(`${MAP_SAMPLES_DIR}/${file}`);
+      expect(html).toContain(`src="${src}" alt="${alt}"`);
+      const image = await get(src);
+      expect(image.status, file).toBe(200);
+      expect(image.headers.get("content-type"), file).toBe("image/png");
+    }
+  });
+
+  it("shows every colour role of the map as a swatch with its token and recipe", async () => {
+    const html = await (await get("/styleguide/map")).text();
+    const roles = MAP_ROLE_GROUPS.flatMap((group) =>
+      group.roles.map(([role]) => role),
+    );
+    expect(roles.sort()).toEqual(Object.keys(COLOURS).sort());
+    for (const role of roles) {
+      expect(html).toContain(
+        `<span class="styleguide-sample" data-bg="${mapToken(role)}"></span>`,
+      );
+      expect(html).toContain(COLOURS[role]);
+    }
+    expect(html).toContain("22% --color-success in --color-bg");
   });
 });
 

@@ -2,8 +2,12 @@ import { env } from "cloudflare:workers";
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { beforeEach, describe, expect, it } from "vitest";
-import { mapFonts } from "../../src/maps/font";
-import { coveringTiles, viewportAt } from "../../src/maps/projection";
+import { FALLBACK_FAMILY, FAMILY, mapFonts } from "../../src/maps/font";
+import {
+  coveringTiles,
+  tilePixels,
+  viewportAt,
+} from "../../src/maps/projection";
 import { MapReader } from "../../src/maps/reader";
 import { COLOURS } from "../../src/maps/style";
 import { buildSvg, scaleBar, type Scene } from "../../src/maps/svg";
@@ -91,11 +95,25 @@ describe("buildSvg", () => {
     expect(imperial).toMatch(/>[\d.]+ (ft|mi)<\/text>/);
   });
 
-  it("draws the pin, orange with a light outline, with its tip on the point", async () => {
+  it("draws the pin as the blaze, with its tip on the point, outlined light then dark", async () => {
     const svg = buildSvg(await sceneAt(SUMMIT, 13));
-    const pin = svg.match(/<path d="M600 400[^"]*"([^>]*)\/>/);
-    expect(pin?.[1]).toContain(`fill="${COLOURS.pin}"`);
-    expect(pin?.[1]).toContain(`stroke="${COLOURS.pinOutline}"`);
+    const [keyline, blaze] = [
+      ...svg.matchAll(/<path d="M600 400[^"]*"([^>]*)\/>/g),
+    ].map((match) => match[1]);
+    expect(keyline).toContain(`stroke="${COLOURS.pinKeyline}"`);
+    expect(keyline).toContain(`fill="none"`);
+    expect(blaze).toContain(`fill="${COLOURS.pin}"`);
+    expect(blaze).toContain(`stroke="${COLOURS.pinOutline}"`);
+  });
+
+  it("sets labels in Public Sans, and a name it cannot set wholly in Noto Sans", async () => {
+    const svg = buildSvg(await sceneAt(SUMMIT, 13));
+    const familyOf = (text: string) =>
+      new RegExp(
+        `<text font-family="([^"]*)"[^>]*><tspan[^>]*>${text}</tspan>`,
+      ).exec(svg)?.[1];
+    expect(familyOf("Little Si")).toBe(FAMILY);
+    expect(familyOf("Mount Si / q̓əlbc̓")).toBe(FALLBACK_FAMILY);
   });
 
   it("prints the attribution it is given", async () => {
@@ -133,6 +151,129 @@ describe("buildSvg", () => {
     const svg = buildSvg(await sceneAt(SUMMIT, 13, { tiles: [] }));
     expect(svg).not.toContain(COLOURS.forest);
     expect(svg).toContain(COLOURS.pin);
+  });
+});
+
+/**
+ * A scene of made-up tiles that hold only the given features, each a point
+ * or a line at positions in logical pixels on a 600 by 400 picture, with
+ * the pin far to the right.
+ */
+function madeUpScene(
+  features: {
+    layer: string;
+    properties: Record<string, unknown>;
+    at: { x: number; y: number }[];
+  }[],
+): Scene {
+  const view = viewportAt(SUMMIT, {
+    zoom: 14,
+    tileZoom: 14,
+    width: 600,
+    height: 400,
+    pixelRatio: 1,
+  });
+  const size = tilePixels(view);
+  const extent = 4096;
+  const tiles = coveringTiles(view).map((tile) => {
+    const layers: Record<string, { feature: unknown }[]> = {};
+    for (const { layer, properties, at } of features) {
+      const points = at.map(({ x, y }) => ({
+        x: ((x - tile.left) / size) * extent,
+        y: ((y - tile.top) / size) * extent,
+      }));
+      const feature = {
+        type: points.length > 1 ? 2 : 1,
+        properties,
+        loadGeometry: () => [points],
+      };
+      (layers[layer] ??= []).push({ feature });
+    }
+    const data = Object.fromEntries(
+      Object.entries(layers).map(([name, list]) => [
+        name,
+        {
+          extent,
+          length: list.length,
+          feature: (i: number) => list[i]?.feature,
+        },
+      ]),
+    );
+    return { tile, data: { layers: data } as unknown as VectorTile };
+  });
+  return {
+    view,
+    tiles,
+    pin: { lon: SUMMIT.lon + 0.008, lat: SUMMIT.lat },
+    units: "metric",
+    attribution: "© OpenStreetMap contributors",
+    fonts: mapFonts(),
+  };
+}
+
+describe("label priority", () => {
+  // By the picture's left edge a label fits only to the right of its point,
+  // so the label that ranks higher takes that place and the other is left
+  // out.
+  const EDGE = [{ x: 12, y: 200 }];
+  const town = {
+    layer: "places",
+    properties: {
+      kind: "locality",
+      kind_detail: "town",
+      name: "Townsend",
+      population_rank: 15,
+    },
+    at: EDGE,
+  };
+  const peak = {
+    layer: "pois",
+    properties: { kind: "peak", name: "Mount Rainier", elevation: 4392 },
+    at: EDGE,
+  };
+
+  it("labels a summit before a town in its place", () => {
+    const svg = buildSvg(madeUpScene([town, peak]));
+    expect(svg).toContain(">Mount Rainier</tspan>");
+    expect(svg).toContain(">4,392 m</tspan>");
+    expect(svg).not.toContain(">Townsend</tspan>");
+  });
+
+  it("labels a lake before a town in its place", () => {
+    const lake = {
+      layer: "pois",
+      properties: { kind: "water", name: "Rattlesnake Lake" },
+      at: EDGE,
+    };
+    const svg = buildSvg(madeUpScene([town, lake]));
+    expect(svg).toContain(">Rattlesnake Lake</tspan>");
+    expect(svg).not.toContain(">Townsend</tspan>");
+  });
+
+  it("labels a river along its line before a town in its way", () => {
+    const river = {
+      layer: "water",
+      properties: { kind: "river", name: "Snoqualmie River" },
+      at: [
+        { x: 4, y: 200 },
+        { x: 200, y: 200 },
+      ],
+    };
+    const svg = buildSvg(madeUpScene([town, river]));
+    expect(svg).toMatch(/<textPath[^>]*>Snoqualmie River<\/textPath>/);
+    expect(svg).not.toContain(">Townsend</tspan>");
+  });
+
+  it("moves a town aside for a summit where there is room for both", () => {
+    const middle = [{ x: 300, y: 200 }];
+    const svg = buildSvg(
+      madeUpScene([
+        { ...town, at: middle },
+        { ...peak, at: middle },
+      ]),
+    );
+    expect(svg).toContain(">Mount Rainier</tspan>");
+    expect(svg).toContain(">Townsend</tspan>");
   });
 });
 

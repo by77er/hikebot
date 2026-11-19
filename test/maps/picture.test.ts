@@ -160,12 +160,17 @@ describe("mapPicture", () => {
       DEFAULT_PICTURE.width,
       DEFAULT_PICTURE.height,
     ]);
-    // The pin's head, between its white dot and its edge.
-    const headY = 400 - FURNITURE.pinHeight * 2;
-    expect(png.pixel(600, headY + FURNITURE.pinRadius * 2 * 0.7).rgb).toBe(
-      COLOURS.pin.toLowerCase(),
+    // The pin's blaze, its light outline and its dark keyline, right of it.
+    const middle = 400 - ((FURNITURE.pinHeight + FURNITURE.pinTip) * 2) / 2;
+    const edge = 600 + FURNITURE.pinWidth;
+    expect(png.pixel(600, middle).rgb).toBe(COLOURS.pin);
+    expect(png.pixel(edge + FURNITURE.pinOutline, middle).rgb).toBe(
+      COLOURS.pinOutline,
     );
-    expect(png.pixel(600, headY).rgb).toBe(COLOURS.pinOutline.toLowerCase());
+    expect(
+      png.pixel(edge + 2 * FURNITURE.pinOutline + FURNITURE.pinKeyline, middle)
+        .rgb,
+    ).toBe(COLOURS.pinKeyline);
   });
 
   it("draws water in the water's colour", async () => {
@@ -223,6 +228,26 @@ describe("mapPicture", () => {
     expect(
       new Uint8Array((await kept?.arrayBuffer()) ?? new ArrayBuffer(0)),
     ).toEqual(new Uint8Array([12, 1, 2, 3]));
+  });
+
+  it("draws again rather than serve a picture of the previous style", async () => {
+    await seed();
+    const draw = vi.fn(() => Promise.resolve(new Uint8Array([2])));
+    const key = (await mapPicture(deps({ draw }), SAMPLE.point))?.key ?? "";
+    await clearBucket();
+    await seed();
+    const old = key.replace(
+      `/style-${String(STYLE_VERSION)}/`,
+      `/style-${String(STYLE_VERSION - 1)}/`,
+    );
+    expect(old).not.toBe(key);
+    await env.MAPS.put(old, new Uint8Array([1]));
+
+    const picture = await mapPicture(deps({ draw }), SAMPLE.point);
+
+    expect(draw).toHaveBeenCalledTimes(2);
+    expect(picture?.png).toEqual(new Uint8Array([2]));
+    expect(await env.MAPS.head(old)).not.toBeNull();
   });
 
   it("draws again for another zoom, size, units or build", async () => {

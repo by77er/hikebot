@@ -1,31 +1,59 @@
 /**
- * The typeface of map labels, loaded in this one place: Noto Sans (SIL Open
- * Font License 1.1, `./fonts/OFL.txt`), subset to Latin with its extensions,
- * IPA and combining marks. To change the typeface, replace the files in
- * `./fonts/`, the imports and `FAMILY` here, as "Change the map style" in
- * `src/maps/AGENTS.md` says.
+ * The typeface of map labels, loaded in this one place: Public Sans, Cairn's
+ * typeface (SIL Open Font License 1.1, `./fonts/PublicSans-OFL.txt`), in
+ * regular, semibold and italic, subset to Latin with its extensions. Public
+ * Sans has no IPA and few combining marks, so a text with a character it
+ * lacks, such as `Mount Si / q̓əlbc̓`, is set wholly in Noto Sans (OFL,
+ * `./fonts/NotoSans-OFL.txt`), subset to Latin with its extensions, IPA and
+ * combining marks: the rasterizer would draw a missing mark from another
+ * font beside its letter instead of on it. To change the typeface, replace
+ * the files in `./fonts/`, the imports and the families here, as "Change
+ * the map style" in `src/maps/AGENTS.md` says.
  */
-import italic from "./fonts/NotoSans-Italic.ttf";
-import regular from "./fonts/NotoSans-Regular.ttf";
-import semiBold from "./fonts/NotoSans-SemiBold.ttf";
-import { readFontMetrics, type FontMetrics } from "./font-metrics";
+import fallbackItalic from "./fonts/NotoSans-Italic.ttf";
+import fallbackRegular from "./fonts/NotoSans-Regular.ttf";
+import fallbackSemiBold from "./fonts/NotoSans-SemiBold.ttf";
+import italic from "./fonts/PublicSans-Italic.ttf";
+import regular from "./fonts/PublicSans-Regular.ttf";
+import semiBold from "./fonts/PublicSans-SemiBold.ttf";
+import {
+  readFontMetrics,
+  type LabelFont,
+  type SceneFonts,
+} from "./font-metrics";
+import { FALLBACK_FAMILY, FAMILY } from "./style";
 
-/** The family name the font files carry, for the SVG's `font-family`. */
-export const FAMILY = "Noto Sans";
+export { FALLBACK_FAMILY, FAMILY } from "./style";
 
-export interface FontFace {
-  weight: 400 | 600;
-  italic: boolean;
-}
+export type { FontFace, LabelFont } from "./font-metrics";
 
-export interface MapFonts {
-  family: string;
+/** Public Sans, falling back to Noto Sans for a text it cannot set. */
+export interface MapFonts extends SceneFonts {
   /** Every font file, for the rasterizer. */
   buffers: Uint8Array[];
-  metrics(face: FontFace): FontMetrics;
 }
 
 let loaded: MapFonts | undefined;
+
+function family(
+  name: string,
+  files: { regular: Uint8Array; semiBold: Uint8Array; italic: Uint8Array },
+): LabelFont {
+  const metrics = {
+    regular: readFontMetrics(files.regular),
+    semiBold: readFontMetrics(files.semiBold),
+    italic: readFontMetrics(files.italic),
+  };
+  return {
+    family: name,
+    metrics: (face) =>
+      face.italic
+        ? metrics.italic
+        : face.weight === 600
+          ? metrics.semiBold
+          : metrics.regular,
+  };
+}
 
 /** The label fonts; parsed once per isolate. */
 export function mapFonts(): MapFonts {
@@ -35,20 +63,18 @@ export function mapFonts(): MapFonts {
     semiBold: new Uint8Array(semiBold),
     italic: new Uint8Array(italic),
   };
-  const metrics = {
-    regular: readFontMetrics(files.regular),
-    semiBold: readFontMetrics(files.semiBold),
-    italic: readFontMetrics(files.italic),
+  const fallbackFiles = {
+    regular: new Uint8Array(fallbackRegular),
+    semiBold: new Uint8Array(fallbackSemiBold),
+    italic: new Uint8Array(fallbackItalic),
   };
+  const main = family(FAMILY, files);
+  const fallback = family(FALLBACK_FAMILY, fallbackFiles);
+  const cmap = main.metrics({ weight: 400, italic: false });
   loaded = {
-    family: FAMILY,
-    buffers: [files.regular, files.semiBold, files.italic],
-    metrics: (face) =>
-      face.italic
-        ? metrics.italic
-        : face.weight === 600
-          ? metrics.semiBold
-          : metrics.regular,
+    ...main,
+    buffers: [...Object.values(files), ...Object.values(fallbackFiles)],
+    forText: (text) => (cmap.covers(text) ? main : fallback),
   };
   return loaded;
 }

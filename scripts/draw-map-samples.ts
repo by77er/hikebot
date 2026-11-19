@@ -1,16 +1,27 @@
 /**
  * `npm run maps:samples`: starts the Worker in local workerd with the sample
  * map archive in its bucket, draws the views in `map-samples.ts` through the
- * `MapPainter` Durable Object and writes them to `docs/maps/samples/`.
+ * `MapPainter` Durable Object and writes them to `public/assets/maps/samples/`. Then
+ * draws the pin on each fill in `PIN_FILLS` with the same drawing code and
+ * rasterizer, here in Node, from made-up tiles.
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import { createTestHarness } from "wrangler";
+import { readFontMetrics } from "../src/maps/font-metrics";
+import { FAMILY } from "../src/maps/style";
 import { seedMaps, type MapsBucket } from "../test/e2e/harness/maps";
-import { drawSamples, type Paint } from "./map-samples";
+import { drawPinSamples, drawSamples, type Paint } from "./map-samples";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const OUT = fileURLToPath(new URL("../docs/maps/samples/", import.meta.url));
+const OUT = fileURLToPath(
+  new URL("../public/assets/maps/samples/", import.meta.url),
+);
+const FONTS = fileURLToPath(new URL("../src/maps/fonts/", import.meta.url));
+const WASM = fileURLToPath(
+  import.meta.resolve("@resvg/resvg-wasm/index_bg.wasm"),
+);
 
 interface PainterEnv {
   MAPS: MapsBucket;
@@ -38,7 +49,7 @@ try {
   await seedMaps(env.MAPS);
   const painter = env.MAP_PAINTER.get(env.MAP_PAINTER.idFromName("maps"));
   await mkdir(OUT, { recursive: true });
-  process.exitCode = await drawSamples(
+  const failed = await drawSamples(
     (request) => painter.picture(request),
     (file, png) => writeFile(`${OUT}${file}`, png),
     {
@@ -50,6 +61,42 @@ try {
       },
     },
   );
+  await drawPins();
+  process.exitCode = failed;
 } finally {
   await harness.close();
+}
+
+/** Draws the pin on each fill in `PIN_FILLS` with resvg, as the Worker would. */
+async function drawPins(): Promise<void> {
+  await initWasm(await readFile(WASM));
+  const files = (await readdir(FONTS)).filter((file) => file.endsWith(".ttf"));
+  const buffers = await Promise.all(
+    files.map(async (file) => new Uint8Array(await readFile(FONTS + file))),
+  );
+  const metrics = readFontMetrics(
+    new Uint8Array(await readFile(`${FONTS}PublicSans-Regular.ttf`)),
+  );
+  await drawPinSamples(
+    (svg) => {
+      const renderer = new Resvg(svg, {
+        font: { fontBuffers: buffers, loadSystemFonts: false },
+      });
+      const image = renderer.render();
+      const png = image.asPng();
+      image.free();
+      renderer.free();
+      return png;
+    },
+    (file, png) => writeFile(OUT + file, png),
+    {
+      log: (line) => {
+        console.log(line);
+      },
+      error: (line) => {
+        console.error(line);
+      },
+    },
+    { family: FAMILY, metrics: () => metrics },
+  );
 }
