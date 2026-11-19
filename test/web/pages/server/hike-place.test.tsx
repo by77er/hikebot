@@ -44,11 +44,14 @@ describe("HikePlace", () => {
     expect(shown(hikePlace(), true)).toContain(`href="/g/${GUILD}/map-pin"`);
   });
 
-  it("says the pin is being looked up", async () => {
-    const text = await spokenText(
-      shown(hikePlace({ pin: null, lookingUp: true }), true),
+  it("says the pin is being looked up, and lets an admin set one meanwhile", async () => {
+    const member = shown(hikePlace({ pin: null, lookingUp: true }));
+    expect(await spokenText(member)).toBe(
+      "Where The map pin is being looked up on OpenStreetMap.",
     );
-    expect(text).toBe("Where The map pin is being looked up on OpenStreetMap.");
+    expect(member).not.toContain("<form");
+    const admin = shown(hikePlace({ pin: null, lookingUp: true }), true);
+    expect(admin).toContain("<form");
   });
 
   it("tells a member there is no map pin, with no form", async () => {

@@ -2,8 +2,9 @@
  * The server's page, after the planned hike's card: where the hike is. Its
  * place name, both map links and OpenStreetMap's credit when it has a map
  * pin, as the hike thread shows them; else that the pin is being looked up,
- * or that there is none. An admin gets Set map pin here when there is none
- * (the form the panel's modal is), and Change map pin when there is one.
+ * or that there is none. An admin gets Set map pin here while there is
+ * none (the form the panel's modal is), and Change map pin when there is
+ * one.
  * Nothing while no hike is planned.
  */
 import type { WebView } from "../../../guild/web-view";
@@ -34,26 +35,27 @@ export function HikePlace({ view, csrf }: { view: WebView; csrf: string }) {
             </div>
           )}
         </>
-      ) : place.lookingUp ? (
-        <p>The map pin is being looked up on OpenStreetMap.</p>
-      ) : canSet ? (
+      ) : (
         <>
           <p>
-            This hike has no map pin, so it has no map links or forecast. You
-            are an admin: set one here, or in Discord with /hike admin.
+            {place.lookingUp
+              ? "The map pin is being looked up on OpenStreetMap."
+              : "This hike has no map pin, so it has no map links or forecast."}{" "}
+            {canSet
+              ? "You are an admin: set one here, or in Discord with /hike admin."
+              : place.lookingUp
+                ? ""
+                : "An admin can set one from /hike admin."}
           </p>
-          <MapPinForm
-            guildId={view.server.id}
-            roundId={place.roundId}
-            csrf={csrf}
-            variant={view.round === null ? "primary" : "secondary"}
-          />
+          {canSet && (
+            <MapPinForm
+              guildId={view.server.id}
+              roundId={place.roundId}
+              csrf={csrf}
+              variant={view.round === null ? "primary" : "secondary"}
+            />
+          )}
         </>
-      ) : (
-        <p>
-          This hike has no map pin, so it has no map links or forecast. An admin
-          can set one from /hike admin.
-        </p>
       )}
     </section>
   );
