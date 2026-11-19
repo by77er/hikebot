@@ -238,14 +238,18 @@ export function cadenceStep(
     : { kind: "close-location-vote", poll };
 }
 
-/** What the schedule does next, for the panel. */
+/** A step the schedule takes, as `nextCadenceAction` names it. */
+export type CadenceActionKind = Exclude<CadenceStep["kind"], "none">;
+
+/** What the schedule does next, for the panel and the web page. */
 export interface CadenceAction {
   at: number;
+  kind: CadenceActionKind;
   /** What happens, as a sentence without its time: `Opens the date vote`. */
   what: string;
 }
 
-const WHAT: Record<Exclude<CadenceStep["kind"], "none">, string> = {
+const WHAT: Record<CadenceActionKind, string> = {
   "close-date-vote": "Closes the date vote",
   "hold-date-vote": "Closes the date vote if anyone has voted",
   "cancel-quiet-round":
@@ -274,16 +278,16 @@ export function nextCadenceAction(
   if (poll !== null) {
     const at = nextDateVoteAttempt(poll, settings, now);
     const step = cadenceStep(settings, snapshot, at, false);
-    return {
-      at,
-      what: step.kind === "none" ? WHAT["close-date-vote"] : WHAT[step.kind],
-    };
+    const kind = step.kind === "none" ? "close-date-vote" : step.kind;
+    return { at, kind, what: WHAT[kind] };
   }
   let at = now;
   for (let i = 0; i < LOOKAHEAD_WEEKS; i++) {
     at = nextCadenceInstant(settings.cadence, settings.timezone, at);
     const step = cadenceStep(settings, snapshot, at, true);
-    if (step.kind !== "none") return { at, what: WHAT[step.kind] };
+    if (step.kind !== "none") {
+      return { at, kind: step.kind, what: WHAT[step.kind] };
+    }
   }
   return null;
 }

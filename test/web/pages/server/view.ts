@@ -8,6 +8,7 @@ import type {
   WebOpenVote,
   WebRoundSection,
 } from "../../../../src/features/round-section";
+import type { WebMapPin } from "../../../../src/features/hike-place-section";
 import type { WebHikeLogEntry } from "../../../../src/features/hike-log";
 import type { WebPlannedHike } from "../../../../src/features/planned-hike-section";
 import type {
@@ -50,6 +51,9 @@ export function baseView(overrides: Partial<WebView> = {}): WebView {
     },
     round: null,
     plannedHike: null,
+    hikePlace: null,
+    hikeForecast: null,
+    schedule: null,
     log: { entries: [], page: 1, pageSize: 5, pages: 1, total: 0 },
     calendar: { url: `https://hikebot.example/calendar/${GUILD}/sig.ics` },
     admin: null,
@@ -64,6 +68,7 @@ export function openVote(
     votes: number;
     viewerVoted?: boolean;
     details?: string;
+    place?: WebMapPin | null;
   }[],
   messageUrl:
     | string
@@ -78,6 +83,7 @@ export function openVote(
       details: option.details ?? null,
       dateValue: null,
       proposedBy: VIEWER,
+      place: option.place ?? null,
       votes: option.votes,
       viewerVoted: option.viewerVoted ?? false,
     })),

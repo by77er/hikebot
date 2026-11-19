@@ -12,6 +12,7 @@
 import type { Point } from "../geo/coordinates";
 import { addDays, hikeStart, todayIn } from "../polls/dates";
 import type { RoundView } from "../polls/store";
+import type { StoredForecast } from "../weather/forecast";
 import {
   FORECAST_NO_PIN,
   FORECAST_PENDING,
@@ -192,16 +193,49 @@ function currentForecast(round: RoundView) {
     : null;
 }
 
-/** Why there is no forecast to show at `now`, as the surfaces say it. */
+/** Why a hike has no forecast to show. */
+export type NoForecastReason = "no_pin" | "too_far" | "pending";
+
+/** What the surfaces say for each reason. */
+export const NO_FORECAST_TEXT: Record<NoForecastReason, string> = {
+  no_pin: FORECAST_NO_PIN,
+  too_far: FORECAST_TOO_FAR,
+  pending: FORECAST_PENDING,
+};
+
+/** Why there is no forecast to show at `now`. */
 function noForecast(
   round: RoundView,
   hike: HikeHours,
   timeZone: string,
   now: number,
-): string {
-  if (roundPoint(round) === null) return FORECAST_NO_PIN;
-  if (!withinForecast(hike, timeZone, now)) return FORECAST_TOO_FAR;
-  return FORECAST_PENDING;
+): NoForecastReason {
+  if (roundPoint(round) === null) return "no_pin";
+  if (!withinForecast(hike, timeZone, now)) return "too_far";
+  return "pending";
+}
+
+/**
+ * The round's weather at `now` in `timeZone`: its forecast, when it has one
+ * for its current pin with some of the hike's hours, or why it has none.
+ * Null when the round has no decided date.
+ */
+export type HikeWeather =
+  | { kind: "forecast"; hike: HikeHours; stored: StoredForecast }
+  | { kind: "none"; hike: HikeHours; reason: NoForecastReason };
+
+export function hikeWeather(
+  round: RoundView,
+  timeZone: string,
+  now: number,
+): HikeWeather | null {
+  const hike = hikeHoursOf(round, timeZone);
+  if (hike === null) return null;
+  const stored = currentForecast(round);
+  if (stored !== null && forecastSummary(stored.forecast, hike) !== null) {
+    return { kind: "forecast", hike, stored };
+  }
+  return { kind: "none", hike, reason: noForecast(round, hike, timeZone, now) };
 }
 
 /** What each surface shows of the weather. */
@@ -224,21 +258,24 @@ export function weatherTexts(
   timeZone: string,
   now: number,
 ): WeatherTexts | null {
-  const hike = hikeHoursOf(round, timeZone);
-  if (hike === null) return null;
-  const stored = currentForecast(round);
-  const summary = stored && forecastSummary(stored.forecast, hike);
-  if (stored === null || !summary) {
-    const why = noForecast(round, hike, timeZone, now);
+  const weather = hikeWeather(round, timeZone, now);
+  if (weather === null) return null;
+  const { hike } = weather;
+  if (weather.kind === "none") {
+    const why = NO_FORECAST_TEXT[weather.reason];
     return {
       thread: forecastNotice(why),
       event: `Weather: ${why}`,
       summary: [`**Weather:** ${why}`],
     };
   }
+  const { stored } = weather;
   return {
     thread: threadForecast(stored, hike, timeZone),
     event: eventForecast(stored, hike, timeZone),
-    summary: [`**Weather:** ${summary}`, `-# ${OPEN_METEO_CREDIT}`],
+    summary: [
+      `**Weather:** ${forecastSummary(stored.forecast, hike) ?? ""}`,
+      `-# ${OPEN_METEO_CREDIT}`,
+    ],
   };
 }
