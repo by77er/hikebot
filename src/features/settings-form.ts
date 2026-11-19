@@ -317,7 +317,9 @@ const saveTimeZoneGroup: GroupSave = async (
 const saveHomeAreaGroup: GroupSave = async ({ context, settings }, fields) => {
   const typed = fields.homeArea;
   if (typed === undefined) return refused("homeArea", UNAVAILABLE);
-  const text = homeAreaText(typed).slice(0, MAX_HOME_AREA);
+  const text = homeAreaText(typed);
+  // The field takes at most MAX_HOME_AREA characters, as the modal does.
+  if (text.length > MAX_HOME_AREA) return refused("homeArea", UNAVAILABLE);
   if (text === "") {
     return settings.homeArea === null
       ? { kind: "saved", notices: [] }

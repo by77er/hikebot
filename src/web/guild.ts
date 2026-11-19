@@ -1,5 +1,4 @@
 /**
-/**
  * The one way a page reads a server, an admin's action changes it and the
  * settings page saves: through its `GuildHike` object's `webView`,
  * `adminAction` and `saveSettings` methods, never its storage.

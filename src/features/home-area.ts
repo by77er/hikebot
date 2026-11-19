@@ -15,8 +15,8 @@ import {
   textInput,
   textInputValue,
 } from "../discord/components";
-import { adminOnly } from "../guild/permissions";
 import { GuildConfig } from "../guild/config";
+import { adminOnly } from "../guild/permissions";
 import type {
   ComponentHandler,
   HandlerContext,
@@ -32,8 +32,8 @@ import {
   renderAdminSettings,
   settingsAnswer,
 } from "./admin-panel";
-import { deferPanel, errorText } from "./poll-ui";
 import { reserveLookupSlot } from "./locate";
+import { deferPanel, errorText } from "./poll-ui";
 import {
   clearHomeArea,
   homeAreaText,
@@ -43,6 +43,27 @@ import {
   type Checked,
   type Notice,
 } from "./settings";
+
+/** Set home area: the modal, prefilled with the current home area. */
+const openHomeAreaModal: ComponentHandler = adminOnly(
+  (_interaction, _context, settings) => ({
+    response: modal(ADMIN_PANEL_IDS.homeArea, "Set home area", [
+      label(
+        "Home area",
+        textInput({
+          custom_id: ADMIN_PANEL_FIELDS.homeArea,
+          required: false,
+          max_length: MAX_HOME_AREA,
+          placeholder: "Seattle, Washington",
+          ...(settings.homeArea === null
+            ? {}
+            : { value: settings.homeArea.text }),
+        }),
+        "A city or region. Leave it empty to look locations up worldwide.",
+      ),
+    ]),
+  }),
+);
 
 /** Waits `ms` milliseconds, for a turn among the geocoder requests. */
 function wait(ms: number): Promise<void> {
@@ -99,27 +120,6 @@ export async function lookUpHomeArea(
     value: ["Home area set to ", { strong: text }, `, found as ${found.name}.`],
   };
 }
-
-/** Set home area: the modal, prefilled with the current home area. */
-const openHomeAreaModal: ComponentHandler = adminOnly(
-  (_interaction, _context, settings) => ({
-    response: modal(ADMIN_PANEL_IDS.homeArea, "Set home area", [
-      label(
-        "Home area",
-        textInput({
-          custom_id: ADMIN_PANEL_FIELDS.homeArea,
-          required: false,
-          max_length: MAX_HOME_AREA,
-          placeholder: "Seattle, Washington",
-          ...(settings.homeArea === null
-            ? {}
-            : { value: settings.homeArea.text }),
-        }),
-        "A city or region. Leave it empty to look locations up worldwide.",
-      ),
-    ]),
-  }),
-);
 
 /**
  * The home area modal: empty clears it at once; the same text as before

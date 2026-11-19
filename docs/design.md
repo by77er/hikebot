@@ -277,11 +277,11 @@ permission", with the roles from their membership.
   60 seconds (`MEMBER_CACHE_MS`); an error is not cached;
 - the server's name, icon and channel names (`GET /guilds/{guild.id}` and
   `GET /guilds/{guild.id}/channels`) for an hour, as long as the owner.
+  That fetch also refreshes the owner id cached in `guild_settings`, the one
+  write the read makes;
 - for the settings page, the server's roles and channels with their types
   and categories (`GET /guilds/{guild.id}/roles` and
   `GET /guilds/{guild.id}/channels`) for 60 seconds.
-  That fetch also refreshes the owner id cached in `guild_settings`, the one
-  write the read makes.
 
 A restart of the object (a deploy, or eviction when idle) empties the
 in-memory caches, so the next read asks Discord again; the owner cache in

@@ -408,6 +408,9 @@ describe("saving a group of settings", () => {
     expect((await settingsOf(guild)).homeArea?.text).toBe(
       "Seattle, Washington",
     );
+    expect(
+      refusals(await save(guild, "home-area", { homeArea: "x".repeat(101) })),
+    ).toEqual({ homeArea: "This action is no longer available." });
     expect(notices(await save(guild, "home-area", { homeArea: "" }))).toEqual([
       "Home area cleared: locations are looked up worldwide.",
     ]);
