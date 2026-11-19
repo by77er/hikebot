@@ -29,6 +29,7 @@ const PLACES = [
 let browser: Browser;
 let path: string;
 let cookie: string;
+let member: PageClient;
 
 beforeAll(async () => {
   const play = new RoundPlayer(e2e);
@@ -59,6 +60,7 @@ beforeAll(async () => {
   const client = new PageClient(e2e.url);
   expect((await client.signIn({ id: VIEWER })).status).toBe(303);
   cookie = client.cookieHeader();
+  member = client;
   path = `/g/${g.guildId}`;
   browser = await launchBrowser({ webgl: true });
 }, 120_000);
@@ -129,6 +131,13 @@ async function settled(page: Page): Promise<void> {
   );
 }
 
+/** The text of every element `selector` picks. */
+async function texts(page: Page, selector: string): Promise<string[]> {
+  return (await page.evaluate(
+    `[...document.querySelectorAll(${JSON.stringify(selector)})].map((e) => e.textContent)`,
+  )) as string[];
+}
+
 /** Where `selector` is on the page, rounded to whole pixels. */
 async function box(page: Page, selector: string): Promise<number[]> {
   return (await page.evaluate(`(() => {
@@ -163,20 +172,16 @@ it("draws both maps from this Worker's tiles, loading nothing from another host 
   expect(await page.evaluate("window.__violations")).toEqual([]);
 
   // The planned hike's pin with its name, and five numbered places.
-  expect(await page.$$eval(".map-view__pin", (pins) => pins.length)).toBe(1);
-  expect(
-    await page.$eval(".maplibregl-popup-content", (popup) => popup.textContent),
-  ).toBe("Mount Si");
-  expect(
-    await page.$$eval(".map-view__marker", (markers) =>
-      markers.map((marker) => marker.textContent),
-    ),
-  ).toEqual(["1", "2", "3", "4", "5"]);
-  expect(
-    await page.$$eval(".maplibregl-ctrl-attrib", (attributions) =>
-      attributions.map((element) => element.textContent),
-    ),
-  ).toEqual([
+  expect(await texts(page, ".map-view__pin")).toEqual([""]);
+  expect(await texts(page, ".maplibregl-popup-content")).toEqual(["Mount Si"]);
+  expect(await texts(page, ".map-view__marker")).toEqual([
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+  ]);
+  expect(await texts(page, ".maplibregl-ctrl-attrib")).toEqual([
     expect.stringContaining("© OpenStreetMap contributors"),
     expect.stringContaining("© OpenStreetMap contributors"),
   ]);
@@ -206,9 +211,11 @@ it("zooms from the keyboard, with a visible focus, and from its buttons", async 
   const { page } = await open();
   await settled(page);
   const hikeMap = ".hike-card figure[data-map]";
-  const zoom = () =>
-    page.$eval(hikeMap, (figure) =>
-      Number(figure.getAttribute("data-map-zoom")),
+  const zoom = async () =>
+    Number(
+      await page.evaluate(
+        `document.querySelector(${JSON.stringify(hikeMap)}).dataset.mapZoom`,
+      ),
     );
   const before = await zoom();
   expect(before).toBe(12);
@@ -239,3 +246,32 @@ it("zooms from the keyboard, with a visible focus, and from its buttons", async 
   await expect.poll(zoom, { timeout: 30_000 }).toBe(before);
   await page.close();
 }, 120_000);
+
+it("serves the stored picture to a member only, and the tiles to anyone", async () => {
+  const picture = await member.get(`${path}/map.png`);
+  expect(picture.status).toBe(200);
+  expect(picture.headers.get("content-type")).toBe("image/png");
+
+  const stranger = new PageClient(e2e.url);
+  const signedOut = await stranger.get(`${path}/map.png`);
+  expect(signedOut.status).toBe(303);
+  expect(signedOut.headers.get("location")).toBe(
+    `/login?next=${encodeURIComponent(`${path}/map.png`)}`,
+  );
+
+  const style = await stranger.get("/maps/style.json");
+  expect(style.status).toBe(200);
+  const { sources } = JSON.parse(style.body) as {
+    sources: { hikebot: { tiles: string[] } };
+  };
+  const tile = await stranger.get(
+    (sources.hikebot.tiles[0] ?? "")
+      .replace("{z}", "12")
+      .replace("{x}", "663")
+      .replace("{y}", "1432"),
+  );
+  expect(tile.status).toBe(200);
+  expect(tile.headers.get("content-type")).toBe(
+    "application/vnd.mapbox-vector-tile",
+  );
+});
