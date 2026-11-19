@@ -1,7 +1,13 @@
 import { env } from "cloudflare:workers";
+import { Compression } from "pmtiles";
 import { beforeEach, describe, expect, it } from "vitest";
 import { MANIFEST_KEY } from "../../src/maps/manifest";
-import { MANIFEST_TTL_MS, MapReader, tileBounds } from "../../src/maps/reader";
+import {
+  MANIFEST_TTL_MS,
+  MapReader,
+  tileBounds,
+  tileBytes,
+} from "../../src/maps/reader";
 import {
   SAMPLE,
   clearBucket,
@@ -326,5 +332,78 @@ describe("MapReader.attribution", () => {
     await putManifest(manifestOf([sampleArchive()]));
 
     expect(await reader().attribution()).toBe(SAMPLE.attribution);
+  });
+});
+
+describe("MapReader.storedTile", () => {
+  it("returns the tile as the archive stores it, gzip, with its compression", async () => {
+    await putSample("builds/test/region.pmtiles");
+    await putManifest(manifestOf([sampleArchive()]));
+    const { z, x, y } = tileAt(lon, lat, SAMPLE.maxzoom);
+
+    const stored = await reader().storedTile(z, x, y);
+
+    if (stored === undefined || stored === "empty") throw new Error("no tile");
+    expect(stored.compression).toBe(Compression.Gzip);
+    const bytes = new Uint8Array(stored.data);
+    expect([bytes[0], bytes[1]]).toEqual([0x1f, 0x8b]);
+    expect(new Uint8Array(await tileBytes(stored))).toEqual(
+      await reader().tile(z, x, y),
+    );
+  });
+
+  it("says a tile is empty where an archive covers it but holds nothing", async () => {
+    await putSample("builds/test/region.pmtiles");
+    // The manifest claims a larger box than the sample's data.
+    await putManifest(
+      manifestOf([sampleArchive({ bbox: [-122.5, 47, -121, 48] })]),
+    );
+    const { z, x, y } = tileAt(-122.4, 47.9, 12);
+
+    expect(await reader().storedTile(z, x, y)).toBe("empty");
+  });
+
+  it("returns nothing outside every archive, or when the archive cannot be read", async () => {
+    await putManifest(manifestOf([sampleArchive()]));
+    const inside = tileAt(lon, lat, SAMPLE.maxzoom);
+    const outside = tileAt(2.35, 48.85, 12);
+
+    expect(
+      await reader().storedTile(outside.z, outside.x, outside.y),
+    ).toBeUndefined();
+    // The manifest names an archive the bucket does not hold.
+    expect(
+      await reader().storedTile(inside.z, inside.x, inside.y),
+    ).toBeUndefined();
+  });
+});
+
+describe("MapReader.coverage", () => {
+  it("joins the archives' boxes and zooms, with the build and attribution", async () => {
+    await putManifest(
+      manifestOf([
+        sampleArchive({
+          name: "world",
+          bbox: WORLD_BBOX,
+          minzoom: 0,
+          maxzoom: 8,
+        }),
+        sampleArchive(),
+      ]),
+    );
+
+    expect(await reader().coverage()).toEqual({
+      build: SAMPLE.build,
+      attribution: SAMPLE.attribution,
+      bounds: WORLD_BBOX,
+      minzoom: 0,
+      maxzoom: SAMPLE.maxzoom,
+    });
+  });
+
+  it("returns nothing without map data", async () => {
+    expect(await reader().coverage()).toBeUndefined();
+    await putManifest(manifestOf([]));
+    expect(await reader().coverage()).toBeUndefined();
   });
 });

@@ -131,6 +131,26 @@ function startLocationVote(store: PollStore, labels: string[]): PollView {
 }
 
 describe("the web view's round", () => {
+  it("gives each location option the point its place was found at, null without one", async () => {
+    const g = await setUp();
+    const poll = await g.store((s) => {
+      const started = startLocationVote(s, ["Ridge", "Lake"]);
+      const ridge = started.options.find((o) => o.label === "Ridge");
+      s.recordPlaceLookup(ridge?.id ?? 0, {
+        kind: "found",
+        point: { lat: 47.5069, lon: -121.739 },
+        name: "Mount Si",
+      });
+      return started;
+    });
+    const view = await g.view(ANA);
+    expect(view.round?.vote?.options.map((o) => [o.label, o.point])).toEqual([
+      ["Ridge", { lat: 47.5069, lon: -121.739 }],
+      ["Lake", null],
+    ]);
+    expect(view.round?.vote?.pollId).toBe(poll.id);
+  });
+
   it("is null with no round, as is the planned hike, and the log is empty", async () => {
     const g = await setUp();
     const view = await g.view(ANA);
@@ -171,6 +191,7 @@ describe("the web view's round", () => {
             proposedBy: OWNER,
             votes: 2,
             viewerVoted: true,
+            point: null,
           },
           {
             optionId: ids.Canyon,
@@ -180,6 +201,7 @@ describe("the web view's round", () => {
             proposedBy: OWNER,
             votes: 1,
             viewerVoted: true,
+            point: null,
           },
           {
             optionId: ids.Ridge,
@@ -189,6 +211,7 @@ describe("the web view's round", () => {
             proposedBy: OWNER,
             votes: 0,
             viewerVoted: false,
+            point: null,
           },
         ],
         voterCount: 2,

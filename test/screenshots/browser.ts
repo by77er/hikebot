@@ -14,9 +14,10 @@
  * package unpacks (Open Sans), so pages render the same whichever fonts the
  * machine has installed.
  *
- * The package turns WebGL off; the interactive map needs it, so it is
- * turned back on, drawn in software by SwiftShader, which the package
- * ships, so no GPU of the machine's is involved.
+ * The package turns WebGL off. The interactive map needs it, so with
+ * `webgl` it is turned back on, drawn in software by SwiftShader, which the
+ * package ships, so no GPU of the machine's is involved. That also changes
+ * how every page is composited, so only pages with a map are taken with it.
  */
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,7 +27,9 @@ import type { Browser } from "puppeteer-core";
 /** Where the package unpacks; delete it to unpack again from npm. */
 export const CHROMIUM_DIR = join(tmpdir(), "hikebot-chromium");
 
-export async function launchBrowser(): Promise<Browser> {
+export async function launchBrowser(
+  options: { webgl?: boolean } = {},
+): Promise<Browser> {
   if (
     existsSync(join(CHROMIUM_DIR, "chromium")) &&
     !existsSync(join(CHROMIUM_DIR, "al2023", "lib"))
@@ -56,10 +59,13 @@ export async function launchBrowser(): Promise<Browser> {
     // opens a page, and each screenshot gets a context of its own.
     args: [
       ...chromium.args.filter(
-        (arg) => arg !== "--single-process" && arg !== "--disable-webgl",
+        (arg) =>
+          arg !== "--single-process" &&
+          !(options.webgl && arg === "--disable-webgl"),
       ),
-      "--use-angle=swiftshader",
-      "--enable-unsafe-swiftshader",
+      ...(options.webgl
+        ? ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
+        : []),
       "--hide-scrollbars",
       "--lang=en-US",
     ],
