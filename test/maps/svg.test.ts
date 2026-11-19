@@ -155,13 +155,16 @@ describe("buildSvg", () => {
 });
 
 /**
- * A scene of made-up tiles that hold only point features, all at `x`
- * logical pixels from the left edge, half-way down a 600 by 400 picture,
- * with the pin far to the right.
+ * A scene of made-up tiles that hold only the given features, each a point
+ * or a line at positions in logical pixels on a 600 by 400 picture, with
+ * the pin far to the right.
  */
-function pointsScene(
-  x: number,
-  features: { layer: string; properties: Record<string, unknown> }[],
+function madeUpScene(
+  features: {
+    layer: string;
+    properties: Record<string, unknown>;
+    at: { x: number; y: number }[];
+  }[],
 ): Scene {
   const view = viewportAt(SUMMIT, {
     zoom: 14,
@@ -171,19 +174,32 @@ function pointsScene(
     pixelRatio: 1,
   });
   const size = tilePixels(view);
+  const extent = 4096;
   const tiles = coveringTiles(view).map((tile) => {
-    const extent = 4096;
-    const at = {
-      x: ((x - tile.left) / size) * extent,
-      y: ((200 - tile.top) / size) * extent,
-    };
-    const inside = at.x >= 0 && at.y >= 0 && at.x < extent && at.y < extent;
-    const layers: Record<string, unknown> = {};
-    for (const { layer, properties } of inside ? features : []) {
-      const feature = { type: 1, properties, loadGeometry: () => [[at]] };
-      layers[layer] = { extent, length: 1, feature: () => feature };
+    const layers: Record<string, { feature: unknown }[]> = {};
+    for (const { layer, properties, at } of features) {
+      const points = at.map(({ x, y }) => ({
+        x: ((x - tile.left) / size) * extent,
+        y: ((y - tile.top) / size) * extent,
+      }));
+      const feature = {
+        type: points.length > 1 ? 2 : 1,
+        properties,
+        loadGeometry: () => [points],
+      };
+      (layers[layer] ??= []).push({ feature });
     }
-    return { tile, data: { layers } as unknown as VectorTile };
+    const data = Object.fromEntries(
+      Object.entries(layers).map(([name, list]) => [
+        name,
+        {
+          extent,
+          length: list.length,
+          feature: (i: number) => list[i]?.feature,
+        },
+      ]),
+    );
+    return { tile, data: { layers: data } as unknown as VectorTile };
   });
   return {
     view,
@@ -196,8 +212,10 @@ function pointsScene(
 }
 
 describe("label priority", () => {
-  // At the left edge, a label fits only to the right of the point, so the
-  // label that ranks higher takes that place and the other is left out.
+  // By the picture's left edge a label fits only to the right of its point,
+  // so the label that ranks higher takes that place and the other is left
+  // out.
+  const EDGE = [{ x: 12, y: 200 }];
   const town = {
     layer: "places",
     properties: {
@@ -206,35 +224,54 @@ describe("label priority", () => {
       name: "Townsend",
       population_rank: 15,
     },
+    at: EDGE,
+  };
+  const peak = {
+    layer: "pois",
+    properties: { kind: "peak", name: "Mount Rainier", elevation: 4392 },
+    at: EDGE,
   };
 
   it("labels a summit before a town in its place", () => {
-    const peak = {
-      layer: "pois",
-      properties: { kind: "peak", name: "Mount Rainier", elevation: 4392 },
-    };
-    const svg = buildSvg(pointsScene(12, [town, peak]));
+    const svg = buildSvg(madeUpScene([town, peak]));
     expect(svg).toContain(">Mount Rainier</tspan>");
     expect(svg).toContain(">4,392 m</tspan>");
     expect(svg).not.toContain(">Townsend</tspan>");
   });
 
-  it("labels water before a town in its place", () => {
+  it("labels a lake before a town in its place", () => {
     const lake = {
       layer: "pois",
       properties: { kind: "water", name: "Rattlesnake Lake" },
+      at: EDGE,
     };
-    const svg = buildSvg(pointsScene(12, [town, lake]));
+    const svg = buildSvg(madeUpScene([town, lake]));
     expect(svg).toContain(">Rattlesnake Lake</tspan>");
     expect(svg).not.toContain(">Townsend</tspan>");
   });
 
-  it("moves a town aside for a summit where there is room for both", () => {
-    const peak = {
-      layer: "pois",
-      properties: { kind: "peak", name: "Mount Rainier", elevation: 4392 },
+  it("labels a river along its line before a town in its way", () => {
+    const river = {
+      layer: "water",
+      properties: { kind: "river", name: "Snoqualmie River" },
+      at: [
+        { x: 4, y: 200 },
+        { x: 200, y: 200 },
+      ],
     };
-    const svg = buildSvg(pointsScene(300, [town, peak]));
+    const svg = buildSvg(madeUpScene([town, river]));
+    expect(svg).toMatch(/<textPath[^>]*>Snoqualmie River<\/textPath>/);
+    expect(svg).not.toContain(">Townsend</tspan>");
+  });
+
+  it("moves a town aside for a summit where there is room for both", () => {
+    const middle = [{ x: 300, y: 200 }];
+    const svg = buildSvg(
+      madeUpScene([
+        { ...town, at: middle },
+        { ...peak, at: middle },
+      ]),
+    );
     expect(svg).toContain(">Mount Rainier</tspan>");
     expect(svg).toContain(">Townsend</tspan>");
   });

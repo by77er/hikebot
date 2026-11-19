@@ -654,6 +654,7 @@ function pointRole(
   return undefined;
 }
 
+/** Summits, then water, win their place from the towns round them. */
 function labelPriority(role: LabelRole, feature: VectorTileFeature): number {
   const rank = Number(feature.properties.population_rank ?? 0) || 0;
   const elevation = Number(feature.properties.elevation ?? 0) || 0;
