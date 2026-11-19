@@ -22,6 +22,11 @@ const PAGES = [
     status: 200,
     title: "Tally vote · Style guide · hikebot",
   },
+  {
+    path: "/styleguide/map",
+    status: 200,
+    title: "Cairn map · Style guide · hikebot",
+  },
   { path: "/", status: 200, title: "hikebot" },
   { path: "/no-such-page", status: 404, title: "Page not found · hikebot" },
 ];
@@ -103,6 +108,24 @@ describe.each(PAGES)("$path", ({ path, status, title }) => {
     const [stylesheet = ""] = stylesheetLinks(page.body);
     const seen = await stylesheetFiles(client, stylesheet);
     expect(seen.some((file) => file.endsWith(".woff2"))).toBe(true);
+  });
+});
+
+describe("the Cairn map page", () => {
+  it("shows the sample pictures, each a PNG from the Worker's origin, cached for a year", async () => {
+    const client = new PageClient(e2e.url);
+    const page = await client.get("/styleguide/map");
+    const images = [...page.body.matchAll(/<img src="([^"]*)" alt="([^"]+)"/g)];
+    expect(images.length).toBeGreaterThanOrEqual(10);
+    for (const [, src = ""] of images) {
+      expect(src).toMatch(
+        /^\/assets\/v\/[^/]+\/maps\/samples\/[a-z0-9-]+\.png$/,
+      );
+      const image = await client.get(src);
+      expect(image.status, src).toBe(200);
+      expect(image.headers.get("content-type"), src).toBe("image/png");
+      expect(image.headers.get("cache-control"), src).toBe(IMMUTABLE);
+    }
   });
 });
 

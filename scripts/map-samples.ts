@@ -1,7 +1,7 @@
 /**
  * `npm run maps:samples`: the fixed set of map pictures a style change is
  * reviewed on, drawn from the committed sample archive into
- * `docs/maps/samples/`. This module holds the views and the loop; the entry
+ * `public/assets/maps/samples/`. This module holds the views and the loop; the entry
  * file `draw-map-samples.ts` starts the Worker in local workerd and passes
  * in the Durable Object's `picture` method and a file writer.
  */
@@ -12,7 +12,7 @@ import { coveringTiles, viewportAt } from "../src/maps/projection";
 import type { Scene } from "../src/maps/svg";
 
 export interface SampleView {
-  /** The file name under docs/maps/samples/. */
+  /** The file name under public/assets/maps/samples/. */
   file: string;
   /** What the view shows, printed with the result. */
   title: string;

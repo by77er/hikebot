@@ -360,6 +360,32 @@
   line-height: var(--line-height-small);
 }
 
+.styleguide-maps {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--width-map-sample)), 1fr)
+  );
+  gap: var(--space-5);
+}
+
+.styleguide-maps li + li {
+  margin: 0;
+}
+
+.styleguide-maps img {
+  width: 100%;
+  max-width: var(--width-map-sample);
+  height: auto;
+}
+
+.styleguide-swatches--wide {
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, var(--width-map-swatch)), 1fr)
+  );
+}
+
 /* Each colour token as a background, then as a foreground, one per line. */
 .styleguide-sample[data-bg="color-bg"] {
   background: var(--color-bg);
@@ -529,4 +555,99 @@
 }
 .styleguide-sample[data-fg="color-contour"] {
   color: var(--color-contour);
+}
+
+/* Each map token as a background, one per line (the Cairn map page). */
+.styleguide-sample[data-bg="map-land"] {
+  background: var(--map-land);
+}
+.styleguide-sample[data-bg="map-forest"] {
+  background: var(--map-forest);
+}
+.styleguide-sample[data-bg="map-grass"] {
+  background: var(--map-grass);
+}
+.styleguide-sample[data-bg="map-bare-rock"] {
+  background: var(--map-bare-rock);
+}
+.styleguide-sample[data-bg="map-ice"] {
+  background: var(--map-ice);
+}
+.styleguide-sample[data-bg="map-settled"] {
+  background: var(--map-settled);
+}
+.styleguide-sample[data-bg="map-park"] {
+  background: var(--map-park);
+}
+.styleguide-sample[data-bg="map-protected-area"] {
+  background: var(--map-protected-area);
+}
+.styleguide-sample[data-bg="map-protected-area-outline"] {
+  background: var(--map-protected-area-outline);
+}
+.styleguide-sample[data-bg="map-water"] {
+  background: var(--map-water);
+}
+.styleguide-sample[data-bg="map-water-label"] {
+  background: var(--map-water-label);
+}
+.styleguide-sample[data-bg="map-road-motorway"] {
+  background: var(--map-road-motorway);
+}
+.styleguide-sample[data-bg="map-road-motorway-casing"] {
+  background: var(--map-road-motorway-casing);
+}
+.styleguide-sample[data-bg="map-road-major"] {
+  background: var(--map-road-major);
+}
+.styleguide-sample[data-bg="map-road-major-casing"] {
+  background: var(--map-road-major-casing);
+}
+.styleguide-sample[data-bg="map-road-minor"] {
+  background: var(--map-road-minor);
+}
+.styleguide-sample[data-bg="map-road-minor-casing"] {
+  background: var(--map-road-minor-casing);
+}
+.styleguide-sample[data-bg="map-rail"] {
+  background: var(--map-rail);
+}
+.styleguide-sample[data-bg="map-path"] {
+  background: var(--map-path);
+}
+.styleguide-sample[data-bg="map-track"] {
+  background: var(--map-track);
+}
+.styleguide-sample[data-bg="map-path-halo"] {
+  background: var(--map-path-halo);
+}
+.styleguide-sample[data-bg="map-building"] {
+  background: var(--map-building);
+}
+.styleguide-sample[data-bg="map-label"] {
+  background: var(--map-label);
+}
+.styleguide-sample[data-bg="map-label-halo"] {
+  background: var(--map-label-halo);
+}
+.styleguide-sample[data-bg="map-peak"] {
+  background: var(--map-peak);
+}
+.styleguide-sample[data-bg="map-pin"] {
+  background: var(--map-pin);
+}
+.styleguide-sample[data-bg="map-pin-outline"] {
+  background: var(--map-pin-outline);
+}
+.styleguide-sample[data-bg="map-pin-keyline"] {
+  background: var(--map-pin-keyline);
+}
+.styleguide-sample[data-bg="map-furniture"] {
+  background: var(--map-furniture);
+}
+.styleguide-sample[data-bg="map-furniture-background"] {
+  background: var(--map-furniture-background);
+}
+.styleguide-sample[data-bg="map-frame"] {
+  background: var(--map-frame);
 }

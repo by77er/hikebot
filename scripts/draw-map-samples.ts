@@ -1,7 +1,7 @@
 /**
  * `npm run maps:samples`: starts the Worker in local workerd with the sample
  * map archive in its bucket, draws the views in `map-samples.ts` through the
- * `MapPainter` Durable Object and writes them to `docs/maps/samples/`. Then
+ * `MapPainter` Durable Object and writes them to `public/assets/maps/samples/`. Then
  * draws the pin on each fill in `PIN_FILLS` with the same drawing code and
  * rasterizer, here in Node, from made-up tiles.
  */
@@ -16,7 +16,9 @@ import { seedMaps, type MapsBucket } from "../test/e2e/harness/maps";
 import { PIN_FILLS, drawSamples, pinScene, type Paint } from "./map-samples";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const OUT = fileURLToPath(new URL("../docs/maps/samples/", import.meta.url));
+const OUT = fileURLToPath(
+  new URL("../public/assets/maps/samples/", import.meta.url),
+);
 const FONTS = fileURLToPath(new URL("../src/maps/fonts/", import.meta.url));
 const WASM = fileURLToPath(
   import.meta.resolve("@resvg/resvg-wasm/index_bg.wasm"),

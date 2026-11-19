@@ -113,6 +113,14 @@ export function StyleguidePage({ tokens }: { tokens: SchemeTokens }) {
           <h2>Contents</h2>
           <Index title="Foundations" sections={FOUNDATIONS} />
           <Index title="Components" sections={COMPONENTS} />
+          <div class="stack stack--tight">
+            <h3>Pages of their own</h3>
+            <ol>
+              <li>
+                <a href="/styleguide/map">Cairn map</a>
+              </li>
+            </ol>
+          </div>
         </nav>
         {STYLEGUIDE_SECTIONS.filter(({ ownPage }) => !ownPage).map(
           ({ id, render: Render }) => (

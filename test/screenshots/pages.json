@@ -100,6 +100,13 @@
       "user": null
     },
     {
+      "name": "styleguide-map",
+      "path": "/styleguide/map",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
       "name": "styleguide-round-stepper",
       "path": "/styleguide/round-stepper",
       "status": 200,
@@ -165,7 +172,7 @@
     },
     {
       "route": "/maps/sample.png",
-      "reason": "The sample map picture (image/png) the deploy's smoke check fetches, not a page; its views are reviewed in docs/maps/samples/ (npm run maps:samples)."
+      "reason": "The sample map picture (image/png) the deploy's smoke check fetches, not a page; its views are reviewed in public/assets/maps/samples/ (npm run maps:samples) and shown on /styleguide/map."
     }
   ]
 }

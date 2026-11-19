@@ -7,13 +7,9 @@ import {
   type CairnToken,
   type ColourRole,
 } from "../../src/maps/style";
+import { mapToken } from "../../src/web/pages/styleguide-map";
 import { contrastRatio, parseTokens } from "../../src/web/tokens";
 import { publicText, TOKENS_FILE } from "../web/design-files";
-
-/** `--map-<role in kebab case>`, without the dashes. */
-function mapToken(role: string): string {
-  return `map-${role.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
-}
 
 /**
  * Every way the style module and the stylesheet disagree: a Cairn token
@@ -36,14 +32,16 @@ function disagreements(css: string): string[] {
   ) as Record<CairnToken, string>;
   for (const [role, recipe] of Object.entries(RECIPES)) {
     const made = mixRecipe(recipe, tokens);
-    const token = light[mapToken(role)];
+    const token = light[mapToken(role as ColourRole)];
     if (token !== made || COLOURS[role as ColourRole] !== made) {
       found.push(
-        `${role}: --${mapToken(role)} is ${String(token)}, style.ts has ${COLOURS[role as ColourRole]}, the recipe makes ${made}`,
+        `${role}: --${mapToken(role as ColourRole)} is ${String(token)}, style.ts has ${COLOURS[role as ColourRole]}, the recipe makes ${made}`,
       );
     }
   }
-  const roles = new Set(Object.keys(RECIPES).map(mapToken));
+  const roles = new Set(
+    Object.keys(RECIPES).map((role) => mapToken(role as ColourRole)),
+  );
   for (const name of Object.keys(light)) {
     if (name.startsWith("map-") && !roles.has(name)) {
       found.push(`--${name} is no role of src/maps/style.ts`);

@@ -114,6 +114,8 @@
     --width-pair-sample: 4.75rem;
     --width-shape: 10rem;
     --width-scale-label: 9rem;
+    --width-map-sample: 25rem;
+    --width-map-swatch: 20rem;
 
     /* Elevation, for overlays only. */
     --elevation-overlay:
