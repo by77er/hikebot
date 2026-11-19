@@ -15,18 +15,18 @@ const PIN = { lat: 47.4881, lon: -121.7232, label: "Mount Si" };
 
 /** The settings the browser script reads from the figure. */
 async function config(html: string): Promise<MapConfig | null> {
-  let data: string | null = null;
+  const found: { data: string | null } = { data: null };
   await new HTMLRewriter()
     .on("figure", {
       element(element) {
-        data = element.getAttribute("data-map");
+        found.data = element.getAttribute("data-map");
       },
     })
     .transform(new Response(html))
     .text();
-  if (data === null) return null;
+  if (found.data === null) return null;
   // HTMLRewriter gives the attribute as written, with its entities.
-  const text = (data as string)
+  const text = found.data
     .replace(/&quot;/g, '"')
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
