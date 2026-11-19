@@ -874,7 +874,7 @@ All tables live in the guild's `GuildHike` SQLite database.
   index. Also `location_option_id` and `date_option_id` (the winners),
   `thread_id` (the hike's forum thread), `event_id` (the hike's Discord
   scheduled event), `map_picture_key` (the `MAPS` bucket key of the map
-  picture its thread and event show, migration `0007_round_map_picture`),
+  picture its thread and event show, migration `0008_round_map_picture`),
   `day_of_channel_id` / `day_of_message_id` (the
   hike-day announcement, once posted), `started_by` / `started_at`, and
   `ended_by` / `ended_at` (set on complete or cancel).
