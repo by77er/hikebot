@@ -3,7 +3,8 @@
  * a number (tabular figures) and as a bar of the members who voted, the
  * winner (the blaze and "Winner") with the tie-break note when the winner
  * was drawn from a tie, the viewer's own vote, the details and who
- * proposed it. Given `choice`, the label is a real checkbox's label, for
+ * proposed it, and for a located option its place name and map link, as
+ * the poll message shows them. Given `choice`, the label is a real checkbox's label, for
  * the votable form (`TallyVote`). Rows sit in a `TallyList`. Every text in
  * it comes from members and is rendered as text.
  */
@@ -11,6 +12,7 @@ import { useId } from "preact/hooks";
 import { Blaze } from "./blaze";
 import type { Preview } from "./button";
 import { CheckIcon, ChevronRightIcon } from "./icons";
+import { MapLinks, type MapPlace } from "./map-links";
 
 export interface TallyOption {
   /** The option's id, the value its checkbox sends. */
@@ -22,6 +24,8 @@ export interface TallyOption {
   votes: number;
   /** The viewer's saved vote is on this option. */
   yourVote?: boolean;
+  /** A location's map pin; its list then carries OpenStreetMap's credit. */
+  place?: MapPlace | null;
 }
 
 export interface TallyRowProps {
@@ -56,7 +60,7 @@ export function TallyRow({
 }: TallyRowProps) {
   const countId = useId();
   const checkId = useId();
-  const { label, details, proposer, votes, yourVote = false } = option;
+  const { label, details, proposer, votes, yourVote = false, place } = option;
   const className = [
     "tally-row",
     winner && "tally-row--winner",
@@ -120,6 +124,7 @@ export function TallyRow({
         </p>
       )}
       {tieNote && <p class="tally-row__tie">{tieNote}</p>}
+      {place && <MapLinks place={place} variant="compact" label={label} />}
       {details && !collapseDetails && (
         <p class="tally-row__details">{details}</p>
       )}

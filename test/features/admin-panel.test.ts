@@ -1201,6 +1201,7 @@ describe("renderAdminSettings", () => {
         now: Date.UTC(2030, 0, 1),
         nextScheduled: {
           at: Date.UTC(2030, 0, 5, 17),
+          kind: "start-location-vote",
           what: "Opens a location vote",
         },
       },

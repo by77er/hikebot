@@ -24,6 +24,7 @@ import {
   type AdminRequest,
 } from "./action";
 import { TEXT_FIELD } from "./fields";
+import { mapPinAction, mapPinPage } from "./map-pin";
 import { noticeCookie } from "./notice";
 
 /** A page or POST of the server `guildId`. */
@@ -38,7 +39,7 @@ export const NOT_OFFERED =
   "That control is no longer offered: the round has moved on since the page was loaded.";
 
 /** Back to the server's page, saying the control is no longer offered. */
-async function notOffered(
+export async function notOffered(
   env: Env,
   admin: AdminRequest,
   guildId: string,
@@ -160,6 +161,7 @@ export const ADMIN_PAGES = new Map<string, AdminHandler>([
   ["/admin/close-vote", confirmPage("close-vote")],
   ["/admin/withdraw-date-vote", confirmPage("withdraw-date-vote")],
   ["/admin/cancel-round", confirmPage("cancel-round")],
+  ["/admin/set-map-pin", mapPinPage],
 ]);
 
 /** The admin controls' POSTs by the path after `/g/<guild id>`. */
@@ -175,4 +177,5 @@ export const ADMIN_ACTIONS = new Map<string, AdminHandler>([
   ["/admin/show-map-picture", action("show-map-picture")],
   ["/admin/post-hike-day", action("post-hike-day")],
   ["/admin/announce", action("announce")],
+  ["/admin/set-map-pin", mapPinAction],
 ]);

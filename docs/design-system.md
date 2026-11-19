@@ -591,6 +591,28 @@ its styles in `public/assets/cairn/components/`, its unit test in
     group's first choice).
   - _Don't:_ show it without the errors at the fields, or list errors the
     member cannot fix there.
+- **Forecast table** (`forecast-table.tsx`, `/styleguide/forecast-table`):
+  a hike's hourly forecast, as the hike thread gives it.
+  - _Anatomy:_ a `table` named by its caption (the day and the time zone,
+    small and muted); columns Time, Conditions, Temp, Rain and Wind (read
+    out as Temperature and Rain or snow); one row per hour headed by its
+    time (a `<time>`). Each cell has a first figure with its unit and a
+    second that says what it is ("50°F" and "feels 46°", "20%" and
+    "0.01 in", "6 mph" and "gusts 12"), so a cell reads on its own; the
+    conditions are words with a weather icon beside them (decorative: the
+    words carry them). A value the forecast lacks is a dash, as in the
+    thread.
+  - _Variants:_ the server's units: °F, inches and mph, or °C, mm and
+    km/h.
+  - _States:_ none; it is not interactive.
+  - _Layout:_ on a phone each second figure sits under the first in muted
+    small text and the cells are tight, so the five columns fit 390px
+    (checked on the screenshots); from the breakpoint it sits beside it.
+    Like every table it still scrolls inside its own box rather than widen
+    the page.
+  - _Do:_ pass the hours, words and times the bot shows, in the server's
+    time zone. _Don't:_ colour a row for the weather, or drop the words for
+    the icon.
 - **Form actions** (`form-actions.tsx`, `/styleguide/form-actions`): the bar
   at the foot of a form.
   - _Anatomy:_ the one primary action (a submit Button: primary, or danger
@@ -652,7 +674,29 @@ its styles in `public/assets/cairn/components/`, its unit test in
   `DiscordIcon`, Discord's mark, filled rather than stroked, for **Sign in
   with Discord** only: its shape is Discord's own, as published in the
   `simple-icons` package (16.38.0, CC0; the mark itself is Discord's
-  trademark, used as its brand guidelines say, see Discord sign-in).
+  trademark, used as its brand guidelines say, see Discord sign-in). The
+  weather icons (`weather-icons.tsx`, shown with the forecast table) are
+  Lucide's too: sun, cloud and sun, cloud, fog, drizzle, rain, snow,
+  thunderstorm, hail, sunrise and sunset, and a question mark for a code
+  without data; `WeatherIcon` picks the one for a WMO weather code.
+- **Map links** (`map-links.tsx`, `/styleguide/map-links`): where a
+  location is, as the bot shows it.
+  - _Anatomy:_ `full`: the place name (semibold, after a map pin icon), or
+    the pin's coordinates when it has no name; the coordinates under a name
+    (small, muted); **Open in OpenStreetMap** and **Open in Google Maps**,
+    quiet buttons with the external-link icon after the words; then
+    OpenStreetMap's credit, "© OpenStreetMap contributors", linking its
+    copyright page. `compact`, in a vote's row, as the poll message does:
+    one small muted line, a map pin, the place name and a **Map** link
+    named after the option ("Map of Lake Serene"); the tally list carries
+    the credit once, under its rows.
+  - _Variants:_ `full`, `compact`; with or without a place name.
+  - _States:_ the links' and buttons' own.
+  - _Do:_ use plain links. _Don't:_ embed a map, a tile or a picture from
+    another site: the content security policy forbids it, and it would
+    tell that site who opened the page.
+  - It is built from the layout classes, the utilities and Button, and has
+    no stylesheet of its own.
 - **Pagination** (`pagination.tsx`, `/styleguide/pagination`): the way
   through a list that comes in pages, newest first, such as the hike log.
   - _Anatomy:_ a `nav` named by its `label` ("Hike log pages"), with
@@ -772,7 +816,8 @@ its styles in `public/assets/cairn/components/`, its unit test in
     (with a check); the tie note, in the bot's words ("3 options tied with
     4 votes each; the winner was drawn at random."); the details; "Proposed
     by" and the name ("hikebot" for the bot's own). Date options have no
-    proposer.
+    proposer. A located option has its place line (compact Map links) after
+    the marks, and the list then ends with OpenStreetMap's credit.
   - _Variants_: open or closed; winner, winner from a tie; with the details
     shown or folded behind a "Details" disclosure (a native `<details>`
     whose summary is a 44px target named "Details of <label>"); votable
@@ -855,7 +900,8 @@ its styles in `public/assets/cairn/components/`, its unit test in
 - **Two widths on a desktop**: 720px for a page that does one job, 1080px
   for overviews. Running text stops at 68 characters whatever the width.
 - **Spacing from the scale** through `.stack` (vertical; `--tight`,
-  `--loose`, `--section`), `.cluster` (a wrapping row) and `.grid` (cards
+  `--loose`, `--section`), `.cluster` (a wrapping row; `--nowrap` keeps an
+  icon beside words that wrap) and `.grid` (cards
   side by side, one column on a phone). A page's structure: the
   `.page-heading` (eyebrow, h1, lead), then sections `--space-7` apart.
 - **The primary action** sits right after what it acts on, never at the

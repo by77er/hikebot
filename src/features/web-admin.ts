@@ -14,7 +14,9 @@ import {
   type PanelActionKind,
 } from "./admin-panel";
 import { START_DATES_FIELD, startDateVoteOnSchedule } from "./date-vote";
+import { MAP_PIN_HOOKS } from "./index";
 import { START_LOCATIONS_FIELD } from "./location-vote";
+import { setMapPinAction } from "./map-pin";
 import {
   CANCEL_QUESTION,
   closeQuestion,
@@ -43,12 +45,11 @@ import {
 export const WEB_WORK_WAIT_MS = 20_000;
 
 /**
- * A control the web page offers: the panel's round controls but Set map
- * pin (it needs the place lookup the panel's modal does), and Withdraw
- * date vote while a date vote is open.
+ * A control the web page offers: the panel's round controls, and Withdraw
+ * date vote while a date vote is open. Set map pin is offered by the
+ * page's Where section (`hike-place.tsx`) rather than the Admin card.
  */
-export type WebAdminActionKind =
-  Exclude<PanelActionKind, "set-map-pin"> | "withdraw-date-vote";
+export type WebAdminActionKind = PanelActionKind | "withdraw-date-vote";
 
 export interface WebAdminAction {
   kind: WebAdminActionKind;
@@ -124,9 +125,10 @@ export function adminSection(source: WebViewSource): WebAdminSection | null {
 }
 
 /**
- * The controls the web page offers now, in the panel's order: the panel's
- * (`panelActions`) but Set map pin, with Withdraw date vote before Cancel
- * round while a date vote is open.
+ * The controls the Admin card offers now, in the panel's order: the
+ * panel's (`panelActions`) but Set map pin, which the Where section
+ * offers, with Withdraw date vote before Cancel round while a date vote is
+ * open.
  */
 export function webAdminActions(
   storage: DurableObjectStorage,
@@ -276,5 +278,11 @@ function act(
       return retryHikeDay(context, actor, { roundId: target });
     case "announce":
       return retryAnnouncement(context, actor, { pollId: target });
+    case "set-map-pin":
+      return setMapPinAction(
+        context,
+        { roundId: target, input: request.text ?? "" },
+        MAP_PIN_HOOKS,
+      );
   }
 }

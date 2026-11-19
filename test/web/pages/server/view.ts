@@ -8,6 +8,22 @@ import type {
   WebOpenVote,
   WebRoundSection,
 } from "../../../../src/features/round-section";
+import {
+  webForecast,
+  type WebHikeForecast,
+} from "../../../../src/features/hike-forecast-section";
+import type {
+  WebHikePlace,
+  WebMapPin,
+} from "../../../../src/features/hike-place-section";
+import type { WebSchedule } from "../../../../src/features/schedule-section";
+import {
+  NO_FORECAST_TEXT,
+  type NoForecastReason,
+} from "../../../../src/features/weather-state";
+import { hikeStart } from "../../../../src/polls/dates";
+import type { Units } from "../../../../src/weather/forecast";
+import { readForecast } from "../../../../src/weather/open-meteo";
 import type { WebHikeLogEntry } from "../../../../src/features/hike-log";
 import type { WebPlannedHike } from "../../../../src/features/planned-hike-section";
 import type {
@@ -31,6 +47,8 @@ import type { WebView } from "../../../../src/guild/web-view";
 export const GUILD = "200000000000007001";
 export const VIEWER = "400000000000007001";
 export const TIME_ZONE = "Europe/Berlin";
+/** The time zone the recorded forecasts in test/weather/fixtures are for. */
+export const RECORDED_ZONE = "America/Los_Angeles";
 export const MARKUP = "<script>alert(1)</script><b>Ridge</b>";
 
 /** A member's view of a server with nothing planned and no hikes. */
@@ -50,6 +68,9 @@ export function baseView(overrides: Partial<WebView> = {}): WebView {
     },
     round: null,
     plannedHike: null,
+    hikePlace: null,
+    hikeForecast: null,
+    schedule: null,
     log: { entries: [], page: 1, pageSize: 5, pages: 1, total: 0 },
     calendar: { url: `https://hikebot.example/calendar/${GUILD}/sig.ics` },
     admin: null,
@@ -64,6 +85,7 @@ export function openVote(
     votes: number;
     viewerVoted?: boolean;
     details?: string;
+    place?: WebMapPin | null;
   }[],
   messageUrl:
     | string
@@ -78,6 +100,7 @@ export function openVote(
       details: option.details ?? null,
       dateValue: null,
       proposedBy: VIEWER,
+      place: option.place ?? null,
       votes: option.votes,
       viewerVoted: option.viewerVoted ?? false,
     })),
@@ -210,6 +233,7 @@ export function adminAction(
       ...plain("Announce date vote", 2, "secondary"),
       note: "**Date vote announcement:** not posted.",
     },
+    "set-map-pin": plain("Set map pin", 12, "secondary"),
   };
   return { kind, ...base[kind], ...overrides };
 }
@@ -239,6 +263,33 @@ export function adminSection(
   };
 }
 
+/** A pin at Mailbox Peak, with the geocoder's name unless `name` is null. */
+export function mapPin(
+  name: string | null = "Mailbox Peak, King County",
+): WebMapPin {
+  return {
+    lat: 47.4669,
+    lon: -121.6746,
+    text: "47.4669, -121.6746",
+    name,
+    osmUrl:
+      "https://www.openstreetmap.org/?mlat=47.4669&mlon=-121.6746#map=13/47.4669/-121.6746",
+    googleUrl:
+      "https://www.google.com/maps/search/?api=1&query=47.4669,-121.6746",
+  };
+}
+
+/** Where the planned hike of `plannedHike()` is: pinned, settable. */
+export function hikePlace(overrides: Partial<WebHikePlace> = {}): WebHikePlace {
+  return {
+    roundId: 12,
+    pin: mapPin(),
+    lookingUp: false,
+    pinnable: true,
+    ...overrides,
+  };
+}
+
 /** `view` as an admin sees it, offering `actions`. */
 export function asAdmin(view: WebView, actions: WebAdminAction[]): WebView {
   return {
@@ -250,3 +301,50 @@ export function asAdmin(view: WebView, actions: WebAdminAction[]): WebView {
 
 /** The date vote's wording, for a close of the date vote. */
 export const DATE_CLOSE = closeQuestion(DATE_POLL);
+
+/**
+ * The forecast of a recorded Open-Meteo answer in `units`, for a four-hour
+ * hike at `date` in Los Angeles, where the answers were recorded, stored a
+ * day before it.
+ */
+export function forecastOf(
+  answer: unknown,
+  units: Units,
+  date: string,
+): WebHikeForecast {
+  const start = hikeStart(date, RECORDED_ZONE);
+  return webForecast(
+    {
+      forecast: readForecast(answer, {
+        point: { lat: 47.4669, lon: -121.6746 },
+        units,
+      }),
+      fetchedAt: start - 26 * 3_600_000,
+      updatedAt: start - 26 * 3_600_000,
+    },
+    { start, end: start + 4 * 3_600_000 },
+    RECORDED_ZONE,
+  );
+}
+
+/** No forecast, for `reason`, in the thread's words. */
+export function noForecast(reason: NoForecastReason): WebHikeForecast {
+  return { kind: "none", reason, text: NO_FORECAST_TEXT[reason] };
+}
+
+/** The schedule on, Wednesdays at 09:00, doing `next`. */
+export function schedule(overrides: Partial<WebSchedule> = {}): WebSchedule {
+  return {
+    weekday: "Wednesday",
+    time: "09:00",
+    timeZone: TIME_ZONE,
+    dateVoteDays: 2,
+    next: {
+      kind: "close-location-vote",
+      at: Date.UTC(2030, 5, 5, 7),
+      when: "Wednesday 09:00",
+    },
+    waiting: null,
+    ...overrides,
+  };
+}

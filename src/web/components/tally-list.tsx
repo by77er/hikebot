@@ -3,9 +3,11 @@
  * poll message gives them (locations by votes, dates by date), under the
  * number of members who have voted, in the bot's words. Up to 25 rows; with
  * more than `COLLAPSE_AFTER` the details fold behind "Details", so the
- * labels and counts stay scannable on a phone. Given `choice`, every row is
+ * labels and counts stay scannable on a phone. With a located option, the
+ * list ends with OpenStreetMap's credit. Given `choice`, every row is
  * votable: put it inside a `TallyVote` form.
  */
+import { OsmCredit } from "./map-links";
 import { TallyRow, type TallyOption } from "./tally-row";
 
 /** With more options than this, each row's details are folded away. */
@@ -64,6 +66,7 @@ export function TallyList({
           </li>
         ))}
       </ol>
+      {options.some((option) => option.place) && <OsmCredit />}
     </div>
   );
 }

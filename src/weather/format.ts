@@ -52,7 +52,8 @@ export interface HikeHours {
   end: number;
 }
 
-interface UnitLabels {
+/** How a forecast's units are written. */
+export interface UnitLabels {
   temperature: string;
   wind: string;
   precipitation: string;
@@ -85,6 +86,11 @@ const LABELS: Record<Units, UnitLabels> = {
   },
 };
 
+/** How the values of a forecast in `units` are written. */
+export function unitLabels(units: Units): UnitLabels {
+  return LABELS[units];
+}
+
 /** From two hours before the start to two hours after the end. */
 export function forecastWindow({ start, end }: HikeHours): {
   from: number;
@@ -94,6 +100,18 @@ export function forecastWindow({ start, end }: HikeHours): {
     from: start - FORECAST_PADDING_HOURS * HOUR_MS,
     to: end + FORECAST_PADDING_HOURS * HOUR_MS,
   };
+}
+
+/**
+ * The hours the thread's hourly block shows: from two hours before the
+ * start to two hours after the end (`forecastWindow`).
+ */
+export function hourlyHours(
+  forecast: Forecast,
+  hike: HikeHours,
+): ForecastHour[] {
+  const { from, to } = forecastWindow(hike);
+  return hoursBetween(forecast, from, to);
 }
 
 /**
@@ -180,22 +198,37 @@ function hourlyTable(
   return ["```", ...lines, "```"].join("\n");
 }
 
+/**
+ * The hike day's sunrise and sunset in `timeZone` (`07:30`), each null when
+ * the forecast lacks it; null when the forecast has no such day.
+ */
+export function hikeSunTimes(
+  forecast: Forecast,
+  hike: HikeHours,
+  timeZone: string,
+): { sunrise: string | null; sunset: string | null } | null {
+  const date = todayIn(timeZone, hike.start);
+  const day = forecast.days.find(
+    (d) => d.sunrise !== null && todayIn(timeZone, d.sunrise) === date,
+  );
+  if (!day) return null;
+  return {
+    sunrise: day.sunrise === null ? null : timeIn(timeZone, day.sunrise),
+    sunset: day.sunset === null ? null : timeIn(timeZone, day.sunset),
+  };
+}
+
 /** The hike day's sunrise and sunset, if the forecast has them. */
 function sunLine(
   forecast: Forecast,
   hike: HikeHours,
   timeZone: string,
 ): string | null {
-  const date = todayIn(timeZone, hike.start);
-  const day = forecast.days.find(
-    (d) => d.sunrise !== null && todayIn(timeZone, d.sunrise) === date,
-  );
-  if (!day) return null;
+  const sun = hikeSunTimes(forecast, hike, timeZone);
+  if (!sun) return null;
   const parts = [
-    ...(day.sunrise === null
-      ? []
-      : [`Sunrise ${timeIn(timeZone, day.sunrise)}`]),
-    ...(day.sunset === null ? [] : [`Sunset ${timeIn(timeZone, day.sunset)}`]),
+    ...(sun.sunrise === null ? [] : [`Sunrise ${sun.sunrise}`]),
+    ...(sun.sunset === null ? [] : [`Sunset ${sun.sunset}`]),
   ];
   return parts.length === 0 ? null : parts.join(" · ");
 }
@@ -212,7 +245,10 @@ function uvWords(uv: number): string {
  * `FREEZING_REACH` of the forecast point, the UV index when it reaches
  * `HIGH_UV`, and snowfall when there is any.
  */
-function notes(forecast: Forecast, hours: ForecastHour[]): string[] {
+export function forecastNotes(
+  forecast: Forecast,
+  hours: ForecastHour[],
+): string[] {
   const labels = LABELS[forecast.units];
   const lines: string[] = [];
   const freezing = minOf(hours.map((h) => h.freezingLevel));
@@ -253,8 +289,7 @@ export function threadForecast(
 ): string {
   const { forecast } = stored;
   const labels = LABELS[forecast.units];
-  const { from, to } = forecastWindow(hike);
-  const hours = hoursBetween(forecast, from, to);
+  const hours = hourlyHours(forecast, hike);
   if (hours.length === 0) return forecastNotice(FORECAST_PENDING);
   const sun = sunLine(forecast, hike, timeZone);
   return [
@@ -262,7 +297,7 @@ export function threadForecast(
     `Times in ${timeZone}; temperature/feels-like (${labels.temperature}), chance and amount of rain or snow (${labels.precipitationName}), wind/gusts (${labels.wind}).`,
     hourlyTable(hours, timeZone, labels),
     ...(sun === null ? [] : [sun]),
-    ...notes(forecast, hours),
+    ...forecastNotes(forecast, hours),
     `-# Updated <t:${String(Math.floor(stored.updatedAt / 1000))}:f> · checked every hour · ${OPEN_METEO_CREDIT}`,
   ].join("\n");
 }

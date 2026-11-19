@@ -9,6 +9,7 @@ import type { WebViewSource } from "../guild/web-view";
 import type { PollKind, PollView } from "../polls/store";
 import { rankOptions } from "../polls/tally";
 import { DATE_POLL, decidedLocation } from "./date-vote";
+import { webMapPin, type WebMapPin } from "./hike-place-section";
 import { LOCATION_POLL } from "./location-vote";
 import { chronological, type PollWording } from "./poll-ui";
 
@@ -24,6 +25,8 @@ export interface WebVoteOption {
   dateValue: string | null;
   /** The user id of the member who proposed it. */
   proposedBy: string;
+  /** A location's map pin, as the poll message links it; null without one. */
+  place: WebMapPin | null;
   votes: number;
   viewerVoted: boolean;
 }
@@ -104,6 +107,7 @@ function openVote(poll: PollView, guildId: string): WebOpenVote {
       details: option.details,
       dateValue: option.dateValue,
       proposedBy: option.proposedBy,
+      place: webMapPin(option.place),
       votes: option.votes,
       viewerVoted: poll.viewerVotes.includes(option.id),
     })),
