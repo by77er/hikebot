@@ -8,7 +8,8 @@
  */
 
 /** What a signature is for. Add a member for each new use. */
-export type Purpose = "session" | "oauth-state" | "csrf" | "calendar";
+export type Purpose =
+  "session" | "oauth-state" | "csrf" | "calendar" | "notice";
 
 /** The shortest `SIGNING_SECRET` accepted, in characters. */
 export const MIN_SECRET_LENGTH = 32;

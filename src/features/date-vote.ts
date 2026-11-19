@@ -61,7 +61,12 @@ import {
   scheduleRefresh,
   type PollWording,
 } from "./poll-ui";
-import { dateVoteRefusal, defaultDates, startDateVote } from "./round-actions";
+import {
+  dateVoteRefusal,
+  defaultDates,
+  startDateVote,
+  type RoundContext,
+} from "./round-actions";
 import { planWeatherStep } from "./weather";
 
 export const DATE_IDS = {
@@ -205,22 +210,35 @@ function quoted(line: string): string {
 }
 
 /**
+ * The start modal's one field: its label, hint, placeholder and limit. The
+ * web page's Start date vote form shows the same.
+ */
+export const START_DATES_FIELD = {
+  label: "Candidate dates (one per line)",
+  hint: `${String(MIN_DATE_OPTIONS)} to ${String(MAX_OPTIONS)} dates, as YYYY-MM-DD or YYYY-MM-DD HH:MM (24-hour); the time defaults to ${DEFAULT_HIKE_TIME}.`,
+  placeholder: `2026-12-05 (starts at ${DEFAULT_HIKE_TIME}) or 2026-12-05 09:00`,
+  maxLength: MAX_DATES_INPUT,
+  required: true,
+};
+
+/**
  * The Start date vote modal, its field prefilled with `dates`, one per
  * line.
  */
 export function startModal(dates: readonly string[]): APIInteractionResponse {
+  const field = START_DATES_FIELD;
   return modal(DATE_IDS.start, "Start date vote", [
     label(
-      "Candidate dates (one per line)",
+      field.label,
       textInput({
         custom_id: DATE_IDS.dates,
         style: TextInputStyle.Paragraph,
-        required: true,
-        max_length: MAX_DATES_INPUT,
-        placeholder: `2026-12-05 (starts at ${DEFAULT_HIKE_TIME}) or 2026-12-05 09:00`,
+        required: field.required,
+        max_length: field.maxLength,
+        placeholder: field.placeholder,
         value: dates.join("\n"),
       }),
-      `${String(MIN_DATE_OPTIONS)} to ${String(MAX_OPTIONS)} dates, as YYYY-MM-DD or YYYY-MM-DD HH:MM (24-hour); the time defaults to ${DEFAULT_HIKE_TIME}.`,
+      field.hint,
     ),
   ]);
 }
@@ -238,30 +256,46 @@ const openStartModal: ComponentHandler = adminOnly((interaction, context) => {
 });
 
 /**
- * The start modal: opens the date poll with `startDateVote` on the typed
- * lines, moves the weekly schedule's next run to the vote's planned close
- * when the schedule is on, then in the follow-up posts the poll message
- * and redraws the panel. A refusal is answered ephemerally.
+ * Opens the date poll with `startDateVote` and, once it started, moves the
+ * weekly schedule's next run to the vote's planned close when the schedule
+ * is on. The start modal and the web page's Start date vote both call it.
+ * Does not check that the actor is an admin: the caller must.
+ */
+export async function startDateVoteOnSchedule(
+  context: RoundContext,
+  actor: string,
+  input: { dates?: readonly string[] },
+): Promise<ReturnType<typeof startDateVote>> {
+  const store = context.store ?? new PollStore(context.storage);
+  const outcome = startDateVote({ ...context, store }, actor, input);
+  if (outcome.ok) {
+    const settings = new GuildConfig(context.storage).get();
+    await scheduleCadence(context.storage, store, settings, store.now());
+  }
+  return outcome;
+}
+
+/**
+ * The start modal: opens the date poll with `startDateVoteOnSchedule` on
+ * the typed lines, then in the follow-up posts the poll message and
+ * redraws the panel. A refusal is answered ephemerally.
  */
 const submitStart: ModalHandler = adminOnly(
-  async (interaction: APIModalSubmitInteraction, context, settings) => {
-    const store = new PollStore(context.storage);
-    const outcome = startDateVote(
-      { ...roundContext(interaction, context), store },
-      actorOf(interaction),
-      {
-        dates: (textInputValue(interaction.data, DATE_IDS.dates) ?? "").split(
-          /\r?\n/,
-        ),
-      },
-    );
-    if (outcome.ok) {
-      await scheduleCadence(context.storage, store, settings, store.now());
-    }
-    return answerPanel(interaction, context, outcome, (message) => ({
-      response: ephemeralNotice(message),
-    }));
-  },
+  async (interaction: APIModalSubmitInteraction, context) =>
+    answerPanel(
+      interaction,
+      context,
+      await startDateVoteOnSchedule(
+        roundContext(interaction, context),
+        actorOf(interaction),
+        {
+          dates: (textInputValue(interaction.data, DATE_IDS.dates) ?? "").split(
+            /\r?\n/,
+          ),
+        },
+      ),
+      (message) => ({ response: ephemeralNotice(message) }),
+    ),
 );
 
 const FULL = `This vote already has ${String(MAX_OPTIONS)} dates, the most it can hold. Vote for one of them instead.`;

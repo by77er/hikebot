@@ -7,7 +7,7 @@
  * `WebViewSource`: the guild-wide ones here (`serverSection`,
  * `viewerSection`, `settingsSection`), the others beside the feature that
  * owns their data (`roundSection`, `plannedHikeSection`, `hikeLogSection`,
- * `calendarSection`).
+ * `calendarSection`, `adminSection`).
  * Nothing here writes to storage except the owner cache in the guild's
  * settings.
  */
@@ -31,6 +31,7 @@ import {
   type WebPlannedHike,
 } from "../features/planned-hike-section";
 import { roundSection, type WebRoundSection } from "../features/round-section";
+import { adminSection, type WebAdminSection } from "../features/web-admin";
 import { PollStore } from "../polls/store";
 import { GuildConfig, type GuildSettings } from "./config";
 import { decideAdmin, OWNER_CACHE_MS } from "./permissions";
@@ -70,6 +71,8 @@ export interface WebView {
   plannedHike: WebPlannedHike | null;
   log: WebHikeLogSection;
   calendar: WebCalendarSection;
+  /** The round controls an admin may use now; null for everyone else. */
+  admin: WebAdminSection | null;
 }
 
 export interface WebServerSection {
@@ -131,6 +134,7 @@ export async function buildWebView(source: WebViewSource): Promise<WebView> {
     plannedHike: plannedHikeSection(source),
     log: hikeLogSection(source),
     calendar: await calendarSection(source),
+    admin: adminSection(source),
   };
 }
 
@@ -177,15 +181,22 @@ export class WebViewCache {
   /**
    * The user's role ids, null when they are not a member (Discord answered
    * 404), or "error" when Discord could not be asked. Errors are not cached.
+   * With `ask`, Discord is asked even when the cache holds a fresh answer,
+   * and the answer replaces it.
    */
   async member(
     api: DiscordApi,
     guildId: string,
     userId: string,
     now: number,
+    { ask = false }: { ask?: boolean } = {},
   ): Promise<string[] | null | "error"> {
     const cached = this.members.get(userId);
-    if (cached !== undefined && fresh(cached.fetchedAt, now, MEMBER_CACHE_MS)) {
+    if (
+      !ask &&
+      cached !== undefined &&
+      fresh(cached.fetchedAt, now, MEMBER_CACHE_MS)
+    ) {
       return cached.roleIds;
     }
     let roleIds: string[] | null;

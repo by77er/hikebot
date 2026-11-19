@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readGuild } from "../../src/web/guild";
+import { actOnGuild, readGuild } from "../../src/web/guild";
 import { discordFetch, paths } from "../guild/web-view-helpers";
 
 const GUILD = "200000000000005001";
@@ -49,6 +49,52 @@ describe("readGuild", () => {
       ["1234", MEMBER],
     ] as const) {
       expect(await readGuild(env, guildId, userId)).toStrictEqual({
+        kind: "not_member",
+      });
+    }
+    expect(paths(fetch)).toEqual([]);
+  });
+});
+
+describe("actOnGuild", () => {
+  const ACTION_GUILD = "200000000000005002";
+  const start = {
+    action: "start-location-vote",
+    target: null,
+    text: "Ridge Trail",
+  } as const;
+
+  it("runs an admin's control in the guild object through the binding", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      discordFetch({
+        id: ACTION_GUILD,
+        name: "Trail Friends",
+        ownerId: OWNER,
+        members: { [OWNER]: [], [MEMBER]: [] },
+      }),
+    );
+    expect(await actOnGuild(env, ACTION_GUILD, MEMBER, start)).toStrictEqual({
+      kind: "forbidden",
+    });
+    expect(await actOnGuild(env, ACTION_GUILD, STRANGER, start)).toStrictEqual({
+      kind: "not_member",
+    });
+    // The owner gets as far as the round action, which wants setup first.
+    expect(await actOnGuild(env, ACTION_GUILD, OWNER, start)).toMatchObject({
+      kind: "refused",
+      code: "setup_incomplete",
+    });
+  });
+
+  it("answers not_member for ids that cannot be Discord's, asking no one", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    for (const [guildId, userId] of [
+      ["../admin", MEMBER],
+      [ACTION_GUILD, "me"],
+      ["", ""],
+      ["1234", MEMBER],
+    ] as const) {
+      expect(await actOnGuild(env, guildId, userId, start)).toStrictEqual({
         kind: "not_member",
       });
     }

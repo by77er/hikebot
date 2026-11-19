@@ -10,6 +10,22 @@ import type {
 } from "../../../../src/features/round-section";
 import type { WebHikeLogEntry } from "../../../../src/features/hike-log";
 import type { WebPlannedHike } from "../../../../src/features/planned-hike-section";
+import type {
+  WebAdminAction,
+  WebAdminSection,
+} from "../../../../src/features/web-admin";
+import {
+  DATE_POLL,
+  START_DATES_FIELD,
+} from "../../../../src/features/date-vote";
+import {
+  LOCATION_POLL,
+  START_LOCATIONS_FIELD,
+} from "../../../../src/features/location-vote";
+import {
+  CANCEL_QUESTION,
+  closeQuestion,
+} from "../../../../src/features/poll-ui";
 import type { WebView } from "../../../../src/guild/web-view";
 
 export const GUILD = "200000000000007001";
@@ -36,6 +52,7 @@ export function baseView(overrides: Partial<WebView> = {}): WebView {
     plannedHike: null,
     log: { entries: [], page: 1, pageSize: 5, pages: 1, total: 0 },
     calendar: { url: `https://hikebot.example/calendar/${GUILD}/sig.ics` },
+    admin: null,
     ...overrides,
   };
 }
@@ -145,3 +162,91 @@ export function logSection(
     total,
   };
 }
+
+/** A control of the admin section, as `webAdminActions` makes it. */
+export function adminAction(
+  kind: WebAdminAction["kind"],
+  overrides: Partial<WebAdminAction> = {},
+): WebAdminAction {
+  const base: Record<WebAdminAction["kind"], Omit<WebAdminAction, "kind">> = {
+    "start-location-vote": plain("Start location vote", null, "primary"),
+    "start-date-vote": plain("Start date vote", null, "primary"),
+    "close-vote": {
+      ...plain("Close location vote", 1, "primary"),
+      confirm: closeQuestion(LOCATION_POLL),
+    },
+    "withdraw-date-vote": {
+      ...plain("Withdraw date vote", 2, "quiet"),
+      confirm: {
+        question: "Withdraw the date vote?",
+        consequence: "The date vote is taken back.",
+      },
+    },
+    "cancel-round": {
+      ...plain("Cancel round", 1, "danger"),
+      confirm: CANCEL_QUESTION,
+    },
+    "post-vote-message": {
+      ...plain("Post vote message", 1, "secondary"),
+      note: "**The location vote is open**, but its message has not been posted. Click Post vote message to post it.",
+    },
+    "create-hike-thread": {
+      ...plain("Create hike thread", 1, "secondary"),
+      note: "**Hike thread:** not created. Could not create the hike thread in <#300000000000007003>: Discord answered: Missing Permissions (HTTP 403, code 50013).",
+    },
+    "create-hike-event": {
+      ...plain("Create hike event", 1, "secondary"),
+      note: "**Hike event:** not created. Click Create hike event to create it.",
+    },
+    "show-map-picture": {
+      ...plain("Show map picture", 1, "secondary"),
+      note: "**Map picture:** not shown. Click Show map picture to draw it.",
+    },
+    "post-hike-day": {
+      ...plain("Post hike-day announcement", 1, "secondary"),
+      note: "**Hike-day announcement:** not posted.",
+    },
+    announce: {
+      ...plain("Announce date vote", 2, "secondary"),
+      note: "**Date vote announcement:** not posted.",
+    },
+  };
+  return { kind, ...base[kind], ...overrides };
+}
+
+function plain(
+  label: string,
+  target: number | null,
+  style: WebAdminAction["style"],
+): Omit<WebAdminAction, "kind"> {
+  return { label, target, style, note: null, confirm: null };
+}
+
+/** An admin's section offering `actions`, with setup complete. */
+export function adminSection(
+  actions: WebAdminAction[],
+  overrides: Partial<WebAdminSection> = {},
+): WebAdminSection {
+  return {
+    actions,
+    setupMissing: null,
+    locationsField: { ...START_LOCATIONS_FIELD },
+    datesField: {
+      ...START_DATES_FIELD,
+      value: ["2030-06-15 11:00", "2030-06-16 11:00"],
+    },
+    ...overrides,
+  };
+}
+
+/** `view` as an admin sees it, offering `actions`. */
+export function asAdmin(view: WebView, actions: WebAdminAction[]): WebView {
+  return {
+    ...view,
+    viewer: { ...view.viewer, isAdmin: true },
+    admin: adminSection(actions),
+  };
+}
+
+/** The date vote's wording, for a close of the date vote. */
+export const DATE_CLOSE = closeQuestion(DATE_POLL);

@@ -81,6 +81,11 @@ async function main(): Promise<void> {
         `pages.json cancels sign-in for page ${page.name}, which has no user to sign in`,
       );
     }
+    if (page.submit && page.user === null) {
+      throw new Error(
+        `pages.json submits a form for page ${page.name}, which has no user to sign in`,
+      );
+    }
   }
   const outDir = join(ROOT, OUT_DIR);
   mkdirSync(outDir, { recursive: true });
@@ -102,10 +107,18 @@ async function main(): Promise<void> {
         const e2e = await run.start();
         const seed = SEEDS[page.seed];
         if (seed) await seed(e2e);
+        const submitted = page.submit ? await submit(e2e.url, page) : null;
         for (const viewport of Object.keys(VIEWPORTS) as ViewportName[]) {
           for (const scheme of SCHEMES) {
             const file = screenshotFile(page.name, viewport, scheme);
-            const png = await capture(browser, e2e.url, page, viewport, scheme);
+            const png = await capture(
+              browser,
+              e2e.url,
+              page,
+              viewport,
+              scheme,
+              submitted,
+            );
             writeFileSync(join(outDir, file), png);
             console.log(`wrote ${OUT_DIR}/${file}`);
           }
@@ -147,12 +160,13 @@ async function capture(
   entry: ScreenshotPage,
   viewport: ViewportName,
   scheme: (typeof SCHEMES)[number],
+  submitted: { path: string; cookie: string } | null,
 ): Promise<Uint8Array> {
   const context = await browser.createBrowserContext();
   try {
     const page = await context.newPage();
     const failures: string[] = [];
-    const { path, cookie } = await signedIn(base, entry);
+    const { path, cookie } = submitted ?? (await signedIn(base, entry));
     const url = new URL(path, base);
     // The session (or, for a cancelled sign-in, the state) cookie, sent the
     // way the browser would send the one the Worker set.
@@ -246,6 +260,34 @@ async function signedIn(
   if (back.status !== 303) {
     throw new Error(
       `${entry.name}: signing in ${entry.user} answered ${String(back.status)}`,
+    );
+  }
+  return { path: entry.path, cookie: client.cookieHeader() };
+}
+
+/**
+ * Signs the page's `user` in, opens `submit.from` and submits its form, as
+ * a browser would, and returns the path to open and the cookies to send:
+ * the session and whatever the submission set.
+ */
+async function submit(
+  base: URL,
+  entry: ScreenshotPage,
+): Promise<{ path: string; cookie: string }> {
+  const { submit: form, user } = entry;
+  if (!form || user === null) throw new Error(`${entry.name} submits nothing`);
+  const client = new PageClient(base);
+  const back = await client.signIn({ id: user });
+  if (back.status !== 303) {
+    throw new Error(
+      `${entry.name}: signing in ${user} answered ${String(back.status)}`,
+    );
+  }
+  const from = await client.get(form.from);
+  const answer = await client.submitForm(from, form.action, form.fields);
+  if (answer.status !== 303) {
+    throw new Error(
+      `${entry.name}: submitting ${form.action} answered ${String(answer.status)}`,
     );
   }
   return { path: entry.path, cookie: client.cookieHeader() };

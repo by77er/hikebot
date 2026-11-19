@@ -1,7 +1,10 @@
 /**
- * The one way a page reads a server: through its `GuildHike` object's
- * `webView` method, never its storage.
+ * The one way a page reads a server, and an admin's action changes it:
+ * through its `GuildHike` object's `webView` and `adminAction` methods,
+ * never its storage.
  */
+import type { WebAdminRequest } from "../features/web-admin";
+import type { WebActionResult } from "../guild/web-action";
 import type { WebViewResult } from "../guild/web-view";
 
 /** A Discord snowflake: 17 to 20 digits. */
@@ -24,4 +27,23 @@ export async function readGuild(
   }
   const stub = env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(guildId));
   return stub.webView({ guildId, userId, ...log });
+}
+
+/**
+ * Runs an admin's round control `request` on guild `guildId` as user
+ * `userId`, through the object's `adminAction`, which checks with Discord
+ * that the user is a member and an admin at this moment before it acts.
+ * Ids that cannot be Discord's are `not_member`, without waking an object.
+ */
+export async function actOnGuild(
+  env: Env,
+  guildId: string,
+  userId: string,
+  request: WebAdminRequest,
+): Promise<WebActionResult> {
+  if (!SNOWFLAKE.test(guildId) || !SNOWFLAKE.test(userId)) {
+    return { kind: "not_member" };
+  }
+  const stub = env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(guildId));
+  return stub.adminAction({ guildId, userId, ...request });
 }
