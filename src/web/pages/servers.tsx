@@ -1,44 +1,64 @@
 /**
  * The list of the signed-in user's servers that hikebot is in, at
- * `/servers`, as of sign-in. Each is a card linking to the server's page.
+ * `/servers`, as of sign-in: a tile per server linking to its page, then
+ * Refresh servers for a list that is out of date. With no servers, an
+ * empty state says why, and how a server admin adds hikebot.
  */
 import type { SessionGuild } from "../auth/session";
 import { Button } from "../components/button";
-import { Card } from "../components/card";
+import { EmptyState } from "../components/empty-state";
+import { ExternalLinkIcon } from "../components/icons";
+import { ServerTileList } from "../components/server-tile";
 import { Layout, type LayoutUser } from "../layout";
+
+const REFRESH_PATH = "/login?next=/servers";
 
 export function ServersPage({
   user,
   guilds,
+  inviteUrl,
 }: {
   user: LayoutUser;
   guilds: SessionGuild[];
+  /** The link that adds hikebot to a server (`inviteUrl` in invite.ts). */
+  inviteUrl: string;
 }) {
   return (
-    <Layout title="Your servers · hikebot" user={user} width="overview">
+    <Layout title="Choose a server · hikebot" user={user} width="overview">
       <div class="stack stack--loose">
         <div class="page-heading">
-          <h1>Your servers</h1>
+          <h1>Choose a server</h1>
           <p class="page-heading__lead">
-            The servers you share with hikebot, as of when you signed in.
+            {guilds.length === 0
+              ? "The servers you share with hikebot show here, once it is in one."
+              : "The servers you share with hikebot. Choose one to see its hikes."}
           </p>
         </div>
         {guilds.length === 0 ? (
-          <p>
-            hikebot is not in any of your servers. A server admin can add it to
-            their server.
-          </p>
+          <EmptyState
+            title="hikebot is not in any of your servers"
+            action={
+              <Button href={inviteUrl} iconAfter={ExternalLinkIcon}>
+                Add hikebot to a server
+              </Button>
+            }
+          >
+            A server admin can add it to their server; then refresh your servers
+            to see it here.
+          </EmptyState>
         ) : (
-          <ul class="grid list-reset">
-            {guilds.map((guild) => (
-              <li key={guild.id}>
-                <Card title={guild.name} href={`/g/${guild.id}`} />
-              </li>
-            ))}
-          </ul>
+          <ServerTileList servers={guilds} />
         )}
-        <div class="cluster">
-          <Button href="/login?next=/servers">Refresh servers</Button>
+        <div class="stack stack--tight">
+          <p class="u-muted">
+            This list is from when you signed in. Joined a server, or added
+            hikebot to one since? Refresh your servers.
+          </p>
+          <div class="cluster">
+            <Button variant="quiet" href={REFRESH_PATH}>
+              Refresh servers
+            </Button>
+          </div>
         </div>
       </div>
     </Layout>

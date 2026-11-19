@@ -12,14 +12,18 @@
 @import url("tokens.css") layer(tokens);
 @import url("layout.css") layer(layout);
 /* Components, one file each, in alphabetical order, one line each. */
+@import url("components/app-header.css") layer(components);
+@import url("components/avatar.css") layer(components);
 @import url("components/banner.css") layer(components);
 @import url("components/blaze.css") layer(components);
 @import url("components/button.css") layer(components);
 @import url("components/card.css") layer(components);
+@import url("components/discord-sign-in.css") layer(components);
 @import url("components/empty-state.css") layer(components);
 @import url("components/hike-card.css") layer(components);
 @import url("components/icon.css") layer(components);
 @import url("components/round-stepper.css") layer(components);
+@import url("components/server-tile.css") layer(components);
 @import url("components/status-pill.css") layer(components);
 @import url("components/tally-list.css") layer(components);
 @import url("components/tally-row.css") layer(components);

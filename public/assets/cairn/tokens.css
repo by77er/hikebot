@@ -24,6 +24,7 @@
     --color-primary-hover: #174a37;
     --color-primary-active: #103627;
     --color-on-primary: #ffffff;
+    --color-discord-mark: #ffffff;
     --color-accent: #d9541e;
     --color-link: #1d5e86;
     --color-info: #1d5e86;
@@ -90,6 +91,8 @@
     --target-min: 2.75rem;
     --icon-size: 1.25rem;
     --icon-size-small: 1rem;
+    --avatar-size: 3rem;
+    --avatar-size-small: 2rem;
     --blaze-width: 0.5rem;
     --blaze-height: 1.125rem;
     --width-date-leaf: 4rem;
@@ -100,6 +103,9 @@
     --gutter: var(--space-4);
     --height-screen: 100dvh;
     --width-card-min: 13.5rem;
+    --width-tile-min: 18rem;
+    --width-header-name: 8rem;
+    --width-menu: 16rem;
 
     /* Widths of the style guide's grids. */
     --width-index: 10rem;
@@ -135,6 +141,7 @@
       --color-primary-hover: #97d3b5;
       --color-primary-active: #b1e0c8;
       --color-on-primary: #0d1a13;
+      --color-discord-mark: #000000;
       --color-accent: #f07f4a;
       --color-link: #8ec5ec;
       --color-info: #8ec5ec;

@@ -6,6 +6,7 @@
  */
 import { systemNow } from "../../clock";
 import { defaultRandom } from "../../polls/tally";
+import { inviteUrl } from "../invite";
 import { ServersPage } from "../pages/servers";
 import { seeOther } from "../redirect";
 import { htmlResponse } from "../response";
@@ -54,6 +55,7 @@ export function addSignInRoutes(
         <ServersPage
           user={await layoutUser(env, session, now)}
           guilds={session.guilds}
+          inviteUrl={inviteUrl(env)}
         />,
       );
     });

@@ -329,6 +329,17 @@
   line-height: var(--line-height-small);
 }
 
+/* A frame around a whole band, such as the app header, shown as an example. */
+.styleguide-frame {
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+/* Room under the header for its open menu. */
+.styleguide-frame--menu {
+  padding-block-end: calc(var(--space-8) * 2);
+}
+
 .styleguide-icons {
   display: grid;
   grid-template-columns: repeat(
@@ -385,6 +396,9 @@
 }
 .styleguide-sample[data-bg="color-on-primary"] {
   background: var(--color-on-primary);
+}
+.styleguide-sample[data-bg="color-discord-mark"] {
+  background: var(--color-discord-mark);
 }
 .styleguide-sample[data-bg="color-accent"] {
   background: var(--color-accent);
@@ -467,6 +481,9 @@
 }
 .styleguide-sample[data-fg="color-on-primary"] {
   color: var(--color-on-primary);
+}
+.styleguide-sample[data-fg="color-discord-mark"] {
+  color: var(--color-discord-mark);
 }
 .styleguide-sample[data-fg="color-accent"] {
   color: var(--color-accent);

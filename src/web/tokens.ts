@@ -171,6 +171,14 @@ export const PAIRINGS: Pairing[] = [
       use: "Primary button label",
     }),
   ),
+  ...["color-primary", "color-primary-hover", "color-primary-active"].map(
+    (background): Pairing => ({
+      foreground: "color-discord-mark",
+      background,
+      kind: "non-text",
+      use: "Discord's mark on the Sign in with Discord button",
+    }),
+  ),
   ...["color-danger", "color-danger-hover", "color-danger-active"].map(
     (background): Pairing => ({
       foreground: "color-on-danger",

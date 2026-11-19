@@ -9,7 +9,8 @@
  * page or a file it loads fails.
  *
  * Every run on the same commit writes the same bytes: each page gets a fresh
- * Worker with fixed seed data, the browser's clock is frozen, its time zone
+ * Worker with fixed seed data, Discord's CDN is answered with fixed pictures
+ * (`discord-cdn.ts`), the browser's clock is frozen, its time zone
  * and language are fixed, animations and transitions are off, the device
  * scale factor is 1, fonts come from the browser package, never from the
  * machine, and the shot waits for the page's fonts and CSS images (such as
@@ -34,6 +35,7 @@ import { fileURLToPath } from "node:url";
 import type { Browser, CDPSession } from "puppeteer-core";
 import { PageClient } from "../e2e/harness/web";
 import { launchBrowser } from "./browser";
+import { cdnReply, isMissingPicture } from "./discord-cdn";
 import {
   SCHEMES,
   screenshotFile,
@@ -155,13 +157,21 @@ async function capture(
     // The session (or, for a cancelled sign-in, the state) cookie, sent the
     // way the browser would send the one the Worker set.
     if (cookie !== "") await page.setExtraHTTPHeaders({ Cookie: cookie });
+    // Avatars and server icons come from the stand-in for Discord's CDN.
+    await page.setRequestInterception(true);
+    page.on("request", (request) => {
+      const reply = cdnReply(request.url());
+      void (reply ? request.respond(reply) : request.continue());
+    });
     page.on("requestfailed", (request) => {
       failures.push(
         `${request.url()} failed: ${request.failure()?.errorText ?? "unknown error"}`,
       );
     });
     page.on("response", (response) => {
-      if (response.url() === url.href) return;
+      if (response.url() === url.href || isMissingPicture(response.url())) {
+        return;
+      }
       if (response.status() >= 400) {
         failures.push(
           `${response.url()} answered ${String(response.status())}`,
@@ -170,7 +180,8 @@ async function capture(
     });
     page.on("console", (message) => {
       if (message.type() !== "error") return;
-      if (message.location().url === url.href) return;
+      const from = message.location().url ?? "";
+      if (from === url.href || isMissingPicture(from)) return;
       failures.push(`console error: ${message.text()}`);
     });
     page.on("pageerror", (error) => {

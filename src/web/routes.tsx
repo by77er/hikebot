@@ -16,6 +16,7 @@ import { versionedAsset } from "./assets";
 import { addSignInRoutes } from "./auth/routes";
 import { readSession } from "./auth/session";
 import { calendarRoute } from "./calendar";
+import { inviteUrl } from "./invite";
 import { MethodNotAllowedPage, NotFoundPage } from "./pages/errors";
 import { HomePage } from "./pages/home";
 import {
@@ -40,7 +41,7 @@ export const webRouter = new WebRouter({
   .get("/", async (request, env) =>
     (await readSession(request, env, systemNow()))
       ? seeOther("/servers")
-      : htmlResponse(<HomePage />),
+      : htmlResponse(<HomePage inviteUrl={inviteUrl(env)} />),
   )
   .get("/styleguide", async (request, env) => {
     const tokensCss = await env.ASSETS.fetch(

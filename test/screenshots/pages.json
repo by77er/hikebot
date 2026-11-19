@@ -36,6 +36,13 @@
       "user": "400000000000000001"
     },
     {
+      "name": "servers-one",
+      "path": "/servers",
+      "status": 200,
+      "seed": "member-one-server",
+      "user": "400000000000000001"
+    },
+    {
       "name": "sign-in-cancelled",
       "path": "/auth/callback",
       "status": 200,
@@ -58,6 +65,27 @@
       "user": null
     },
     {
+      "name": "styleguide-app-header",
+      "path": "/styleguide/app-header",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-avatar",
+      "path": "/styleguide/avatar",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-discord-sign-in",
+      "path": "/styleguide/discord-sign-in",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
       "name": "styleguide-empty-state",
       "path": "/styleguide/empty-state",
       "status": 200,
@@ -74,6 +102,13 @@
     {
       "name": "styleguide-round-stepper",
       "path": "/styleguide/round-stepper",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-server-tile",
+      "path": "/styleguide/server-tile",
       "status": 200,
       "seed": "empty",
       "user": null

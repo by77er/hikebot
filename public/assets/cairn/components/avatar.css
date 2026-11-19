@@ -1,0 +1,57 @@
+/*
+ * Avatar: a user's or server's picture over its initials. The initials
+ * fill the frame on a sandstone background in pine; the picture, when it
+ * loads, covers them. A picture that fails to load gets a ::after (browsers
+ * draw one only on a broken image) that covers the broken-image mark with
+ * the same initials. Round for a person, a rounded square for a server.
+ */
+
+.avatar {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--avatar-size);
+  height: var(--avatar-size);
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--color-surface-subtle);
+  color: var(--color-primary);
+  font-size: var(--font-size-lead);
+  line-height: 1;
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
+  user-select: none;
+}
+
+.avatar--small {
+  width: var(--avatar-size-small);
+  height: var(--avatar-size-small);
+  font-size: var(--font-size-small);
+}
+
+.avatar--square {
+  border-radius: var(--radius-card);
+}
+
+.avatar--small.avatar--square {
+  border-radius: var(--radius-control);
+}
+
+.avatar__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Reaches over the edge browsers draw around a broken image. */
+.avatar__image::after {
+  content: attr(data-initials);
+  position: absolute;
+  inset: calc(-1 * var(--border-width-strong));
+  display: grid;
+  place-items: center;
+  background: var(--color-surface-subtle);
+}

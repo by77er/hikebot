@@ -58,8 +58,7 @@ and which headers they carry.
 "Sign-in and sessions" in `docs/design.md` says what the session holds. The
 example is `/trails` again, now for signed-in members only.
 
-1. Take the signed-in user as a prop and pass it to `Layout`, which then
-   shows their name and the Sign out button:
+1. Take the signed-in user as a prop and pass it to `Layout` as `user`:
 
    ```tsx
    /** The list of trails at `/trails`, for signed-in members. */
@@ -657,7 +656,24 @@ Here the component is `pill`; use your component's name.
    `test/screenshots/seeds.ts`. A seed gets the running Worker and fake
    Discord API and sets the state up as members would, as "Play a hike
    round in an end-to-end scenario" in `test/AGENTS.md` says, with fixed
-   names and dates written years ahead, never from today's date.
+   names and dates written years ahead, never from today's date. To sign
+   `MEMBER_ID` in with a given server list, call `member` there with the
+   servers, which of them the bot is in, and the user's display name and
+   avatar. Give an avatar or server icon the hash `picture(n)` for a fixed
+   picture, or `MISSING_PICTURE` for one that fails to load, both from
+   `test/screenshots/discord-cdn.ts`, which answers for Discord's CDN while
+   the screenshots are taken; leave it out for none:
+
+   ```ts
+   "member-one-server": (e2e) =>
+     member(
+       e2e,
+       [{ id: guildId(1), name: "Ridge Walkers", icon: picture(2) }],
+       () => true,
+       { globalName: "Ana Hiker", avatar: MISSING_PICTURE },
+     ),
+   ```
+
 3. A `GET` route that is not a page (a file, a redirect, a plain-text
    answer) goes under `"excluded"` with its `route` as registered and the
    `reason` it has no screenshot.

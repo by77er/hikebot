@@ -58,9 +58,12 @@ describe("signing in", () => {
 
     const servers = await client.get("/servers");
     expect(servers.status).toBe(200);
-    expect(servers.body).toContain("<title>Your servers · hikebot</title>");
+    expect(servers.body).toContain("<title>Choose a server · hikebot</title>");
     expect(servers.body).toContain(
-      `<a class="card__link" href="/g/${ana.withBot.id}">${ana.withBot.name}</a>`,
+      `<a class="server-tile" href="/g/${ana.withBot.id}">`,
+    );
+    expect(servers.body).toContain(
+      `<span class="server-tile__name">${ana.withBot.name}</span>`,
     );
     expect(servers.body).not.toContain(ana.withoutBot.name);
     expect(servers.body).toContain("Signed in as Hiker 1.");
@@ -68,7 +71,7 @@ describe("signing in", () => {
       '<button class="button button--quiet" type="submit"><span>Sign out</span></button>',
     );
     expect(servers.body).toContain(
-      '<a class="button button--secondary" href="/login?next=/servers"><span>Refresh servers</span></a>',
+      '<a class="button button--quiet" href="/login?next=/servers"><span>Refresh servers</span></a>',
     );
 
     const home = await client.get("/");
@@ -102,9 +105,8 @@ describe("signing in", () => {
     const client = new PageClient(e2e.url);
     await client.signIn({ id });
     const servers = await client.get("/servers");
-    expect(servers.body).toContain(
-      "hikebot is not in any of your servers. A server admin can add it to their server.",
-    );
+    expect(servers.body).toContain("hikebot is not in any of your servers");
+    expect(servers.body).toContain("A server admin can add it to their server");
     expect(servers.body).toContain("Signed in as loner.");
   });
 
@@ -119,6 +121,13 @@ describe("signing in", () => {
     expect(cancelled.body).toContain(
       '<a class="button button--primary" href="/login"><span>Try again</span></a>',
     );
+    expect(cancelled.body).toContain(
+      "You did not sign in, so Discord told hikebot nothing about you.",
+    );
+    expect(cancelled.body).toContain(
+      '<a class="button button--quiet" href="/">',
+    );
+    expect(cancelled.body).toContain("<span>Go to the home page</span>");
     expect(client.cookies.size).toBe(0);
     expect((await client.get("/servers")).status).toBe(303);
   });
