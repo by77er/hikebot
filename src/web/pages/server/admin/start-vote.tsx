@@ -67,6 +67,12 @@ export function StartVotePage({
       user={user}
     >
       <div class="stack stack--section">
+        {error !== undefined && (
+          <ErrorSummary
+            title={page.notStarted}
+            errors={[{ field: FIELD_ID, message: error }]}
+          />
+        )}
         <BackLink href={`/g/${view.server.id}`}>
           Back to {view.server.name}
         </BackLink>
@@ -79,12 +85,6 @@ export function StartVotePage({
               : `The vote opens in ${where}${location === undefined ? "" : ` for ${location}`}. Times are in ${view.settings.timeZone}.`}
           </p>
         </div>
-        {error !== undefined && (
-          <ErrorSummary
-            title={page.notStarted}
-            errors={[{ field: FIELD_ID, message: error }]}
-          />
-        )}
         <form
           class="stack stack--loose"
           method="post"

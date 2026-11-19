@@ -75,7 +75,7 @@ export interface WebAdminAction {
 export const WITHDRAW_QUESTION: ConfirmQuestion = {
   question: "Withdraw the date vote?",
   consequence:
-    "The date vote is taken back with its dates and votes, and its message shows it as cancelled. The location stays decided, so you can start the date vote again.",
+    "The date vote is taken back with its dates and votes, and its message shows it as cancelled. The location stays decided, so you can start a new date vote.",
 };
 
 /** A start form's field, as the panel's start modal has it. */

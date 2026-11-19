@@ -78,13 +78,13 @@ export function AdminControls({
     <Card
       title="Admin"
       footer={
-        last.length > 0 && (
+        last.length > 0 ? (
           <div class="cluster">
             {last.map((action) => (
               <ActionButton view={view} action={action} csrf={csrf} />
             ))}
           </div>
-        )
+        ) : undefined
       }
     >
       <div class="stack">

@@ -286,8 +286,17 @@ export const SEEDS: Record<string, Seed> = {
   ),
   "server-location-decided": server(locationDecided),
   "server-location-decided-admin": server(locationDecided, "admin"),
+  "server-location-vote-admin": server(locationVote(), "admin"),
   "server-date-vote": server(dateVote),
+  "server-date-vote-admin": server(dateVote, "admin"),
+  /** The date vote open for its owner, and Discord refusing the forum. */
+  "server-date-vote-forum-refused-admin": (e2e) =>
+    server(async (play, g) => {
+      await dateVote(play, g);
+      e2e.discord.failChannel(g.channels.forum, "missing-permissions");
+    }, "admin")(e2e),
   "server-hike-planned": server(hikePlanned),
+  "server-hike-planned-admin": server(hikePlanned, "admin"),
   "server-hike-log": server(hikeLog),
   "server-not-member": server(locationVote(), "stranger"),
 };

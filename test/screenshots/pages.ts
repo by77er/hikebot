@@ -25,6 +25,13 @@ export interface ScreenshotPage {
    * `/auth/callback`, and the query is the one Discord sends back.
    */
   cancel?: boolean;
+  /**
+   * With a `user`: once, before the page's screenshots, open `from` and
+   * submit its form that posts to `action`, with `fields` over the form's
+   * own, as the browser would; the page is then opened with the cookies
+   * that leaves, such as the notice of an admin's action.
+   */
+  submit?: { from: string; action: string; fields?: Record<string, string> };
 }
 
 export interface ExcludedRoute {

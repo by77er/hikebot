@@ -3,6 +3,8 @@ import { ServerPage } from "../../../../src/web/pages/server/page";
 import { htmlResponse } from "../../../../src/web/response";
 import { outline } from "../../helpers";
 import {
+  adminAction,
+  asAdmin,
   baseView,
   logSection,
   MARKUP,
@@ -19,6 +21,46 @@ async function page(view: Parameters<typeof ServerPage>[0]["view"]) {
   ).text();
   return { html, page: await outline(html) };
 }
+
+/** The first words of each section of the page, in order. */
+async function sections(html: string): Promise<string[]> {
+  const words: string[] = [];
+  let depth = 0;
+  await new HTMLRewriter()
+    .on("div.stack--section > *", {
+      element(element) {
+        words.push("");
+        depth += 1;
+        element.onEndTag(() => {
+          depth -= 1;
+        });
+      },
+    })
+    .onDocument({
+      text(chunk) {
+        const last = words.pop();
+        if (last !== undefined) {
+          words.push(depth > 0 ? last + chunk.text : last);
+        }
+      },
+    })
+    .transform(new Response(html))
+    .text();
+  return words.map((text) => {
+    const trimmed = text.replace(/\s+/g, " ").trim();
+    return SECTION_STARTS.find((start) => trimmed.startsWith(start)) ?? trimmed;
+  });
+}
+
+const SECTION_STARTS = [
+  "Switch server",
+  "Hike planned.",
+  "Location vote",
+  "Admin",
+  "Planned hike",
+  "Hike log",
+  "Calendar",
+];
 
 describe("ServerPage", () => {
   it("puts its sections in order: heading, current step, planned hike, log, calendar", async () => {
@@ -78,5 +120,63 @@ describe("ServerPage", () => {
       "&lt;script>alert(1)&lt;/script>&lt;b>Ridge&lt;/b>",
     );
     expect(shown.elements).not.toContain("b");
+  });
+
+  it("puts an admin's notice right after the heading and the Admin card after the current step", async () => {
+    const thread = adminAction("create-hike-thread");
+    const view = asAdmin(
+      baseView({
+        round: round(
+          "location_vote_open",
+          openVote("location", [{ label: "Lake", votes: 1 }]),
+        ),
+        plannedHike: plannedHike(),
+        log: logSection(6, 1, 5),
+      }),
+      [thread, adminAction("close-vote"), adminAction("cancel-round")],
+    );
+    const html = await htmlResponse(
+      <ServerPage
+        user={USER}
+        view={view}
+        notice={{ kind: "done", lines: ["Hike planned."], retries: [thread] }}
+      />,
+    ).text();
+    expect(await sections(html)).toEqual([
+      "Switch server",
+      expect.stringMatching(/^Done, but a step failed\./),
+      "Location vote",
+      "Admin",
+      "Planned hike",
+      "Hike log",
+      "Calendar",
+    ]);
+    expect((await outline(html)).scripts).toBe(0);
+  });
+
+  it("shows no Admin card to a member", async () => {
+    const { html } = await page(baseView({ plannedHike: plannedHike() }));
+    expect(html).not.toContain(">Admin</h2>");
+    expect(html).not.toContain("/admin/");
+  });
+
+  it("gives the Admin card exactly one primary button", async () => {
+    const view = asAdmin(
+      baseView({
+        round: round(
+          "location_vote_open",
+          openVote("location", [{ label: "Lake", votes: 1 }]),
+        ),
+      }),
+      [adminAction("close-vote"), adminAction("cancel-round")],
+    );
+    const { html } = await page(view);
+    const card = html.slice(
+      html.lastIndexOf("<article", html.indexOf(">Admin</h2>")),
+    );
+    const end = card.indexOf("</article>");
+    expect([...card.slice(0, end).matchAll(/button--primary/g)]).toHaveLength(
+      1,
+    );
   });
 });

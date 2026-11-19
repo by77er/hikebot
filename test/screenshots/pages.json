@@ -1,6 +1,55 @@
 {
   "pages": [
     {
+      "name": "admin-cancel-round",
+      "path": "/g/220000000000000101/admin/cancel-round?target=1",
+      "status": 200,
+      "seed": "server-location-vote-admin",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "admin-close-date-vote",
+      "path": "/g/220000000000000101/admin/close-vote?target=2",
+      "status": 200,
+      "seed": "server-date-vote-admin",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "admin-close-location-vote",
+      "path": "/g/220000000000000101/admin/close-vote?target=1",
+      "status": 200,
+      "seed": "server-location-vote-admin",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "admin-only",
+      "path": "/g/220000000000000101/admin/start-location-vote",
+      "status": 403,
+      "seed": "server-location-vote",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "admin-start-date-vote",
+      "path": "/g/220000000000000101/admin/start-date-vote",
+      "status": 200,
+      "seed": "server-location-decided-admin",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "admin-start-location-vote",
+      "path": "/g/220000000000000101/admin/start-location-vote",
+      "status": 200,
+      "seed": "server-empty-admin",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "admin-withdraw-date-vote",
+      "path": "/g/220000000000000101/admin/withdraw-date-vote?target=2",
+      "status": 200,
+      "seed": "server-date-vote-admin",
+      "user": "400000000000000001"
+    },
+    {
       "name": "home",
       "path": "/",
       "status": 200,
@@ -19,6 +68,13 @@
       "path": "/g/220000000000000101",
       "status": 200,
       "seed": "server-date-vote",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-date-vote-admin",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-date-vote-admin",
       "user": "400000000000000001"
     },
     {
@@ -43,6 +99,13 @@
       "user": "400000000000000001"
     },
     {
+      "name": "server-hike-planned-admin",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-hike-planned-admin",
+      "user": "400000000000000001"
+    },
+    {
       "name": "server-location-decided",
       "path": "/g/220000000000000101",
       "status": 200,
@@ -61,6 +124,13 @@
       "path": "/g/220000000000000101",
       "status": 200,
       "seed": "server-location-vote",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-location-vote-admin",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-location-vote-admin",
       "user": "400000000000000001"
     },
     {
@@ -90,6 +160,17 @@
       "status": 403,
       "seed": "server-not-member",
       "user": "400000000000000001"
+    },
+    {
+      "name": "server-result-failed-step-admin",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-date-vote-forum-refused-admin",
+      "user": "400000000000000001",
+      "submit": {
+        "from": "/g/220000000000000101/admin/close-vote?target=2",
+        "action": "/g/220000000000000101/admin/close-vote"
+      }
     },
     {
       "name": "server-with-log",

@@ -16,8 +16,12 @@ export const NOTICE_COOKIE = "__Host-hikebot_notice";
 export const NOTICE_TTL_MS = 60_000;
 /** The longest a line may be in the cookie; longer ones end in `…`. */
 export const MAX_NOTICE_LINE = 400;
-/** The most the sealed notice's JSON may take, so the cookie stays small. */
+/** The most bytes the notice's JSON may take, so the cookie stays small. */
 const MAX_NOTICE_JSON = 2400;
+
+function size(notice: AdminNotice): number {
+  return new TextEncoder().encode(JSON.stringify(notice)).length;
+}
 
 export interface AdminNotice {
   /**
@@ -56,14 +60,15 @@ export function fitNotice(notice: AdminNotice): AdminNotice {
       note: retry.note === null ? null : shorten(retry.note),
     })),
   };
-  while (
-    JSON.stringify(fitted).length > MAX_NOTICE_JSON &&
-    fitted.lines.length > 1
-  ) {
+  while (size(fitted) > MAX_NOTICE_JSON && fitted.lines.length > 1) {
     fitted.lines.pop();
   }
-  if (JSON.stringify(fitted).length > MAX_NOTICE_JSON) {
-    fitted.retries = fitted.retries.map((retry) => ({ ...retry, note: null }));
+  if (size(fitted) > MAX_NOTICE_JSON) {
+    fitted.retries = fitted.retries.map((retry) => ({
+      ...retry,
+      note: null,
+      confirm: null,
+    }));
   }
   return fitted;
 }

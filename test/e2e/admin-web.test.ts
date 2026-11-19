@@ -172,7 +172,7 @@ it("lets an admin play a whole round from the web while a member votes in Discor
   expect(textOf(page.body)).toContain(
     "The date vote is closed: Sat, 15 Jun 2030 · 09:00 won with 1 vote.",
   );
-  expect(textOf(page.body)).not.toContain("A step failed.");
+  expect(textOf(page.body)).not.toContain("a step failed");
   expect(buttonLabels(play.shown(when))).toEqual([]);
 
   expect(e2e.discord.threads(g.channels.forum)).toHaveLength(1);
@@ -288,7 +288,7 @@ it("creates the hike thread again from the page after Discord refused it once", 
   );
   e2e.discord.clearChannelFailure(g.channels.forum);
   const text = textOf(closed.body);
-  expect(text).toContain("A step failed. Try it again:");
+  expect(text).toContain("Done, but a step failed.");
   expect(text).toContain(
     "Hike thread: not created. Could not create the hike thread in",
   );
@@ -300,6 +300,6 @@ it("creates the hike thread again from the page after Discord refused it once", 
     `/g/${g.guildId}/admin/create-hike-thread`,
   );
   expect(textOf(retried.body)).toContain("The hike thread is open:");
-  expect(textOf(retried.body)).not.toContain("A step failed.");
+  expect(textOf(retried.body)).not.toContain("a step failed");
   expect(e2e.discord.threads(g.channels.forum)).toHaveLength(1);
 });
