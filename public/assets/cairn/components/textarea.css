@@ -1,0 +1,6 @@
+/* Textarea: the `.input` box over several lines; it grows taller, never wider. */
+
+.textarea {
+  min-height: calc(var(--line-height-body) * 3 + 2 * var(--space-2));
+  resize: vertical;
+}

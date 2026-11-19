@@ -77,7 +77,13 @@ The Worker (`src/index.ts`) handles the rest:
     `GET /styleguide/<component>` is the page of its own of a component
     too large for that page (the HTML 404 page for any other name), and
     `GET /styleguide/map` the Cairn map: the committed map sample pictures
-    and each colour role of the map style as a swatch.
+    and each colour role of the map style as a swatch. A component's page
+    reads its own query string, which its example forms send by `GET`
+    (the error summary's "Propose a location" form comes back with its
+    errors and what was typed). `POST /styleguide/<component>` takes the
+    example forms that post, such as a confirmation page's: it changes
+    nothing, so it needs no session or CSRF token, and answers `303` to
+    the page with `?posted=1`, where the page says the form was posted.
   - `GET /assets/*`: the file from `public/` through the `ASSETS` binding,
     for a request that reaches the Worker.
   - `GET /assets/v/<version>/*`: the same files under the deployed
@@ -334,7 +340,9 @@ browser says the request came from this site: `Sec-Fetch-Site:
 same-origin` when sent, and an `Origin` equal to the request's origin when
 sent; a request with neither is refused. `POST /logout` is the first such
 form: the **Sign out** button in the user menu of the header `Layout`
-shows. It clears the cookie and redirects to `/`.
+shows. It clears the cookie and redirects to `/`. The style guide's
+example forms post to `POST /styleguide/<component>`, which changes
+nothing and so takes no session and no CSRF token.
 
 The helpers later pages and forms use, each documented in its module:
 `readSession` and `requireSession` (which redirects to

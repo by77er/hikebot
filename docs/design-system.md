@@ -4,7 +4,9 @@ A cairn is the stack of stones that marks a trail: small, built from simple
 parts, there to show the way. Cairn is the design system of hikebot's web
 pages: the principles, the tokens, the stylesheet, the page shell and the
 components every page is built from. `/styleguide` shows all of it, drawn
-with the real stylesheet; this document says why it is the way it is.
+with the real stylesheet (a component whose examples would make that page
+too tall to screenshot has a page of its own at `/styleguide/<id>`, linked
+from its index); this document says why it is the way it is.
 
 How to build with it is in `src/web/AGENTS.md`: "Build a page from the
 design system", "Add a token" and "Add a component to the design system".
@@ -142,6 +144,8 @@ its ratio. "Surfaces" are `bg`, `surface`, `surface-raised` and
 | Each tone (`info`, `success`, `warning`, `danger`) on its `*-subtle` background                          | 3:1 (1.4.11, icon)      |
 | `border-strong` on every surface (control boundary)                                                      | 3:1 (1.4.11)            |
 | `primary` and `danger` fills on `bg` and `surface` (button boundary)                                     | 3:1 (1.4.11)            |
+| `primary` on `bg` and `surface` (a checked box, a chosen radio)                                          | 3:1 (1.4.11)            |
+| `danger` on `bg` and `surface` (the boundary and side bar of a field in error)                           | 3:1 (1.4.11)            |
 | `focus` on every surface (focus ring)                                                                    | 3:1 (1.4.11, 2.4.13)    |
 | `accent` on every surface (the blaze)                                                                    | 3:1 (1.4.11)            |
 | `info`, `success`, `danger` as text on their `*-subtle` background (status pills)                        | 4.5:1                   |
@@ -151,6 +155,14 @@ Every text pairing in fact clears 4.5:1, headings included; the 3:1
 large-text minimum is the floor, not the target. Disabled controls are
 exempt in WCAG but still use `text-muted` on `surface-subtle` (5:1 or more)
 so they stay readable.
+
+Form controls use only these pairings, on `bg` and `surface`: a control's
+boundary is `border-strong` (3:1), its label and typed text `text`, its hint
+and limit `text-muted` and its error `danger` (4.5:1 as text), a field in
+error has a `danger` boundary and side bar (3:1), and a checked box is a
+`primary` fill with an `on-primary` tick. The contrast test checks each of
+them in both schemes ("cover the form controls" in
+`test/web/contrast.test.ts`).
 
 ### Typography
 
@@ -296,6 +308,16 @@ only; nothing moves on its own.
 | `--width-tile-min`                | 288px                          | The narrowest a server tile gets in its grid before it wraps.                                                                    |
 | `--width-header-name`             | 128px                          | The most of the user's name the header shows before "…".                                                                         |
 | `--width-menu`                    | 256px                          | The user menu's panel (narrower on a narrow screen).                                                                             |
+| `--choice-size`                   | 24px                           | The box of a checkbox and the circle of a radio.                                                                                 |
+| `--width-input-short`             | 200px                          | A text field for a short value, such as a date (`--short`).                                                                      |
+
+`--choice-size` is 24px rather than the 20px of an icon: a box drawn at
+the body's line height is easy to see in sunlight and to aim at, and it
+still sits inside the 44px row that is the real target (the label covers
+the box's column). `--width-input-short` is 200px so that the longest
+value the bot takes in a short field, a date with a time
+(`2026-12-05 09:00`, 16 characters), fits with the padding, and the field's
+width says how much is expected; anything longer gets the full width.
 
 The one breakpoint is **48rem (768px)**, written out in media queries
 because they cannot read custom properties. Below it there is a single
@@ -418,6 +440,19 @@ its styles in `public/assets/cairn/components/`, its unit test in
   named by that label. The style guide's sample pictures are
   `public/assets/cairn/samples/picture.svg` and `broken.svg` (deliberately
   not a valid picture), made in this repository.
+- **Back link** (`back-link.tsx`, `/styleguide/back-link`): the way up
+  to the page this one belongs to, such as from a setting to the
+  settings.
+  - _Anatomy:_ a left arrow (decorative) and the words, in the link colour
+    and underlined, a 44px target, first in `main` above the page heading.
+  - _Variants:_ none.
+  - _States:_ default, hover (a thicker underline), focus-visible, active
+    (the text colour). A long destination wraps beside the arrow.
+  - _Name:_ its words, which say where it goes ("Back to settings").
+  - _Do:_ name the destination; link to a fixed path, so it works however
+    the member arrived.
+  - _Don't:_ write "Back" alone, rely on the browser's history, or use it
+    at the foot of a form (the form actions bar has the way back there).
 - **Banner** (`banner.tsx`): a message about the page or what just
   happened, in four tones: `info` and `success` (`role="status"`),
   `warning` and `danger` (`role="alert"`). The tone is said by the icon's
@@ -436,6 +471,80 @@ its styles in `public/assets/cairn/components/`, its unit test in
   heading (level 2 to 4). With `href` the heading's link covers the card,
   which gets hover, active and focus states; links and buttons in its
   footer stay separately clickable.
+- **Checkbox** (`checkbox.tsx`, `/styleguide/checkbox`): a choice a member
+  turns on or off.
+  - _Anatomy:_ a 24px box (`--choice-size`) with a `border-strong`
+    boundary, the label beside it and an optional hint under the label. The
+    label covers the box's column too, so the whole row, at least 44px tall,
+    is the target.
+  - _Variants:_ on its own (with its own error, shown above it with the
+    danger bar) or in a choice group (marked invalid by the group).
+  - _States:_ off, on (a `primary` fill and an `on-primary` tick, drawn
+    with borders so forced-colour modes keep it), hover, focus-visible, in
+    error (a `danger` boundary), disabled off and on (sandstone, muted).
+  - _Name:_ its label; the hint and error are tied with `aria-describedby`.
+  - _Do:_ use it for an independent yes or no ("Announce the location
+    vote"), and for any number of choices from a list, in a choice group.
+  - _Don't:_ use one for a choice between two things (use radios), or
+    submit the form when it is clicked.
+- **Choice group** (`choice-group.tsx`, `/styleguide/choice-group`): the
+  checkboxes or radios that answer one question.
+  - _Anatomy:_ a `fieldset` without a border; its `legend` asks the question
+    and looks like a label, then the group's hint, its error, and one row per
+    choice. The fieldset's `aria-describedby` names the hint and error; the
+    first choice takes the group's `id`, so the error summary's link lands
+    on it, and the group's own hint and error are named after `<id>-group`.
+  - _Variants:_ `radio` (pick one: two to five short choices that should
+    all be seen, such as PT, MT, CT, ET or UTC) and `checkbox` (pick any
+    number, such as the candidate dates of a date vote).
+  - _States:_ default, chosen (kept from `value` when the form comes back),
+    required ("(required)" in the legend, spoken, and `required` on each
+    radio), in error (the danger bar, the error's icon and words, and
+    `aria-invalid` on every choice), disabled (the fieldset's `disabled`).
+  - _Name:_ the legend, read before each choice.
+  - _Do:_ ask the question in the legend in the bot's words ("Time zone",
+    "Candidate dates"); say the group's error once, at the group.
+  - _Don't:_ put radios outside a group, use radios for more than five
+    choices or long ones (use a select), or give each choice its own error.
+- **Confirmation** (`confirmation.tsx`, `/styleguide/confirmation`): the
+  page between a click and an action that cannot be undone, such as
+  closing a vote or cancelling a round.
+  - _Anatomy:_ an optional eyebrow (what it is about: "Location vote ·
+    open"), the bot's question as the page's h1 ("Cancel this round?"),
+    what will happen in the bot's words with what it applies to (a
+    definition list), "This cannot be undone." with a warning icon, then a
+    form that posts (with the CSRF field and what identifies the thing) and
+    holds the form actions: the action, then "Back".
+  - _Variants:_ `danger` for an action that destroys or discards something
+    ("Cancel round": its votes are discarded); `primary` for one that ends
+    something but keeps it ("Close location vote": the votes decide the
+    winner). Discord draws both in red; on the web the colour says whether
+    anything is lost.
+  - _States:_ the page itself has none; its buttons have theirs.
+  - _Name:_ the page's h1, and the title starts with the question.
+  - _Do:_ make the click that leads here a link to the page, so it works
+    without JavaScript and the browser's back leaves it; restate the
+    consequences, not "Are you sure?".
+  - _Don't:_ use a dialog or a script's `confirm()`, or do anything on the
+    request that shows the page.
+- **Definition list** (`definition-list.tsx`, `/styleguide/definition-list`):
+  settings or facts as names and values, each with an optional action to
+  change it.
+  - _Anatomy:_ a `dl`, one row per item divided by hairlines: the name
+    (`dt`, semibold), the value (`dd`) and the action (`dd`, a quiet
+    Button link). On a phone the name sits over the value and the action
+    beside both; from the breakpoint the three share a line. Long values (a
+    100-character channel name) wrap anywhere rather than widen the page.
+  - _Variants:_ with change actions (settings) or without (facts).
+  - _States:_ set; not set (muted words: "Not set", or the bot's sentence,
+    such as "Not set: only the server owner can use the panel."); the
+    action's hover and focus-visible.
+  - _Name:_ the action reads its label and the row's name ("Change voting
+    channel", "Set admin role"), the name visually hidden.
+  - _Do:_ say what an unset value means when the bot does; use "Set" for
+    an unset value and "Change" for a set one.
+  - _Don't:_ leave a value blank or write a dash, or use a table for
+    settings.
 - **Discord sign-in** (`discord-sign-in.tsx`, its own style guide page):
   **Sign in with Discord**, a variant of Button: the primary button,
   linking to `/login` (with `next` when given), with Discord's mark before
@@ -464,6 +573,58 @@ its styles in `public/assets/cairn/components/`, its unit test in
     the page colour plus the pattern's tint; `test/web/contrast.test.ts`
     checks text, muted text, the button and focus ring against a contour
     line in both schemes.
+- **Error summary** (`error-summary.tsx`, `/styleguide/error-summary`): the
+  box at the top of a form that came back with errors.
+  - _Anatomy:_ an error icon (named "Error"), the title saying what did not
+    happen in the bot's words ("Your location was not added.", "The date
+    vote was not started."), then a link per field in error in the same
+    words as the error at the field, each a 44px row. It is built like the
+    danger banner, with a 2px boundary since it holds focus.
+  - _Variants:_ none.
+  - _States:_ on a page that answers a submission it takes focus
+    (`autofocus`, no JavaScript needed) and is an alert, so it is
+    announced; `autoFocus={false}` only where several are shown.
+  - _Name:_ its title. The title is a paragraph, not a heading, so the
+    page's h1 still comes first in the outline.
+  - _Do:_ put it first in `main`, above the heading, and start the page's
+    `<title>` with "Error: "; link each error to its field's `id` (a
+    group's first choice).
+  - _Don't:_ show it without the errors at the fields, or list errors the
+    member cannot fix there.
+- **Form actions** (`form-actions.tsx`, `/styleguide/form-actions`): the bar
+  at the foot of a form.
+  - _Anatomy:_ the one primary action (a submit Button: primary, or danger
+    on a confirmation), then the way back (a secondary Button link,
+    "Back").
+  - _Variants:_ with or without the way back (a page that has a back link
+    at its top may leave it out).
+  - _States:_ on a phone the buttons stack and fill the width, primary on
+    top where the thumb finds it; from the breakpoint they sit in a row,
+    primary first.
+  - _Do:_ name the action as the bot does ("Propose a location", "Set time
+    zone", "Cancel round").
+  - _Don't:_ add a reset button, put two primary actions in the bar, or put
+    the way back first.
+- **Form row** (`form-row.tsx`, `/styleguide/form-row`): the frame of every
+  form control, used by the text field, textarea and select.
+  - _Anatomy:_ in this order, 4px apart: the label (semibold; "(required)"
+    after it in muted text, hidden from assistive technology since the
+    control's `required` says it), the hint (muted), the error (danger,
+    semibold, an alert icon and a visually hidden "Error: "), the control,
+    and the limit ("Up to 80 characters.", small and muted). The error sits
+    above the control so it is read before it and stays in view above a
+    phone's keyboard; the limit sits under it, next to what is typed.
+  - _Variants:_ around a Cairn control, or around a control Cairn has no
+    component for (`describedBy(id, …)` gives its `aria-describedby`).
+  - _States:_ default; in error, a 4px danger bar down its side, the
+    control's danger boundary and `aria-invalid="true"`, so the error is
+    never colour alone.
+  - _Name:_ the label, by `for`; `aria-describedby` names the hint, error
+    and limit, in that order.
+  - _Do:_ write a label as a noun in sentence case ("Name", "Time zone"),
+    and a hint in the bot's words.
+  - _Don't:_ use a placeholder instead of a label or hint, or put the error
+    under the control.
 - **Hike card** (`hike-card.tsx`): one planned or past hike.
   - _Purpose_: when and where a hike is, and the way to everything about
     it (thread, event, calendar, map), at a glance.
@@ -492,6 +653,38 @@ its styles in `public/assets/cairn/components/`, its unit test in
   with Discord** only: its shape is Discord's own, as published in the
   `simple-icons` package (16.38.0, CC0; the mark itself is Discord's
   trademark, used as its brand guidelines say, see Discord sign-in).
+- **Pagination** (`pagination.tsx`, `/styleguide/pagination`): the way
+  through a list that comes in pages, newest first, such as the hike log.
+  - _Anatomy:_ a `nav` named by its `label` ("Hike log pages"), with
+    "Newer" (left arrow) on the left, "Older" (right arrow) on the right,
+    as the bot's buttons say, and the position in words ("43 hikes · page 2
+    of 5", the bot's line). On a phone the position sits above the buttons;
+    from the breakpoint between them.
+  - _Variants:_ none.
+  - _States:_ first page (Newer disabled), middle, last page (Older
+    disabled): a disabled direction has no link, so it cannot be focused
+    or followed, and keeps its place so the bar keeps its shape, as in
+    Discord.
+  - _Name:_ the `nav`'s label; the buttons say their direction.
+  - _Do:_ leave the bar out when there is only one page.
+  - _Don't:_ number every page, or say "Previous" and "Next", which the
+    bot does not.
+- **Radio** (`radio.tsx`, `/styleguide/radio`): one of a few choices that
+  exclude each other, always inside a choice group.
+  - _Anatomy:_ a 24px circle with a `border-strong` boundary, the label
+    beside it and an optional hint under it (such as "America/Los_Angeles"
+    under "PT"); the whole 44px row is the target.
+  - _Variants:_ none.
+  - _States:_ not chosen, chosen (a `primary` ring round a `primary` dot,
+    drawn as a border so forced-colour modes keep it), hover,
+    focus-visible, in a group in error (`aria-invalid`, a danger boundary),
+    disabled not chosen and chosen.
+  - _Name:_ its label, after the group's legend.
+  - _Do:_ give the radios of one question the same `name`, so the arrow
+    keys move between them; choose the current value for the member (the
+    server's time zone).
+  - _Don't:_ use one alone, or use radios for a yes or no (use a
+    checkbox).
 - **Round stepper** (`round-stepper.tsx`): where a hike round is.
   - _Purpose_: the page's "where are we": which of the round's steps are
     done, which is now and which are to come.
@@ -511,6 +704,25 @@ its styles in `public/assets/cairn/components/`, its unit test in
   - _Do_: put one near the top of a round's page. _Don't_: use it for
     anything but a round, or rely on the marker's colour: the word is the
     state.
+- **Select** (`select.tsx`, `/styleguide/select`): one choice from a list
+  the server knows, such as a channel, a role or a time zone.
+  - _Anatomy:_ the browser's own `<select>` in the text field's box
+    (`.input`), with a chevron drawn in the text colour, in a form row.
+    Options can be grouped (a channel's category, a time zone's region);
+    a `placeholder` option with an empty value says what to pick ("Pick the
+    voting channel", as the bot's select says) or what nothing means ("Not
+    set").
+  - _Variants:_ flat or grouped options.
+  - _States:_ nothing chosen, chosen (kept from `value`), hover,
+    focus-visible, in error, disabled. A long option (a 100-character
+    channel) ends in an ellipsis inside the box; the open list is the
+    phone's or browser's own picker, which handles a list of 400 time
+    zones.
+  - _Name:_ its label, with the hint and error tied by `aria-describedby`.
+  - _Do:_ use it for a long list or long options; offer only valid choices
+    (only forum channels for the hike threads channel).
+  - _Don't:_ build a custom drop-down, or use a select for two to five
+    short choices (use radios).
 - **Server tile** (`server-tile.tsx`, its own style guide page): one server
   to choose, as one link to `/g/<id>` with one focus ring: the server's
   icon or initials (Avatar, decorative), its name and a chevron, at least
@@ -595,6 +807,44 @@ its styles in `public/assets/cairn/components/`, its unit test in
     "Your vote" mark is left out, since the checkbox shows it.
   - _Do_: put the CSRF field in `hidden`. _Don't_: submit on change (it
     would need JavaScript), or add a second Vote button.
+- **Text field** (`text-field.tsx`, `/styleguide/text-field`): one line of
+  text, such as a location's name, a date or a home area.
+  - _Anatomy:_ an `<input>` in the `.input` box (a 2px `border-strong`
+    boundary, 44px tall, the full width of its column) in a form row.
+  - _Variants:_ full width, or `short` (`--width-input-short`) for a value
+    of a few characters such as a date. `type` is `text` unless only a URL,
+    an email address or a telephone number is valid; `inputMode` asks for
+    the phone's keyboard (`numeric` for digits); `autoComplete` is `off`
+    for things that are not about the member (a location's name) and an
+    autofill token where the member's own data helps (`address-level2` for
+    the home area); `spellCheck={false}` for links, codes and time zones.
+  - _States:_ empty, filled (kept from `value` when the form comes back, at
+    the 80-character limit), hover (a `text` boundary), focus-visible, in
+    error, required, read-only (sandstone with a dashed boundary: it can be
+    read, selected and copied), disabled (sandstone, muted, a faint
+    boundary).
+  - _Limit:_ `maxLength` sets `maxlength` and says "Up to 80 characters."
+    under the field; the server checks it again.
+  - _Name:_ its label, with the hint, error and limit tied by
+    `aria-describedby`.
+  - _Do:_ take the limits from the bot (`src/polls/store.ts`); say the
+    expected form in the hint ("as YYYY-MM-DD or YYYY-MM-DD HH:MM").
+  - _Don't:_ use a placeholder as a label or an example, or `type="number"`
+    for something that is not a quantity.
+- **Textarea** (`textarea.tsx`, `/styleguide/textarea`): several lines of
+  text, such as a location's details or dates one per line.
+  - _Anatomy:_ a `<textarea>` in the text field's box, four lines tall by
+    default (`rows`), in a form row.
+  - _Variants:_ by `rows`.
+  - _States:_ as the text field: empty, filled to the 300-character limit,
+    hover, focus-visible, in error, required, read-only, disabled. The
+    member can make it taller, never wider.
+  - _Name:_ its label, with the hint, error and limit tied by
+    `aria-describedby`.
+  - _Do:_ say "(one per line)" in the label when it takes a list, as the
+    bot's modals do.
+  - _Don't:_ use it for one line, or for a list members choose from (use a
+    choice group).
 
 ## Layout rules
 
@@ -611,6 +861,35 @@ its styles in `public/assets/cairn/components/`, its unit test in
 - **The primary action** sits right after what it acts on, never at the
   bottom of a long page only; on a phone it may fill the width
   (`block`).
+
+## Forms
+
+Every form that changes something is a page of its own, built from the
+form components, and works without JavaScript:
+
+1. **It posts.** `<form method="post" novalidate>` with the CSRF field ("Add
+   a form that changes something" in `src/web/AGENTS.md`). `novalidate`
+   leaves the checking to the server, so every error appears the same way,
+   in the bot's words; `required` and `maxlength` stay on the controls,
+   which still announce them and stop overlong typing.
+2. **Rows, then actions.** Form rows are 32px apart (`.stack.stack--loose`),
+   in the order a member thinks of them; the form actions bar follows the
+   last one. One question per row; a choice group for several related
+   choices.
+3. **A form that fails comes back as itself.** The server answers with the
+   same page, given what was typed (each component's `value` or `checked`)
+   and the errors: the error summary first in `main` (focused and
+   announced), the `<title>` starting with "Error: ", and each error at its
+   field, tied by `aria-describedby`, with `aria-invalid` on the control.
+4. **A form that succeeds redirects** with `303` to the page that shows the
+   result, with a success banner saying what happened in the bot's words.
+5. **An action that cannot be undone** goes through a confirmation page.
+6. **Text from members is text.** Values go into the markup as JSX
+   expressions, never as HTML.
+
+A text field's limit is shown as words and enforced with `maxlength`; it
+does not count down as the member types, since that would need a script,
+and the server checks the limit again.
 
 ## Accessibility rules
 
@@ -819,12 +1098,21 @@ wide. The style is tuned at zooms 11, 12 and 14 on the samples for that:
 
 `test/web/size-budget.test.ts` fails when an asset outgrows its budget:
 
-| What                                            | Budget | Now         |
-| ----------------------------------------------- | ------ | ----------- |
-| The font file                                   | 32 KB  | 27 KB       |
-| All stylesheets, each gzipped, together         | 20 KB  | about 15 KB |
-| The contour pattern                             | 12 KB  | 9 KB        |
-| Everything a page loads from Cairn, transferred | 64 KB  | about 46 KB |
+| What                                            | Budget | Now           |
+| ----------------------------------------------- | ------ | ------------- |
+| The font file                                   | 32 KB  | 27 KB         |
+| All stylesheets, each gzipped, together         | 24 KB  | about 22.5 KB |
+| The contour pattern                             | 12 KB  | 9 KB          |
+| Everything a page loads from Cairn, transferred | 64 KB  | about 53 KB   |
+
+The stylesheets' budget is 24 KB rather than 20 KB, for two reasons.
+Each file is compressed on its own, and one file per component means 33
+small files whose shared vocabulary (`var(--space-`, `border-radius`) is
+compressed again in each: joined into one file, the same rules are about
+13.5 KB gzipped. And the cost a member pays is the whole page's, which
+stays within its 64 KB, with every file cached for a year. Raise it again
+only with the same kind of reason, and first look for rules components can
+share.
 
 ## Designing a new page
 

@@ -1,0 +1,37 @@
+/* Select: the native select in the `.input` box, with a chevron drawn in borders; long options end in an ellipsis. */
+
+.select {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.select .select__input {
+  appearance: none;
+  padding-inline-end: calc(var(--space-4) + var(--space-5));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.select::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: var(--space-4);
+  inset-block-start: 50%;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-inline-end: var(--border-width-strong) solid var(--color-text);
+  border-block-end: var(--border-width-strong) solid var(--color-text);
+  transform: translateY(-75%) rotate(45deg);
+  pointer-events: none;
+}
+
+.select:has(:disabled)::after {
+  border-color: var(--color-text-muted);
+}
+
+.select .select__input:disabled {
+  cursor: not-allowed;
+}

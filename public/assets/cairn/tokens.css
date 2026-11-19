@@ -96,6 +96,8 @@
     --blaze-width: 0.5rem;
     --blaze-height: 1.125rem;
     --width-date-leaf: 4rem;
+    --choice-size: 1.5rem;
+    --width-input-short: 12.5rem;
 
     /* Layout widths: a readable task column and a wider overview. */
     --width-task: 45rem;

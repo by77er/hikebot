@@ -79,6 +79,41 @@
       "user": null
     },
     {
+      "name": "styleguide-back-link",
+      "path": "/styleguide/back-link",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-checkbox",
+      "path": "/styleguide/checkbox",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-choice-group",
+      "path": "/styleguide/choice-group",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-confirmation",
+      "path": "/styleguide/confirmation",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-definition-list",
+      "path": "/styleguide/definition-list",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
       "name": "styleguide-discord-sign-in",
       "path": "/styleguide/discord-sign-in",
       "status": 200,
@@ -88,6 +123,27 @@
     {
       "name": "styleguide-empty-state",
       "path": "/styleguide/empty-state",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-error-summary",
+      "path": "/styleguide/error-summary",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-form-actions",
+      "path": "/styleguide/form-actions",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-form-row",
+      "path": "/styleguide/form-row",
       "status": 200,
       "seed": "empty",
       "user": null
@@ -107,8 +163,29 @@
       "user": null
     },
     {
+      "name": "styleguide-pagination",
+      "path": "/styleguide/pagination",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-radio",
+      "path": "/styleguide/radio",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
       "name": "styleguide-round-stepper",
       "path": "/styleguide/round-stepper",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-select",
+      "path": "/styleguide/select",
       "status": 200,
       "seed": "empty",
       "user": null
@@ -144,6 +221,20 @@
     {
       "name": "styleguide-tally-vote",
       "path": "/styleguide/tally-vote",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-text-field",
+      "path": "/styleguide/text-field",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-textarea",
+      "path": "/styleguide/textarea",
       "status": 200,
       "seed": "empty",
       "user": null

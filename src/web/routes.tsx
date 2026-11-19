@@ -51,16 +51,28 @@ export const webRouter = new WebRouter({
     return htmlResponse(<StyleguidePage tokens={tokens} />);
   })
   .get("/styleguide/*", async (request, env) => {
-    const id = new URL(request.url).pathname.slice("/styleguide/".length);
-    const section = ownPageSection(id);
+    const url = new URL(request.url);
+    const section = ownPageSection(url.pathname.slice("/styleguide/".length));
     if (!section) return notFound();
     const tokensCss = await env.ASSETS.fetch(
       new URL("/assets/cairn/tokens.css", request.url),
     );
     const tokens = parseTokens(await tokensCss.text());
     return htmlResponse(
-      <StyleguideSectionPage section={section} tokens={tokens} />,
+      <StyleguideSectionPage
+        section={section}
+        tokens={tokens}
+        query={url.searchParams}
+      />,
     );
+  })
+  // The style guide's posting forms, such as the confirmation page's, land
+  // here: nothing changes, and the page says the form was posted.
+  .post("/styleguide/*", (request) => {
+    const id = new URL(request.url).pathname.slice("/styleguide/".length);
+    const section = ownPageSection(id);
+    if (!section) return notFound();
+    return seeOther(`/styleguide/${section.id}?posted=1#${section.id}`);
   })
   .get("/assets/*", async (request, env) => {
     const asset = await env.ASSETS.fetch(request);

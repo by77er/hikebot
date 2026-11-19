@@ -5,24 +5,36 @@
  * surface. Each section is a file under `styleguide/`; "Add a component to
  * the design system" in src/web/AGENTS.md says how to add one.
  */
+import { BackLink } from "../components/back-link";
 import { Layout } from "../layout";
 import type { SchemeTokens } from "../tokens";
 import { appHeaderSection } from "./styleguide/app-header";
 import { avatarSection } from "./styleguide/avatar";
+import { backLinkSection } from "./styleguide/back-link";
 import { bannerSection } from "./styleguide/banner";
 import { blazeSection } from "./styleguide/blaze";
 import { buttonSection } from "./styleguide/button";
 import { cardSection } from "./styleguide/card";
+import { checkboxSection } from "./styleguide/checkbox";
+import { choiceGroupSection } from "./styleguide/choice-group";
 import { colourSection } from "./styleguide/colour";
+import { confirmationSection } from "./styleguide/confirmation";
 import { contrastSection } from "./styleguide/contrast";
+import { definitionListSection } from "./styleguide/definition-list";
 import { discordSignInSection } from "./styleguide/discord-sign-in";
 import { emptyStateSection } from "./styleguide/empty-state";
+import { errorSummarySection } from "./styleguide/error-summary";
+import { formActionsSection } from "./styleguide/form-actions";
+import { formRowSection } from "./styleguide/form-row";
 import { hikeCardSection } from "./styleguide/hike-card";
 import { iconsSection } from "./styleguide/icons";
 import { layoutMotionSection } from "./styleguide/layout-motion";
 import { mapSection } from "./styleguide/map";
+import { paginationSection } from "./styleguide/pagination";
+import { radioSection } from "./styleguide/radio";
 import { roundStepperSection } from "./styleguide/round-stepper";
 import type { StyleguideSection } from "./styleguide/section";
+import { selectSection } from "./styleguide/select";
 import { serverTileSection } from "./styleguide/server-tile";
 import { shapeSection } from "./styleguide/shape";
 import { spaceSection } from "./styleguide/space";
@@ -30,6 +42,8 @@ import { statusPillSection } from "./styleguide/status-pill";
 import { tallyListSection } from "./styleguide/tally-list";
 import { tallyRowSection } from "./styleguide/tally-row";
 import { tallyVoteSection } from "./styleguide/tally-vote";
+import { textFieldSection } from "./styleguide/text-field";
+import { textareaSection } from "./styleguide/textarea";
 import { typographySection } from "./styleguide/typography";
 
 /** The tokens, in the order docs/design-system.md gives them. */
@@ -46,20 +60,33 @@ const FOUNDATIONS: StyleguideSection[] = [
 const COMPONENTS: StyleguideSection[] = [
   appHeaderSection,
   avatarSection,
+  backLinkSection,
   bannerSection,
   blazeSection,
   buttonSection,
   cardSection,
+  checkboxSection,
+  choiceGroupSection,
+  confirmationSection,
+  definitionListSection,
   discordSignInSection,
   emptyStateSection,
+  errorSummarySection,
+  formActionsSection,
+  formRowSection,
   hikeCardSection,
   iconsSection,
+  paginationSection,
+  radioSection,
   roundStepperSection,
+  selectSection,
   serverTileSection,
   statusPillSection,
   tallyListSection,
   tallyRowSection,
   tallyVoteSection,
+  textFieldSection,
+  textareaSection,
 ];
 
 /** The map picture's style. */
@@ -133,22 +160,28 @@ export function StyleguidePage({ tokens }: { tokens: SchemeTokens }) {
 export function StyleguideSectionPage({
   section,
   tokens,
+  query,
 }: {
   section: StyleguideSection;
   tokens: SchemeTokens;
+  /** The page's query, for a section whose example form submits to it. */
+  query?: URLSearchParams;
 }) {
   const { title, render: Render } = section;
   return (
     <Layout title={`${title} · Style guide · hikebot`} width="overview">
       <div class="stack stack--section">
-        <div class="page-heading">
-          <p class="page-heading__eyebrow">Cairn design system</p>
-          <h1>Style guide</h1>
-          <p class="page-heading__lead">
-            {title}, on a page of its own, in every state.
-          </p>
+        <div class="stack">
+          <BackLink href="/styleguide">Back to the style guide</BackLink>
+          <div class="page-heading">
+            <p class="page-heading__eyebrow">Cairn design system</p>
+            <h1>Style guide</h1>
+            <p class="page-heading__lead">
+              {title}, on a page of its own, in every state.
+            </p>
+          </div>
         </div>
-        <Render tokens={tokens} />
+        <Render tokens={tokens} query={query} />
       </div>
     </Layout>
   );
