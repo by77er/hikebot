@@ -65,17 +65,43 @@ export class MapReader {
    * most detailed archive that has it, or undefined.
    */
   async tile(z: number, x: number, y: number): Promise<Uint8Array | undefined> {
+    const stored = await this.storedTile(z, x, y);
+    if (stored === undefined || stored === "empty") return undefined;
+    try {
+      return new Uint8Array(await decompress(stored.data, stored.compression));
+    } catch (error) {
+      console.warn(
+        `map tile ${String(z)}/${String(x)}/${String(y)} unreadable: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * Tile `z/x/y` as its archive stores it, with that archive's compression,
+   * for serving as it is; `"empty"` when some archive covers the tile (its
+   * zooms include `z` and its box overlaps the tile) but none has it, which
+   * is the archives' way of saying there is nothing there; undefined
+   * outside every archive, or without map data.
+   */
+  async storedTile(
+    z: number,
+    x: number,
+    y: number,
+  ): Promise<StoredTile | "empty" | undefined> {
     if (!isTile(z, x, y)) return undefined;
     const manifest = await this.currentManifest();
     if (!manifest) return undefined;
     const bounds = tileBounds(z, x, y);
+    let covered = false;
     for (const archive of byDetail(manifest.archives)) {
       if (z < archive.minzoom || z > archive.maxzoom) continue;
       if (!overlaps(archive.bbox, bounds)) continue;
+      covered = true;
       const data = await this.readTile(archive, z, x, y);
       if (data) return data;
     }
-    return undefined;
+    return covered ? "empty" : undefined;
   }
 
   /** The zoom levels some archive covers at a point, ascending. */
@@ -95,6 +121,35 @@ export class MapReader {
     return (await this.currentManifest())?.build;
   }
 
+  /**
+   * Where the archives have tiles, for a map drawn in the browser: their
+   * boxes together, their zooms together, the build and the attribution;
+   * undefined without map data.
+   */
+  async coverage(): Promise<MapCoverage | undefined> {
+    const manifest = await this.currentManifest();
+    const [first, ...rest] = manifest?.archives ?? [];
+    if (!manifest || !first) return undefined;
+    const bounds: BBox = [...first.bbox];
+    let minzoom = first.minzoom;
+    let maxzoom = first.maxzoom;
+    for (const archive of rest) {
+      bounds[0] = Math.min(bounds[0], archive.bbox[0]);
+      bounds[1] = Math.min(bounds[1], archive.bbox[1]);
+      bounds[2] = Math.max(bounds[2], archive.bbox[2]);
+      bounds[3] = Math.max(bounds[3], archive.bbox[3]);
+      minzoom = Math.min(minzoom, archive.minzoom);
+      maxzoom = Math.max(maxzoom, archive.maxzoom);
+    }
+    return {
+      build: manifest.build,
+      attribution: manifest.attribution,
+      bounds,
+      minzoom,
+      maxzoom,
+    };
+  }
+
   /** The attribution to print with the map, or undefined without map data. */
   async attribution(): Promise<string | undefined> {
     return (await this.currentManifest())?.attribution;
@@ -105,10 +160,13 @@ export class MapReader {
     z: number,
     x: number,
     y: number,
-  ): Promise<Uint8Array | undefined> {
+  ): Promise<StoredTile | undefined> {
     try {
-      const response = await this.pmtiles(archive.key).getZxy(z, x, y);
-      return response ? new Uint8Array(response.data) : undefined;
+      const pmtiles = this.pmtiles(archive.key);
+      const response = await pmtiles.getZxy(z, x, y);
+      if (!response) return undefined;
+      const { tileCompression } = await pmtiles.getHeader();
+      return { data: response.data, compression: tileCompression };
     } catch (error) {
       console.warn(
         `map archive ${archive.key} unreadable: ${error instanceof Error ? error.message : String(error)}`,
@@ -120,10 +178,11 @@ export class MapReader {
   private pmtiles(key: string): PMTiles {
     let archive = this.archives.get(key);
     if (!archive) {
+      // Tiles come back as stored; `tile` decompresses them.
       archive = new PMTiles(
         new R2Source(this.bucket, key),
         this.cache,
-        decompress,
+        asStored,
       );
       this.archives.set(key, archive);
     }
@@ -168,6 +227,23 @@ export class MapReader {
   }
 }
 
+/** What `MapReader.coverage` answers. */
+export interface MapCoverage {
+  build: string;
+  attribution: string;
+  /** West, south, east, north: every archive's box inside it. */
+  bounds: BBox;
+  minzoom: number;
+  maxzoom: number;
+}
+
+/** A tile's bytes as its archive stores them. */
+export interface StoredTile {
+  data: ArrayBuffer;
+  /** `Compression.Gzip` for the Protomaps archives. */
+  compression: Compression;
+}
+
 /** Ranged reads of one archive object in an R2 bucket. */
 class R2Source implements Source {
   constructor(
@@ -194,6 +270,15 @@ class R2Source implements Source {
     if (!("body" in object)) throw new EtagMismatch();
     return { data: await object.arrayBuffer(), etag: object.etag };
   }
+}
+
+/** The decompressed bytes of a stored tile. */
+export function tileBytes(tile: StoredTile): Promise<ArrayBuffer> {
+  return decompress(tile.data, tile.compression);
+}
+
+function asStored(data: ArrayBuffer): Promise<ArrayBuffer> {
+  return Promise.resolve(data);
 }
 
 async function decompress(

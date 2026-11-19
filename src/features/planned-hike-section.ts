@@ -1,16 +1,18 @@
 /**
  * The planned hike's section of the web view (`src/guild/web-view.ts`): the
  * newest hike in the log while it has not ended yet, with its start in the
- * guild's time zone, links to its thread and Discord event, and where its
- * map picture is kept.
+ * guild's time zone, links to its thread and Discord event, where its
+ * map picture is kept, and its pin.
  */
 import { channelUrl, eventUrl } from "../discord/api";
 import type { WebViewSource } from "../guild/web-view";
+import type { PlacePoint } from "../polls/store";
 import {
   DEFAULT_HIKE_TIME,
   HIKE_DURATION_HOURS,
   hikeStart,
 } from "../polls/dates";
+import { roundPin } from "./map-picture-state";
 
 export interface WebPlannedHike {
   roundId: number;
@@ -36,6 +38,11 @@ export interface WebPlannedHike {
    * or not drawn yet).
    */
   mapPictureKey: string | null;
+  /**
+   * The pin of its location, where the map centres; null when the location
+   * has none (not found, or never looked up).
+   */
+  point: PlacePoint | null;
 }
 
 /**
@@ -62,5 +69,12 @@ export function plannedHikeSection(
     eventUrl:
       hike.eventId === null ? null : eventUrl(source.guildId, hike.eventId),
     mapPictureKey: hike.mapPictureKey,
+    point: hikePin(source, hike.roundId),
   };
+}
+
+function hikePin(source: WebViewSource, roundId: number): PlacePoint | null {
+  const round = source.store.getRound(roundId);
+  const point = round === null ? null : roundPin(round);
+  return point === null ? null : { lat: point.lat, lon: point.lon };
 }
