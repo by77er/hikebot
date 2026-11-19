@@ -29,8 +29,13 @@ export const MAP_SCRIPT = "maps/map-view.mjs";
 /** Where the map's style comes from (`styleRoute` in `src/web/maps.ts`). */
 export const MAP_STYLE = "/maps/style.json";
 
-/** The zoom a single place is shown at, as its picture is. */
-export const PLACE_ZOOM = 12;
+/**
+ * The zoom a single place is shown at. The picture is drawn at zoom 12 from
+ * zoom 13 tiles (at twice the pixels), which carry the trails zoom 12 tiles
+ * leave out; the browser draws each zoom from its own tiles, so it opens a
+ * zoom closer to show the same trails.
+ */
+export const PLACE_ZOOM = 13;
 
 export interface MapMarker {
   lat: number;

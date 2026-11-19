@@ -2414,7 +2414,11 @@ needed). `public/assets/maps/map-view.mjs`, loaded as a module by every
 map on a page and so run once, starts each map view: it fetches the
 style, keeps the places inside the style's bounds (none inside: the map
 gives up, and keeps its picture or hides), and draws the map over the
-stored picture, removing the picture when MapLibre is `idle`. Labels are
+stored picture, removing the picture when MapLibre is `idle`. One place
+opens centred on it at zoom 13, a zoom closer than its picture: the picture
+is zoom 12 drawn from zoom 13 tiles, which hold the trails, while the
+browser draws each zoom from its own tiles. Several places are fitted into
+the frame, at zoom 14 at most. Labels are
 drawn by MapLibre in the browser with the page's own Public Sans (a style
 without `glyphs` makes it draw every glyph locally; each font stack names
 the weight or style first, then "Public Sans Variable"), so no glyph files

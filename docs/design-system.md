@@ -658,7 +658,8 @@ its styles in `public/assets/cairn/components/`, its unit test in
   MapLibre GL JS, in the Cairn map style ("In the browser" under "Cairn
   map"). One marker is the hike's **pin**, the blaze on a pointer with the
   place's name in a popup over it, and the map is centred on it at zoom
-  12, as the picture is; several markers are **numbered** circles (the
+  13 (the picture is zoom 12 drawn from zoom 13 tiles, which hold the
+  trails; the browser draws a zoom from its own tiles); several markers are **numbered** circles (the
   map's label colour, a white ring and a dark keyline), the map fitted to
   them, with their **list** under it: the same number, the name and the
   coordinates. The frame is 3:2, the picture's shape. The library is

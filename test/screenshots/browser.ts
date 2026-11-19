@@ -18,14 +18,30 @@
  * `webgl` it is turned back on, drawn in software by SwiftShader, which the
  * package ships, so no GPU of the machine's is involved. That also changes
  * how every page is composited, so only pages with a map are taken with it.
+ * That browser's fonts also include Noto Sans, the map picture's fallback
+ * (`src/maps/fonts/`), as members' devices have a font for the characters
+ * Public Sans lacks (such as the marks in `Mount Si / q̓əlbc̓`), which the
+ * map's labels fall back to.
  */
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Browser } from "puppeteer-core";
 
 /** Where the package unpacks; delete it to unpack again from npm. */
 export const CHROMIUM_DIR = join(tmpdir(), "hikebot-chromium");
+
+const MAP_FONTS = fileURLToPath(
+  new URL("../../src/maps/fonts/", import.meta.url),
+);
 
 export async function launchBrowser(
   options: { webgl?: boolean } = {},
@@ -36,15 +52,27 @@ export async function launchBrowser(
   ) {
     rmSync(CHROMIUM_DIR, { recursive: true, force: true });
   }
-  const fontconfig = join(CHROMIUM_DIR, "fontconfig");
+  const fontconfig = join(
+    CHROMIUM_DIR,
+    options.webgl ? "fontconfig-map" : "fontconfig",
+  );
   mkdirSync(fontconfig, { recursive: true });
+  const fallback = join(CHROMIUM_DIR, "map-fonts");
+  if (options.webgl) {
+    mkdirSync(fallback, { recursive: true });
+    for (const file of readdirSync(MAP_FONTS)) {
+      if (file.startsWith("NotoSans-") && file.endsWith(".ttf")) {
+        copyFileSync(join(MAP_FONTS, file), join(fallback, file));
+      }
+    }
+  }
   writeFileSync(
     join(fontconfig, "fonts.conf"),
     `<?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
 <fontconfig>
-  <dir>${join(CHROMIUM_DIR, "fonts")}</dir>
-  <cachedir>${join(CHROMIUM_DIR, "fonts-cache")}</cachedir>
+  <dir>${join(CHROMIUM_DIR, "fonts")}</dir>${options.webgl ? `\n  <dir>${fallback}</dir>` : ""}
+  <cachedir>${join(CHROMIUM_DIR, options.webgl ? "fonts-cache-map" : "fonts-cache")}</cachedir>
 </fontconfig>
 `,
   );
