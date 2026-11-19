@@ -3,11 +3,12 @@
  * hike thread shows it. Each row is the hour (its header), the conditions
  * in words with their weather icon, the temperature with what it feels
  * like, the chance and amount of rain or snow, and the wind with its
- * gusts; a value Open-Meteo did not give is a dash. Each cell says what its
- * second figure is ("feels 47°", "gusts 12"), so a cell reads on its own;
- * on a phone the second figure sits under the first, so five columns fit
- * 390px, and from the breakpoint beside it. The caption names the day and
- * the time zone; figures are tabular.
+ * gusts; a value Open-Meteo did not give is a dash. Each cell carries its
+ * units and says what its second figure is ("feels 47°", "gusts 12"), so
+ * the headers stay one short word and a cell reads on its own; on a phone
+ * the second figure sits under the first, so five columns fit 390px, and
+ * from the breakpoint beside it. The caption names the day and the time
+ * zone.
  */
 import { WeatherIcon } from "./weather-icons";
 
@@ -64,6 +65,16 @@ function Figures({ first, second }: { first: string; second: string }) {
   );
 }
 
+/** A header shortened to fit a phone, read out in full. */
+function Short({ shown, spoken }: { shown: string; spoken: string }) {
+  return (
+    <>
+      <span aria-hidden="true">{shown}</span>
+      <span class="u-visually-hidden">{spoken}</span>
+    </>
+  );
+}
+
 export function ForecastTable({ caption, hours, units }: ForecastTableProps) {
   return (
     <table class="forecast-table">
@@ -72,9 +83,13 @@ export function ForecastTable({ caption, hours, units }: ForecastTableProps) {
         <tr>
           <th scope="col">Time</th>
           <th scope="col">Conditions</th>
-          <th scope="col">Temperature</th>
-          <th scope="col">Rain or snow</th>
-          <th scope="col">Wind ({units.wind})</th>
+          <th scope="col">
+            <Short shown="Temp" spoken="Temperature" />
+          </th>
+          <th scope="col">
+            <Short shown="Rain" spoken="Rain or snow" />
+          </th>
+          <th scope="col">Wind</th>
         </tr>
       </thead>
       <tbody>
@@ -86,7 +101,7 @@ export function ForecastTable({ caption, hours, units }: ForecastTableProps) {
               </time>
             </th>
             <td>
-              <span class="cluster cluster--tight">
+              <span class="cluster cluster--tight cluster--nowrap">
                 <WeatherIcon code={hour.code} size="small" />
                 {hour.conditions}
               </span>
@@ -113,7 +128,11 @@ export function ForecastTable({ caption, hours, units }: ForecastTableProps) {
             </td>
             <td>
               <Figures
-                first={whole(hour.wind)}
+                first={
+                  hour.wind === null
+                    ? NONE
+                    : `${whole(hour.wind)}\u00a0${units.wind}`
+                }
                 second={`gusts\u00a0${whole(hour.gusts)}`}
               />
             </td>

@@ -48,7 +48,7 @@ export function MapLinks({
 }) {
   if (variant === "compact") {
     return (
-      <p class="cluster cluster--tight u-small u-muted">
+      <p class="cluster cluster--tight cluster--nowrap u-small u-muted">
         <MapPinIcon size="small" />
         <span>
           {place.name !== null && <>{place.name} · </>}
@@ -64,7 +64,7 @@ export function MapLinks({
   }
   return (
     <div class="stack stack--tight">
-      <p class="cluster cluster--tight">
+      <p class="cluster cluster--tight cluster--nowrap">
         <MapPinIcon />
         <strong>{place.name ?? place.text}</strong>
       </p>

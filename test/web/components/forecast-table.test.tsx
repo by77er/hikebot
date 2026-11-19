@@ -54,7 +54,7 @@ describe("ForecastTable", () => {
       />,
     );
     expect(await spokenText(html)).toBe(
-      "Hourly forecast for Sat, 15 Jun 2030, times in America/Los_Angeles Time Conditions Temperature Rain or snow Wind (mph) 09:00 Light rain 50°F feels 45° 40% 0.01 in 9 gusts 22 10:00 Clear 50°F feels 45° 40% 0.01 in 9 gusts 22",
+      "Hourly forecast for Sat, 15 Jun 2030, times in America/Los_Angeles Time Conditions Temperature Rain or snow Wind 09:00 Light rain 50°F feels 45° 40% 0.01 in 9 mph gusts 22 10:00 Clear 50°F feels 45° 40% 0.01 in 9 mph gusts 22",
     );
     expect(html).toContain(
       '<th scope="row"><time datetime="2030-06-15T16:00:00.000Z">09:00</time></th>',
@@ -84,7 +84,7 @@ describe("ForecastTable", () => {
       ),
     );
     expect(text).toContain(
-      "09:00 Light rain 0°C feels -7° 40% 3.1 mm 31 gusts 68",
+      "09:00 Light rain 0°C feels -7° 40% 3.1 mm 31 km/h gusts 68",
     );
   });
 

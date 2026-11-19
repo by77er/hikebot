@@ -33,9 +33,7 @@ describe("HikeForecast", () => {
     expect(text).toContain(
       `Hourly forecast for Sat, 15 Jun 2030, times in ${RECORDED_ZONE}`,
     );
-    expect(text).toContain(
-      "Time Conditions Temperature Rain or snow Wind (mph)",
-    );
+    expect(text).toContain("Time Conditions Temperature Rain or snow Wind");
     expect([...html.matchAll(/<th scope="row"/g)]).toHaveLength(9);
     expect(text).toContain("Clear");
     expect(html).toContain('href="https://open-meteo.com/"');
@@ -47,10 +45,10 @@ describe("HikeForecast", () => {
   it("shows a wet and windy day in °C, mm and km/h, with the thread's freezing level note", async () => {
     const html = shown(forecastOf(hohStorm, "metric", "2026-11-24 10:00"));
     const text = await spokenText(html);
-    expect(text).toContain("Wind (km/h)");
+    expect(text).toContain("35 km/h gusts 74");
     expect(text).toContain("Heavy rain");
     expect(text).toContain(
-      "11:00 Heavy rain 9°C feels 7° 95% 4.6 mm 35 gusts 74",
+      "11:00 Heavy rain 9°C feels 7° 95% 4.6 mm 35 km/h gusts 74",
     );
     expect(text).toContain("Freezing level down to");
   });

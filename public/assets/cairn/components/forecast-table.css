@@ -1,10 +1,14 @@
 /*
- * Forecast table: tighter cells, and each cell's second figure under the
+ * Forecast table: tight cells, and each cell's second figure under the
  * first on a phone, so five columns fit 390px; beside it from 48rem.
  */
 
 .forecast-table :is(th, td) {
-  padding-inline: var(--space-2);
+  padding-inline: var(--space-1);
+}
+
+.forecast-table :is(th, td):first-child {
+  padding-inline-start: 0;
 }
 
 .forecast-table__second {
@@ -14,6 +18,10 @@
 }
 
 @media (min-width: 48rem) {
+  .forecast-table :is(th, td) {
+    padding-inline: var(--space-3);
+  }
+
   .forecast-table__second {
     display: inline;
   }

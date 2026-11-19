@@ -64,7 +64,7 @@ const guildId = (n: number) => String(200000000000000100n + BigInt(n));
 export const SERVER = { name: "Ridge Walkers", icon: picture(2) };
 
 /** What a seed of a server's page stores once the server is set up. */
-type ServerSteps = (play: RoundPlayer, g: TestGuild) => Promise<void>;
+type ServerSteps = (play: RoundPlayer, g: TestGuild, e2e: E2E) => Promise<void>;
 
 /**
  * The server SERVER, id 220000000000000101, with its panel set up and then
@@ -84,7 +84,7 @@ function server(
     });
     e2e.discord.addMember(g.guildId, MEMBER_ID);
     await play.setUpPanel(g);
-    await steps(play, g);
+    await steps(play, g, e2e);
     e2e.discord.addUser({
       id: MEMBER_ID,
       username: "ana.hikes",
@@ -184,6 +184,193 @@ const hikePlanned: ServerSteps = (play, g) =>
     threadId: "320000000000000101",
     eventId: "330000000000000101",
   });
+
+/** The guild object's SQLite storage, for what `seedRound` does not store. */
+function storage(e2e: E2E, g: TestGuild) {
+  return e2e.harness
+    .getWorker()
+    .getDurableObjectStorage("GUILD_HIKE", { name: g.guildId });
+}
+
+/** Snow Lake's trailhead. */
+const SNOW_LAKE = { lat: 47.44535, lon: -121.42316 };
+
+/**
+ * Pins the location `label` of the guild's newest location vote at
+ * `point`, with `name` as the geocoder's place name (null: coordinates a
+ * member gave).
+ */
+async function pinLocation(
+  e2e: E2E,
+  g: TestGuild,
+  label: string,
+  point: { lat: number; lon: number },
+  name: string | null,
+): Promise<void> {
+  const sql = await storage(e2e, g);
+  await sql.exec(
+    `UPDATE poll_options SET place_lat = ?, place_lon = ?, place_name = ?,
+       place_status = ?, place_attempts = 1
+     WHERE label = ? AND poll_id =
+       (SELECT max(id) FROM polls WHERE kind = 'location')`,
+    point.lat,
+    point.lon,
+    name,
+    name === null ? "given" : "found",
+    label,
+  );
+}
+
+const HOUR = 3_600_000;
+
+/**
+ * One hour of a seeded forecast, in the forecast's units: the WMO code,
+ * temperature, feels-like, chance and amount of precipitation, wind and
+ * gusts.
+ */
+type SeedHour = [number, number, number, number, number, number, number];
+
+/**
+ * Stores, with the newest round, the forecast the weather job would have
+ * fetched for Snow Lake on Sat, 15 Jun 2030 (11:00 in Los Angeles): `hours`
+ * from 08:00, in `units`, updated on 14 June at 09:00, the freezing level
+ * at `freezing` and the UV index at `uv`, and sets the server's units.
+ */
+async function storeForecast(
+  e2e: E2E,
+  g: TestGuild,
+  units: "imperial" | "metric",
+  hours: SeedHour[],
+  levels: { elevation: number; freezing: number; uv: (i: number) => number },
+): Promise<void> {
+  // 08:00 PDT is 15:00 UTC.
+  const first = Date.UTC(2030, 5, 15, 15);
+  const forecast = {
+    point: SNOW_LAKE,
+    units,
+    elevation: levels.elevation,
+    hours: hours.map(
+      ([code, temperature, feelsLike, chance, amount, wind, gusts], i) => ({
+        at: first + i * HOUR,
+        code,
+        temperature,
+        feelsLike,
+        precipitationChance: chance,
+        precipitation: amount,
+        wind,
+        gusts,
+        snowfall: 0,
+        freezingLevel: levels.freezing,
+        uvIndex: levels.uv(i),
+      }),
+    ),
+    // 05:11 and 21:10 PDT.
+    days: [
+      {
+        sunrise: Date.UTC(2030, 5, 15, 12, 11),
+        sunset: Date.UTC(2030, 5, 16, 4, 10),
+      },
+    ],
+  };
+  const updated = Date.UTC(2030, 5, 14, 16);
+  const sql = await storage(e2e, g);
+  await sql.exec(
+    `UPDATE rounds SET forecast = ?, forecast_fetched_at = ?,
+       forecast_updated_at = ? WHERE id = (SELECT max(id) FROM rounds)`,
+    JSON.stringify(forecast),
+    updated,
+    updated,
+  );
+  await sql.exec("UPDATE guild_settings SET units = ?", units);
+}
+
+/** A fair June day at Snow Lake, in °F, inches and mph. */
+const FAIR: SeedHour[] = [
+  [0, 52, 50, 0, 0, 3, 6],
+  [0, 55, 54, 0, 0, 3, 7],
+  [1, 58, 57, 0, 0, 4, 8],
+  [1, 61, 60, 0, 0, 5, 9],
+  [2, 63, 62, 5, 0, 6, 11],
+  [2, 65, 64, 5, 0, 7, 13],
+  [3, 66, 65, 10, 0, 8, 14],
+  [2, 66, 65, 10, 0, 8, 15],
+  [2, 64, 63, 5, 0, 7, 13],
+  [1, 61, 60, 0, 0, 5, 10],
+  [0, 58, 57, 0, 0, 4, 8],
+];
+
+/** A wet, windy day, in °C, mm and km/h. */
+const STORM: SeedHour[] = [
+  [3, 9, 6, 60, 0, 22, 41],
+  [61, 9, 5, 75, 0.6, 25, 50],
+  [63, 9, 5, 85, 2.4, 29, 61],
+  [63, 8, 4, 90, 3.1, 33, 70],
+  [65, 8, 3, 100, 6.2, 41, 88],
+  [82, 7, 2, 100, 11.8, 45, 97],
+  [81, 7, 3, 95, 4.6, 38, 79],
+  [80, 8, 4, 85, 1.7, 30, 62],
+  [61, 8, 5, 80, 0.8, 26, 52],
+  [3, 8, 5, 60, 0.1, 22, 44],
+  [3, 7, 4, 50, 0, 19, 38],
+];
+
+/** The planned hike of `hikePlanned`, with Snow Lake pinned. */
+const hikePinned: ServerSteps = async (play, g, e2e) => {
+  await hikePlanned(play, g, e2e);
+  await pinLocation(e2e, g, "Snow Lake", SNOW_LAKE, "Snow Lake, King County");
+};
+
+/** The planned hike, pinned, with a fair forecast and a high UV index. */
+const hikeForecast: ServerSteps = async (play, g, e2e) => {
+  await hikePinned(play, g, e2e);
+  await storeForecast(e2e, g, "imperial", FAIR, {
+    elevation: 4012,
+    freezing: 12_500,
+    uv: (i) => (i >= 4 && i <= 7 ? 7.2 : 4),
+  });
+};
+
+/** The planned hike, pinned, with rain, wind and the freezing level near. */
+const hikeStorm: ServerSteps = async (play, g, e2e) => {
+  await hikePinned(play, g, e2e);
+  await storeForecast(e2e, g, "metric", STORM, {
+    elevation: 1223,
+    freezing: 1450,
+    uv: () => 1,
+  });
+};
+
+/**
+ * An open location vote with located options: one the geocoder named, one
+ * at coordinates a member gave, one at a long place name, one not found.
+ */
+const locationVoteLocated: ServerSteps = async (play, g, e2e) => {
+  await locationVote()(play, g, e2e);
+  await pinLocation(e2e, g, "Snow Lake", SNOW_LAKE, "Snow Lake, King County");
+  await pinLocation(
+    e2e,
+    g,
+    "Mailbox Peak",
+    { lat: 47.4669, lon: -121.6746 },
+    null,
+  );
+  await pinLocation(
+    e2e,
+    g,
+    "Rattlesnake Ledge",
+    { lat: 47.4344, lon: -121.7686 },
+    "Rattlesnake Ledge Trailhead, Cedar Falls Road Southeast, North Bend, King County",
+  );
+};
+
+/** No round and no hike, with the weekly schedule on, Wednesdays at 09:00. */
+const scheduleOn: ServerSteps = async (_play, g, e2e) => {
+  const sql = await storage(e2e, g);
+  await sql.exec(
+    "UPDATE guild_settings SET cadence_enabled = 1, cadence_on_since = ?",
+    Date.UTC(2030, 0, 1),
+  );
+};
 
 const LOG_HIKES = [
   "Mailbox Peak",
@@ -297,6 +484,12 @@ export const SEEDS: Record<string, Seed> = {
     }, "admin")(e2e),
   "server-hike-planned": server(hikePlanned),
   "server-hike-planned-admin": server(hikePlanned, "admin"),
+  "server-hike-no-forecast": server(hikePinned),
+  "server-hike-forecast": server(hikeForecast),
+  "server-hike-forecast-rain": server(hikeStorm),
+  "server-map-pin": server(hikeForecast, "admin"),
+  "server-location-vote-located": server(locationVoteLocated),
+  "server-schedule": server(scheduleOn),
   "server-hike-log": server(hikeLog),
   "server-not-member": server(locationVote(), "stranger"),
 };

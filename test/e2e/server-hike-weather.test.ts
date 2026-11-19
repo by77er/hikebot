@@ -207,7 +207,7 @@ describe("the server's page about a planned hike", () => {
 
     // The forecast: the thread's 13:00 row, its sun times and its credit.
     expect(text).toContain(
-      "13:00 Overcast 50°F feels 46° 20% 0.01 in 6 gusts 12",
+      "13:00 Overcast 50°F feels 46° 20% 0.01 in 6 mph gusts 12",
     );
     expect(text).toContain("times in America/Los_Angeles");
     const sun = /Sunrise (\d\d:\d\d) · Sunset (\d\d:\d\d)/.exec(thread);
