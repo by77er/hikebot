@@ -211,6 +211,25 @@ describe("static assets", () => {
     await response.arrayBuffer();
   });
 
+  it("serves the map's scripts as JavaScript, under the versioned path too", async () => {
+    for (const file of [
+      "maps/map-view.mjs",
+      "maps/maplibre/maplibre-gl.mjs",
+      "maps/maplibre/maplibre-gl-worker.mjs",
+    ]) {
+      for (const path of [`/assets/${file}`, assetPath(file)]) {
+        const response = await get(path);
+        expect(response.status, path).toBe(200);
+        expect(response.headers.get("Content-Type"), path).toMatch(
+          /^(text|application)\/javascript/,
+        );
+        await response.arrayBuffer();
+      }
+    }
+    const licence = await get("/assets/maps/maplibre/LICENSE.txt");
+    expect(await licence.text()).toContain("MapLibre contributors");
+  });
+
   it("does not serve the rule and procedure files next to the assets", async () => {
     for (const path of [
       "/_headers",
@@ -417,7 +436,9 @@ describe("GET /styleguide", () => {
       const page = await outline(html);
       expect(page).toMatchObject({
         title: `${title} · Style guide · hikebot`,
-        scripts: 0,
+        // The map view's two maps each name the map's script from this
+        // site; as a module, it runs once.
+        scripts: id === "map-view" ? 2 : 0,
         styleAttributes: 0,
       });
       expect(html).toContain(`<section class="styleguide-section" id="${id}"`);
