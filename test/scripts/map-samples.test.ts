@@ -3,10 +3,12 @@ import regions from "../../maps/regions.json";
 import {
   PIN_FILLS,
   SAMPLE_VIEWS,
+  drawPinSamples,
   drawSamples,
   pinScene,
   type Paint,
 } from "../../scripts/map-samples";
+import { COLOURS } from "../../src/maps/style";
 
 function capture() {
   const lines: string[] = [];
@@ -138,4 +140,45 @@ describe("PIN_FILLS and pinScene", () => {
       }
     },
   );
+});
+
+describe("drawPinSamples", () => {
+  it("renders each pin scene's SVG, writes its picture and reports its size", async () => {
+    const svgs: string[] = [];
+    const written: string[] = [];
+    const { lines, output } = capture();
+    const fonts = {
+      family: "Public Sans",
+      metrics: () => ({
+        width: (text: string, size: number) => text.length * size * 0.5,
+        covers: () => true,
+        ascent: 0.9,
+        descent: 0.2,
+      }),
+    };
+
+    await drawPinSamples(
+      (svg) => {
+        svgs.push(svg);
+        return new Uint8Array(3072);
+      },
+      (file, png) => {
+        written.push(`${file} ${String(png.length)}`);
+        return Promise.resolve();
+      },
+      output,
+      fonts,
+    );
+
+    expect(written).toEqual(PIN_FILLS.map(({ file }) => `${file} 3072`));
+    expect(lines).toEqual([
+      "pin-on-forest.png: the pin on forest, 3 KiB",
+      "pin-on-water.png: the pin on lake, 3 KiB",
+      "pin-on-snow.png: the pin on glacier, 3 KiB",
+    ]);
+    for (const svg of svgs) {
+      expect(svg).toMatch(/^<svg [^>]*width="1200" height="800"/);
+      expect(svg).toContain(`fill="${COLOURS.pin}"`);
+    }
+  });
 });

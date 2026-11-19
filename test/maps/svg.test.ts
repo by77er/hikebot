@@ -3,7 +3,11 @@ import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { beforeEach, describe, expect, it } from "vitest";
 import { FALLBACK_FAMILY, FAMILY, mapFonts } from "../../src/maps/font";
-import { coveringTiles, viewportAt } from "../../src/maps/projection";
+import {
+  coveringTiles,
+  tilePixels,
+  viewportAt,
+} from "../../src/maps/projection";
 import { MapReader } from "../../src/maps/reader";
 import { COLOURS } from "../../src/maps/style";
 import { buildSvg, scaleBar, type Scene } from "../../src/maps/svg";
@@ -147,6 +151,92 @@ describe("buildSvg", () => {
     const svg = buildSvg(await sceneAt(SUMMIT, 13, { tiles: [] }));
     expect(svg).not.toContain(COLOURS.forest);
     expect(svg).toContain(COLOURS.pin);
+  });
+});
+
+/**
+ * A scene of made-up tiles that hold only point features, all at `x`
+ * logical pixels from the left edge, half-way down a 600 by 400 picture,
+ * with the pin far to the right.
+ */
+function pointsScene(
+  x: number,
+  features: { layer: string; properties: Record<string, unknown> }[],
+): Scene {
+  const view = viewportAt(SUMMIT, {
+    zoom: 14,
+    tileZoom: 14,
+    width: 600,
+    height: 400,
+    pixelRatio: 1,
+  });
+  const size = tilePixels(view);
+  const tiles = coveringTiles(view).map((tile) => {
+    const extent = 4096;
+    const at = {
+      x: ((x - tile.left) / size) * extent,
+      y: ((200 - tile.top) / size) * extent,
+    };
+    const inside = at.x >= 0 && at.y >= 0 && at.x < extent && at.y < extent;
+    const layers: Record<string, unknown> = {};
+    for (const { layer, properties } of inside ? features : []) {
+      const feature = { type: 1, properties, loadGeometry: () => [[at]] };
+      layers[layer] = { extent, length: 1, feature: () => feature };
+    }
+    return { tile, data: { layers } as unknown as VectorTile };
+  });
+  return {
+    view,
+    tiles,
+    pin: { lon: SUMMIT.lon + 0.008, lat: SUMMIT.lat },
+    units: "metric",
+    attribution: "© OpenStreetMap contributors",
+    fonts: mapFonts(),
+  };
+}
+
+describe("label priority", () => {
+  // At the left edge, a label fits only to the right of the point, so the
+  // label that ranks higher takes that place and the other is left out.
+  const town = {
+    layer: "places",
+    properties: {
+      kind: "locality",
+      kind_detail: "town",
+      name: "Townsend",
+      population_rank: 15,
+    },
+  };
+
+  it("labels a summit before a town in its place", () => {
+    const peak = {
+      layer: "pois",
+      properties: { kind: "peak", name: "Mount Rainier", elevation: 4392 },
+    };
+    const svg = buildSvg(pointsScene(12, [town, peak]));
+    expect(svg).toContain(">Mount Rainier</tspan>");
+    expect(svg).toContain(">4,392 m</tspan>");
+    expect(svg).not.toContain(">Townsend</tspan>");
+  });
+
+  it("labels water before a town in its place", () => {
+    const lake = {
+      layer: "pois",
+      properties: { kind: "water", name: "Rattlesnake Lake" },
+    };
+    const svg = buildSvg(pointsScene(12, [town, lake]));
+    expect(svg).toContain(">Rattlesnake Lake</tspan>");
+    expect(svg).not.toContain(">Townsend</tspan>");
+  });
+
+  it("moves a town aside for a summit where there is room for both", () => {
+    const peak = {
+      layer: "pois",
+      properties: { kind: "peak", name: "Mount Rainier", elevation: 4392 },
+    };
+    const svg = buildSvg(pointsScene(300, [town, peak]));
+    expect(svg).toContain(">Mount Rainier</tspan>");
+    expect(svg).toContain(">Townsend</tspan>");
   });
 });
 

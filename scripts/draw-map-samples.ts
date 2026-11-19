@@ -11,9 +11,8 @@ import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import { createTestHarness } from "wrangler";
 import { readFontMetrics } from "../src/maps/font-metrics";
 import { FAMILY } from "../src/maps/style";
-import { buildSvg } from "../src/maps/svg";
 import { seedMaps, type MapsBucket } from "../test/e2e/harness/maps";
-import { PIN_FILLS, drawSamples, pinScene, type Paint } from "./map-samples";
+import { drawPinSamples, drawSamples, type Paint } from "./map-samples";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT = fileURLToPath(
@@ -68,29 +67,36 @@ try {
   await harness.close();
 }
 
-/** Draws the pin on each fill in `PIN_FILLS`, as the Worker would. */
+/** Draws the pin on each fill in `PIN_FILLS` with resvg, as the Worker would. */
 async function drawPins(): Promise<void> {
   await initWasm(await readFile(WASM));
   const files = (await readdir(FONTS)).filter((file) => file.endsWith(".ttf"));
   const buffers = await Promise.all(
     files.map(async (file) => new Uint8Array(await readFile(FONTS + file))),
   );
-  const regular = new Uint8Array(
-    await readFile(`${FONTS}PublicSans-Regular.ttf`),
+  const metrics = readFontMetrics(
+    new Uint8Array(await readFile(`${FONTS}PublicSans-Regular.ttf`)),
   );
-  const metrics = readFontMetrics(regular);
-  for (const fill of PIN_FILLS) {
-    const scene = pinScene(fill, { family: FAMILY, metrics: () => metrics });
-    const renderer = new Resvg(buildSvg(scene), {
-      font: { fontBuffers: buffers, loadSystemFonts: false },
-    });
-    const image = renderer.render();
-    const png = image.asPng();
-    image.free();
-    renderer.free();
-    await writeFile(OUT + fill.file, png);
-    console.log(
-      `${fill.file}: the pin on ${fill.kind}, ${String(Math.round(png.length / 1024))} KiB`,
-    );
-  }
+  await drawPinSamples(
+    (svg) => {
+      const renderer = new Resvg(svg, {
+        font: { fontBuffers: buffers, loadSystemFonts: false },
+      });
+      const image = renderer.render();
+      const png = image.asPng();
+      image.free();
+      renderer.free();
+      return png;
+    },
+    (file, png) => writeFile(OUT + file, png),
+    {
+      log: (line) => {
+        console.log(line);
+      },
+      error: (line) => {
+        console.error(line);
+      },
+    },
+    { family: FAMILY, metrics: () => metrics },
+  );
 }

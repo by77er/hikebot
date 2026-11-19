@@ -110,15 +110,14 @@
 
 ## Change the map style
 
-"Cairn map" in `docs/design-system.md` gives the roles, their tokens and the
-hierarchy the style keeps.
-
-1. Change the opacities, widths, dashes, zooms, label sizes, priorities or
-   furniture in `src/maps/style.ts`. A colour comes from a recipe in
-   `RECIPES`: a Cairn token, or a share of it mixed into another. For a new
-   kind of feature, add a role to `RECIPES` and draw it from that role in
-   `src/maps/svg.ts`.
-2. For each role whose colour you changed or added, print the colours the
+1. Read "Cairn map" in `docs/design-system.md` and keep the hierarchy it
+   sets for the roles you change.
+2. Change the opacities, widths, dashes, zooms, label sizes, priorities or
+   furniture in `src/maps/style.ts`. To change a role's colour, edit its
+   recipe in `RECIPES` there: name a Cairn token, or mix a share of one
+   token into another. For a new kind of feature, add a role to `RECIPES`
+   and draw it from that role in `src/maps/svg.ts`.
+3. For each role whose colour you changed or added, print the colours the
    recipes make and copy the role's line into the map group at the end of
    `:root` in `public/assets/cairn/tokens.css`:
 
@@ -137,7 +136,7 @@ hierarchy the style keeps.
    npx vitest run test/maps/style-tokens.test.ts
    ```
 
-3. To change the typeface, put its TrueType files (regular, semibold and
+4. To change the typeface, put its TrueType files (regular, semibold and
    italic) and its licence in `src/maps/fonts/`, then change the imports in
    `src/maps/font.ts` and `FAMILY` in `src/maps/style.ts`. Subset each file
    first, with the same ranges as the files there, using fontTools in a
@@ -151,9 +150,9 @@ hierarchy the style keeps.
    npx vitest run test/maps/font-metrics.test.ts
    ```
 
-4. Add 1 to `STYLE_VERSION` in `src/maps/style.ts`, so pictures drawn in the
+5. Add 1 to `STYLE_VERSION` in `src/maps/style.ts`, so pictures drawn in the
    old style are drawn again instead of served from the bucket.
-5. Keep the samples from before the change, draw them again, and put each
+6. Keep the samples from before the change, draw them again, and put each
    one, before and after, at 400 pixels wide on Discord's dark (`#313338`)
    and light (`#ffffff`) backgrounds, as Discord shows them on a phone. Look
    at every file in `public/assets/maps/samples/` that way and at full size.
@@ -168,7 +167,7 @@ hierarchy the style keeps.
    git status --short public/assets/maps/samples
    ```
 
-6. Run the map tests, take the screenshots of `/styleguide/map` as "Take the
+7. Run the map tests, take the screenshots of `/styleguide/map` as "Take the
    screenshots" in `src/web/AGENTS.md` says, and commit the style, the
    tokens, the fonts and the samples together:
 
@@ -178,6 +177,6 @@ hierarchy the style keeps.
    git add src/maps public/assets docs/screenshots
    ```
 
-7. Put the samples before and after under `## Screenshots` in the pull
+8. Put the samples before and after under `## Screenshots` in the pull
    request's description and your findings under `## Design review`, as
    "Review your own UI change as a designer" in `src/web/AGENTS.md` says.

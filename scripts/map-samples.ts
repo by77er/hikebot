@@ -9,7 +9,7 @@ import type { VectorTile } from "@mapbox/vector-tile";
 import regions from "../maps/regions.json";
 import type { LabelFont } from "../src/maps/font-metrics";
 import { coveringTiles, viewportAt } from "../src/maps/projection";
-import type { Scene } from "../src/maps/svg";
+import { buildSvg, type Scene } from "../src/maps/svg";
 
 export interface SampleView {
   /** The file name under public/assets/maps/samples/. */
@@ -166,4 +166,23 @@ export async function drawSamples(
     );
   }
   return failed > 0 ? 1 : 0;
+}
+
+/**
+ * Draws the pin on each fill in `PIN_FILLS` with `render`, which turns an
+ * SVG into PNG bytes, and writes each picture with `write`.
+ */
+export async function drawPinSamples(
+  render: (svg: string) => Uint8Array,
+  write: (file: string, png: Uint8Array) => Promise<void>,
+  output: Output,
+  fonts: LabelFont,
+): Promise<void> {
+  for (const fill of PIN_FILLS) {
+    const png = render(buildSvg(pinScene(fill, fonts)));
+    await write(fill.file, png);
+    output.log(
+      `${fill.file}: the pin on ${fill.kind}, ${String(Math.round(png.length / 1024))} KiB`,
+    );
+  }
 }
