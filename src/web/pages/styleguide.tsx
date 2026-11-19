@@ -30,6 +30,7 @@ import { hikeCardSection } from "./styleguide/hike-card";
 import { iconsSection } from "./styleguide/icons";
 import { layoutMotionSection } from "./styleguide/layout-motion";
 import { mapSection } from "./styleguide/map";
+import { mapViewSection } from "./styleguide/map-view";
 import { paginationSection } from "./styleguide/pagination";
 import { radioSection } from "./styleguide/radio";
 import { roundStepperSection } from "./styleguide/round-stepper";
@@ -76,6 +77,7 @@ const COMPONENTS: StyleguideSection[] = [
   formRowSection,
   hikeCardSection,
   iconsSection,
+  mapViewSection,
   paginationSection,
   radioSection,
   roundStepperSection,

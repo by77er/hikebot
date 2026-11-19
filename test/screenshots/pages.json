@@ -352,6 +352,14 @@
       "user": null
     },
     {
+      "name": "styleguide-map-view",
+      "path": "/styleguide/map-view",
+      "status": 200,
+      "seed": "empty",
+      "user": null,
+      "map": true
+    },
+    {
       "name": "styleguide-pagination",
       "path": "/styleguide/pagination",
       "status": 200,
