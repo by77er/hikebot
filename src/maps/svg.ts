@@ -8,7 +8,7 @@
  */
 import type { VectorTile, VectorTileFeature } from "@mapbox/vector-tile";
 import { clipLine, clipRing, type Rect } from "./clip";
-import type { FontFace, LabelFont, MapFonts } from "./font";
+import type { FontFace, LabelFont, SceneFonts } from "./font-metrics";
 import { overlaps, placeLabels, type Box, type LabelCandidate } from "./labels";
 import {
   metresPerPixel,
@@ -49,7 +49,7 @@ export interface Scene {
   pin: { lon: number; lat: number };
   units: Units;
   attribution: string;
-  fonts: Pick<MapFonts, "family" | "metrics" | "forText">;
+  fonts: SceneFonts;
 }
 
 type FillRole =

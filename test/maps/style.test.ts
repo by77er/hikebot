@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { WIDTHS, atZoom, type ZoomStops } from "../../src/maps/style";
+import {
+  LABEL_PRIORITY,
+  WIDTHS,
+  atZoom,
+  type ZoomStops,
+} from "../../src/maps/style";
 
 describe("atZoom", () => {
   const stops: ZoomStops = [
@@ -30,6 +35,27 @@ describe("atZoom", () => {
   });
 
   it("interpolates the style's own widths", () => {
-    expect(atZoom(WIDTHS.roadMajor, 13)).toBeCloseTo(3.1, 9);
+    expect(atZoom(WIDTHS.roadMajor, 13)).toBeCloseTo(3.5, 9);
+  });
+});
+
+describe("LABEL_PRIORITY", () => {
+  it("keeps summits, then water, before the places a hiker drives through", () => {
+    const order = Object.entries(LABEL_PRIORITY)
+      .sort(([, a], [, b]) => b - a)
+      .map(([role]) => role);
+    expect(order).toEqual([
+      "peak",
+      "water",
+      "town",
+      "village",
+      "neighbourhood",
+    ]);
+  });
+
+  it("leaves room for a town's population rank below water", () => {
+    // Protomaps ranks populations from 0 to 15.
+    expect(LABEL_PRIORITY.town + 15).toBeLessThan(LABEL_PRIORITY.water);
+    expect(LABEL_PRIORITY.village + 15).toBeLessThan(LABEL_PRIORITY.town);
   });
 });

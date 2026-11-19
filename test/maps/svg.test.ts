@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { beforeEach, describe, expect, it } from "vitest";
-import { mapFonts } from "../../src/maps/font";
+import { FALLBACK_FAMILY, FAMILY, mapFonts } from "../../src/maps/font";
 import { coveringTiles, viewportAt } from "../../src/maps/projection";
 import { MapReader } from "../../src/maps/reader";
 import { COLOURS } from "../../src/maps/style";
@@ -91,11 +91,25 @@ describe("buildSvg", () => {
     expect(imperial).toMatch(/>[\d.]+ (ft|mi)<\/text>/);
   });
 
-  it("draws the pin, orange with a light outline, with its tip on the point", async () => {
+  it("draws the pin as the blaze, with its tip on the point, outlined light then dark", async () => {
     const svg = buildSvg(await sceneAt(SUMMIT, 13));
-    const pin = svg.match(/<path d="M600 400[^"]*"([^>]*)\/>/);
-    expect(pin?.[1]).toContain(`fill="${COLOURS.pin}"`);
-    expect(pin?.[1]).toContain(`stroke="${COLOURS.pinOutline}"`);
+    const [keyline, blaze] = [
+      ...svg.matchAll(/<path d="M600 400[^"]*"([^>]*)\/>/g),
+    ].map((match) => match[1]);
+    expect(keyline).toContain(`stroke="${COLOURS.pinKeyline}"`);
+    expect(keyline).toContain(`fill="none"`);
+    expect(blaze).toContain(`fill="${COLOURS.pin}"`);
+    expect(blaze).toContain(`stroke="${COLOURS.pinOutline}"`);
+  });
+
+  it("sets labels in Public Sans, and a name it cannot set wholly in Noto Sans", async () => {
+    const svg = buildSvg(await sceneAt(SUMMIT, 13));
+    const familyOf = (text: string) =>
+      new RegExp(
+        `<text font-family="([^"]*)"[^>]*><tspan[^>]*>${text}</tspan>`,
+      ).exec(svg)?.[1];
+    expect(familyOf("Little Si")).toBe(FAMILY);
+    expect(familyOf("Mount Si / q̓əlbc̓")).toBe(FALLBACK_FAMILY);
   });
 
   it("prints the attribution it is given", async () => {

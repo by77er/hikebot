@@ -16,29 +16,21 @@ import fallbackSemiBold from "./fonts/NotoSans-SemiBold.ttf";
 import italic from "./fonts/PublicSans-Italic.ttf";
 import regular from "./fonts/PublicSans-Regular.ttf";
 import semiBold from "./fonts/PublicSans-SemiBold.ttf";
-import { readFontMetrics, type FontMetrics } from "./font-metrics";
+import {
+  readFontMetrics,
+  type LabelFont,
+  type SceneFonts,
+} from "./font-metrics";
+import { FALLBACK_FAMILY, FAMILY } from "./style";
 
-/** The family name the font files carry, for the SVG's `font-family`. */
-export const FAMILY = "Public Sans";
-/** The family of the fallback, for texts Public Sans cannot set. */
-export const FALLBACK_FAMILY = "Noto Sans";
+export { FALLBACK_FAMILY, FAMILY } from "./style";
 
-export interface FontFace {
-  weight: 400 | 600;
-  italic: boolean;
-}
+export type { FontFace, LabelFont } from "./font-metrics";
 
-/** One family: its name and its faces' metrics. */
-export interface LabelFont {
-  family: string;
-  metrics(face: FontFace): FontMetrics;
-}
-
-export interface MapFonts extends LabelFont {
+/** Public Sans, falling back to Noto Sans for a text it cannot set. */
+export interface MapFonts extends SceneFonts {
   /** Every font file, for the rasterizer. */
   buffers: Uint8Array[];
-  /** The family to set `text` in: Public Sans if it has every character. */
-  forText(text: string): LabelFont;
 }
 
 let loaded: MapFonts | undefined;

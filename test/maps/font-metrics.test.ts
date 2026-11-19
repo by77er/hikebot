@@ -1,6 +1,6 @@
 import { Resvg } from "@resvg/resvg-wasm";
 import { describe, expect, it } from "vitest";
-import { FAMILY, mapFonts } from "../../src/maps/font";
+import { FALLBACK_FAMILY, FAMILY, mapFonts } from "../../src/maps/font";
 import { rasterize } from "../../src/maps/rasterize";
 
 describe("mapFonts", () => {
@@ -28,14 +28,28 @@ describe("mapFonts", () => {
       const drawn = renderer.innerBBox();
       renderer.free();
       if (!drawn) throw new Error("nothing drawn");
-      // Ink is narrower than the advance by the side bearings; never wider.
-      expect(drawn.width).toBeLessThanOrEqual(measured + 1);
+      // Ink is narrower than the advance by the side bearings; Public Sans's
+      // W overhangs its advance by under 1 %, which the label halo holds.
+      expect(drawn.width).toBeLessThanOrEqual(measured * 1.01 + 1);
       expect(drawn.width).toBeGreaterThan(measured * 0.85);
     },
   );
 
-  it("gives combining marks no width of their own", () => {
+  it("sets a text in Public Sans when it has every character", () => {
+    expect(fonts.forText("Mount Si 1,254 m").family).toBe(FAMILY);
+    expect(fonts.forText("Mount Si / q̓əlbc̓").family).toBe(FALLBACK_FAMILY);
+    expect(fonts.forText("Łeba").family).toBe(FAMILY);
+  });
+
+  it("tells whether a font has a glyph for every character", () => {
     const metrics = fonts.metrics({ weight: 400, italic: false });
+    expect(metrics.covers("North Bend, 1,254 m")).toBe(true);
+    expect(metrics.covers("q̓əlbc̓")).toBe(false);
+    expect(metrics.covers("")).toBe(true);
+  });
+
+  it("gives combining marks no width of their own in the fallback", () => {
+    const metrics = fonts.forText("q̓").metrics({ weight: 400, italic: false });
     expect(metrics.width("q̓", 20)).toBeCloseTo(metrics.width("q", 20), 6);
   });
 

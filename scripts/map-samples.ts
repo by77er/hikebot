@@ -5,7 +5,11 @@
  * file `draw-map-samples.ts` starts the Worker in local workerd and passes
  * in the Durable Object's `picture` method and a file writer.
  */
+import type { VectorTile } from "@mapbox/vector-tile";
 import regions from "../maps/regions.json";
+import type { LabelFont } from "../src/maps/font-metrics";
+import { coveringTiles, viewportAt } from "../src/maps/projection";
+import type { Scene } from "../src/maps/svg";
 
 export interface SampleView {
   /** The file name under docs/maps/samples/. */
@@ -72,6 +76,54 @@ export const SAMPLE_VIEWS: SampleView[] = [
     zoom: 14,
   },
 ];
+
+/**
+ * The fills the pin must stay visible on. The sample archive has no
+ * glacier, so these pictures are drawn by the real drawing code from
+ * made-up tiles that hold one fill everywhere.
+ */
+export const PIN_FILLS = [
+  { file: "pin-on-forest.png", layer: "landuse", kind: "forest" },
+  { file: "pin-on-water.png", layer: "water", kind: "lake" },
+  { file: "pin-on-snow.png", layer: "landcover", kind: "glacier" },
+] as const;
+
+export type PinFill = (typeof PIN_FILLS)[number];
+
+/** The scene of a pin on one fill, at zoom 14, 480 by 320 at 2x. */
+export function pinScene(fill: PinFill, fonts: LabelFont): Scene {
+  const view = viewportAt(regions.samplePoint, {
+    zoom: 14,
+    tileZoom: 14,
+    width: 480,
+    height: 320,
+    pixelRatio: 2,
+  });
+  const extent = 4096;
+  const ring = [
+    { x: -64, y: -64 },
+    { x: extent + 64, y: -64 },
+    { x: extent + 64, y: extent + 64 },
+    { x: -64, y: extent + 64 },
+    { x: -64, y: -64 },
+  ];
+  const feature = {
+    type: 3,
+    properties: { kind: fill.kind },
+    loadGeometry: () => [ring],
+  };
+  const data = {
+    layers: { [fill.layer]: { extent, length: 1, feature: () => feature } },
+  } as unknown as VectorTile;
+  return {
+    view,
+    tiles: coveringTiles(view).map((tile) => ({ tile, data })),
+    pin: regions.samplePoint,
+    units: "metric",
+    attribution: "Made-up tiles",
+    fonts: { ...fonts, forText: () => fonts },
+  };
+}
 
 export interface Output {
   log: (line: string) => void;

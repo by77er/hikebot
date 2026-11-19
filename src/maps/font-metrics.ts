@@ -4,6 +4,23 @@
  * narrows text, so a measured box always holds the drawn label.
  */
 
+export interface FontFace {
+  weight: 400 | 600;
+  italic: boolean;
+}
+
+/** One family: its name and its faces' metrics. */
+export interface LabelFont {
+  family: string;
+  metrics(face: FontFace): FontMetrics;
+}
+
+/** The label fonts as the drawing code needs them. */
+export interface SceneFonts extends LabelFont {
+  /** The family to set `text` in: the main one if it has every character. */
+  forText(text: string): LabelFont;
+}
+
 export interface FontMetrics {
   /** The text's width at `size` pixels. */
   width(text: string, size: number): number;

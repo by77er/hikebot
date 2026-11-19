@@ -55,9 +55,9 @@ export interface ColourRecipe {
 export const RECIPES = {
   /** Everything that is not water or another fill: the paper. */
   land: { token: "color-bg" },
-  forest: { token: "color-success", amount: 0.2 },
+  forest: { token: "color-success", amount: 0.22 },
   /** Grass, meadow, scrub and wetland. */
-  grass: { token: "color-success", amount: 0.12 },
+  grass: { token: "color-success", amount: 0.1 },
   /** Bare rock, scree and sand. */
   bareRock: { token: "color-border", amount: 0.7 },
   /** Glaciers and permanent snow: whiter than the paper, a hint of lake. */
@@ -65,14 +65,14 @@ export const RECIPES = {
   /** Towns' built-up areas. */
   settled: { token: "color-border", amount: 0.45 },
   /** Parks, gardens and pitches. */
-  park: { token: "color-success", amount: 0.2 },
+  park: { token: "color-success", amount: 0.15 },
   /** National parks, nature reserves and other protected areas. */
   protectedArea: { token: "color-primary" },
   protectedAreaOutline: { token: "color-primary", amount: 0.55 },
   water: { token: "color-info", amount: 0.5, into: "color-surface" },
   waterLabel: { token: "color-info" },
-  roadMotorway: { token: "color-border-strong", amount: 0.45 },
-  roadMotorwayCasing: { token: "color-text-muted" },
+  roadMotorway: { token: "color-border-strong", amount: 0.35 },
+  roadMotorwayCasing: { token: "color-border-strong" },
   roadMajor: { token: "color-surface" },
   roadMajorCasing: { token: "color-text-muted" },
   roadMinor: { token: "color-surface" },
@@ -128,7 +128,7 @@ export const COLOURS = Object.fromEntries(
 /** Opacity per role that is drawn see-through; every other role is opaque. */
 export const OPACITY: Partial<Record<ColourRole, number>> = {
   protectedArea: 0.08,
-  building: 0.55,
+  building: 0.4,
   furnitureBackground: 0.8,
 };
 
@@ -169,8 +169,8 @@ export const WIDTHS = {
     [14, 1],
   ],
   path: [
-    [11, 2],
-    [12, 2.1],
+    [11, 2.3],
+    [12, 2.3],
     [14, 2.6],
     [16, 3.2],
   ],
@@ -254,6 +254,11 @@ export const LABEL_SIZES = {
 } as const satisfies Record<string, ZoomStops>;
 
 export type LabelRole = keyof typeof LABEL_SIZES;
+
+/** The family name the label font files carry (`./font.ts` loads them). */
+export const FAMILY = "Public Sans";
+/** The family of the fallback, for texts Public Sans has no glyph for. */
+export const FALLBACK_FAMILY = "Noto Sans";
 
 /** The typeface's weight and style per label role. */
 export const LABEL_FONTS: Record<

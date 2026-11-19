@@ -124,6 +124,44 @@
     --duration-quick: 120ms;
     --duration-moderate: 240ms;
     --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+
+    /*
+     * The map picture's colours, one per role of src/maps/style.ts, each
+     * made from a light-scheme colour above by the recipe there. A picture
+     * has one look in both schemes, so these have no dark values;
+     * test/maps/style-tokens.test.ts checks them against the style.
+     */
+    --map-land: #faf8f3;
+    --map-forest: #cdd9c9;
+    --map-grass: #e5eae0;
+    --map-bare-rock: #e6e0d5;
+    --map-ice: #f1f5f8;
+    --map-settled: #ede9e0;
+    --map-park: #dbe3d6;
+    --map-protected-area: #1f5d45;
+    --map-protected-area-outline: #82a393;
+    --map-water: #8eafc3;
+    --map-water-label: #1d5e86;
+    --map-road-motorway: #ced0cb;
+    --map-road-motorway-casing: #7d8781;
+    --map-road-major: #ffffff;
+    --map-road-major-casing: #566059;
+    --map-road-minor: #ffffff;
+    --map-road-minor-casing: #7d8781;
+    --map-rail: #566059;
+    --map-path: #8f411f;
+    --map-track: #845c44;
+    --map-path-halo: #faf8f3;
+    --map-building: #7d8781;
+    --map-label: #1f2421;
+    --map-label-halo: #faf8f3;
+    --map-peak: #1f2421;
+    --map-pin: #d9541e;
+    --map-pin-outline: #ffffff;
+    --map-pin-keyline: #1f2421;
+    --map-furniture: #1f2421;
+    --map-furniture-background: #ffffff;
+    --map-frame: #7d8781;
   }
 
   @media (prefers-color-scheme: dark) {
