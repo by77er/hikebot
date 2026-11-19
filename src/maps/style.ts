@@ -16,8 +16,8 @@ export const STYLE_VERSION = 2;
  * The light-scheme values of the Cairn tokens the map is drawn from, as
  * `public/assets/cairn/tokens.css` gives them in `:root`. A picture has one
  * look whatever the viewer's scheme: it is posted into Discord, where both
- * themes show the same image. `test/maps/style-tokens.test.ts` fails when a
- * value here differs from the stylesheet.
+ * themes show the same image. A unit test fails when a value here differs
+ * from the stylesheet.
  */
 export const CAIRN = {
   "color-bg": "#faf8f3",

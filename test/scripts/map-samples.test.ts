@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import regions from "../../maps/regions.json";
 import {
+  PIN_FILLS,
   SAMPLE_VIEWS,
   drawSamples,
+  pinScene,
   type Paint,
 } from "../../scripts/map-samples";
 
@@ -99,4 +101,41 @@ describe("drawSamples", () => {
     expect(code).toBe(1);
     expect(lines[0]).toContain("no map data");
   });
+});
+
+describe("PIN_FILLS and pinScene", () => {
+  const fonts = {
+    family: "Public Sans",
+    metrics: () => ({
+      width: (text: string, size: number) => text.length * size * 0.5,
+      covers: () => true,
+      ascent: 0.9,
+      descent: 0.2,
+    }),
+  };
+
+  it("checks the pin on forest, water and snow, each in a file of its own", () => {
+    expect(PIN_FILLS.map(({ kind }) => kind)).toEqual([
+      "forest",
+      "lake",
+      "glacier",
+    ]);
+    const files = [...SAMPLE_VIEWS, ...PIN_FILLS].map(({ file }) => file);
+    expect(new Set(files).size).toBe(files.length);
+  });
+
+  it.each(PIN_FILLS)(
+    "covers a full-size picture with $kind and puts the pin in its middle",
+    (fill) => {
+      const scene = pinScene(fill, fonts);
+      expect([scene.view.width, scene.view.height]).toEqual([1200, 800]);
+      expect(scene.pin).toEqual(regions.samplePoint);
+      expect(scene.tiles.length).toBeGreaterThan(0);
+      for (const { data } of scene.tiles) {
+        const layer = data.layers[fill.layer];
+        expect(layer?.length).toBe(1);
+        expect(layer?.feature(0).properties.kind).toBe(fill.kind);
+      }
+    },
+  );
 });
