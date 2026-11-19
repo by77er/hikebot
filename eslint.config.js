@@ -10,6 +10,8 @@ export default defineConfig(
       ".wrangler",
       "worker-configuration.d.ts",
       "types/lib-dom",
+      // MapLibre GL JS, copied unchanged from its npm package.
+      "public/assets/maps/maplibre",
     ],
   },
   js.configs.recommended,
@@ -31,6 +33,12 @@ export default defineConfig(
   {
     files: ["*.js"],
     extends: [tseslint.configs.disableTypeChecked],
+  },
+  {
+    // Scripts the pages load: plain JavaScript modules run by the browser.
+    files: ["public/**/*.mjs"],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: { globals: globals.browser, sourceType: "module" },
   },
   {
     // End-to-end tests drive the Worker only over HTTP; the probe Worker is

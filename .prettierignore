@@ -5,3 +5,5 @@ worker-configuration.d.ts
 UNDERCURRENT.md
 # Written by the Map data workflow.
 maps/sample/
+# MapLibre GL JS, copied unchanged from its npm package.
+public/assets/maps/maplibre/
