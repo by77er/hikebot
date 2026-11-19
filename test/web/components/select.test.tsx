@@ -108,5 +108,9 @@ describe("Select", () => {
       />,
     );
     expect(html).toContain(' disabled data-preview="focus"');
+    // Only the select previews a state, so focus draws one ring, as it does
+    // on a real keyboard focus.
+    expect(html).toContain('<span class="select"><select');
+    expect(html.match(/data-preview=/g)).toHaveLength(1);
   });
 });

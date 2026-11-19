@@ -69,7 +69,7 @@ export function Select({
       error={error}
       required={required}
     >
-      <span class="select" data-preview={preview}>
+      <span class="select">
         <select
           class="input select__input"
           id={id}

@@ -1105,16 +1105,14 @@ wide. The style is tuned at zooms 11, 12 and 14 on the samples for that:
 | The contour pattern                             | 12 KB  | 9 KB          |
 | Everything a page loads from Cairn, transferred | 64 KB  | about 53 KB   |
 
-The stylesheets' budget was 20 KB until the form controls and page
-furniture came in: with them, the three sets of components built at the
-same time came to about 22.5 KB together. It is 24 KB now, for two
-reasons. Each file is compressed on its own, and one file per component
-means 33 small files whose shared vocabulary (`var(--space-`,
-`border-radius`) is compressed again in each: joined into one file, the
-same rules are about 13.5 KB gzipped. And the cost a member pays is the
-whole page's, which stays within its unchanged 64 KB, with every file
-cached for a year. Raise it again only with the same kind of reason, and
-first look for rules components can share.
+The stylesheets' budget is 24 KB rather than 20 KB, for two reasons.
+Each file is compressed on its own, and one file per component means 33
+small files whose shared vocabulary (`var(--space-`, `border-radius`) is
+compressed again in each: joined into one file, the same rules are about
+13.5 KB gzipped. And the cost a member pays is the whole page's, which
+stays within its 64 KB, with every file cached for a year. Raise it again
+only with the same kind of reason, and first look for rules components can
+share.
 
 ## Designing a new page
 

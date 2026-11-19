@@ -36,7 +36,7 @@ type ProposalErrors = Partial<Record<keyof Proposal, string>>;
 const COORDINATES = /^-?\d{1,2}(\.\d+)?,\s*-?\d{1,3}(\.\d+)?$/;
 const SHORT_LINK = /^https?:\/\/(maps\.app\.goo\.gl|goo\.gl)\//i;
 
-/** The checks the bot makes, in its words. */
+/** A simplified stand-in for the bot's checks, in words like the bot's. */
 export function checkProposal(proposal: Proposal): ProposalErrors {
   const errors: ProposalErrors = {};
   const name = proposal.name.trim();
