@@ -53,7 +53,7 @@ export function HikePlace({ view, csrf }: { view: WebView; csrf: string }) {
               guildId={view.server.id}
               roundId={place.roundId}
               csrf={csrf}
-              variant={view.round === null ? "primary" : "secondary"}
+              variant="secondary"
             />
           )}
         </>

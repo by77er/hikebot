@@ -72,7 +72,9 @@ describe("HikePlace", () => {
     expect(html).toContain('name="target" value="12"');
     expect(html).toContain('name="text"');
     expect(html).toContain("Set map pin");
-    expect(html).toContain("button--primary");
+    // The page's primary action is the Admin card's.
+    expect(html).toContain("button--secondary");
+    expect(html).not.toContain("button--primary");
   });
 
   it("gives no form when the hike can no longer be pinned", () => {
