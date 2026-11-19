@@ -15,8 +15,12 @@
  * scale factor is 1, fonts come from the browser package, never from the
  * machine, and the shot waits for the page's fonts and CSS images (such as
  * the header's contour-line mask) to be ready, and for every interactive
- * map to have drawn everything it shows (MapLibre's `idle`). A page entry
- * with `"javascript": false` is opened with JavaScript off.
+ * map to have drawn everything it shows (MapLibre's `idle`); pages marked
+ * `"map": true` are taken in a second browser with WebGL. A page entry
+ * with `"javascript": false` is shown as a browser with JavaScript off
+ * shows it: every script it loads is answered empty, so none of the page's
+ * code runs (turning JavaScript off in the browser would also stop the
+ * script's own waits).
  *
  * With `--check` it then prints the SHA-256 of each PNG, to compare with
  * another machine's without copying the files, and fails if any file in
@@ -101,6 +105,7 @@ async function main(): Promise<void> {
 
   const { E2ERun } = await import("../e2e/harness/start");
   const browser = await launchBrowser();
+  let mapBrowser: Browser | undefined;
   try {
     for (const page of list.pages) {
       // A fresh Worker per page, so one page's seed cannot show on another.
@@ -113,8 +118,9 @@ async function main(): Promise<void> {
         for (const viewport of Object.keys(VIEWPORTS) as ViewportName[]) {
           for (const scheme of SCHEMES) {
             const file = screenshotFile(page.name, viewport, scheme);
+            if (page.map) mapBrowser ??= await launchBrowser({ webgl: true });
             const png = await capture(
-              browser,
+              page.map && mapBrowser ? mapBrowser : browser,
               e2e.url,
               page,
               viewport,
@@ -131,6 +137,7 @@ async function main(): Promise<void> {
     }
   } finally {
     await browser.close();
+    await mapBrowser?.close();
   }
 
   if (check) {
@@ -180,6 +187,8 @@ async function capture(
       const reply =
         answer && request.isNavigationRequest() && request.url() === url.href
           ? answer
+          : entry.javascript === false && request.resourceType() === "script"
+          ? NO_SCRIPT
           : cdnReply(request.url());
       void (reply ? request.respond(reply) : request.continue());
     });
@@ -208,7 +217,6 @@ async function capture(
       failures.push(`page error: ${String(error)}`);
     });
 
-    if (entry.javascript === false) await page.setJavaScriptEnabled(false);
     const size = VIEWPORTS[viewport];
     await page.setViewport({ ...size, deviceScaleFactor: 1 });
     await page.emulateMediaFeatures([
@@ -371,6 +379,9 @@ const CSS_IMAGES_READY = `(async () => {
   }));
   await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 })()`;
+
+/** The answer to a script request of a page shown without JavaScript. */
+const NO_SCRIPT = { status: 200, contentType: "text/javascript", body: "" };
 
 /**
  * True once every map view on the page has drawn (`data-map-state` set to

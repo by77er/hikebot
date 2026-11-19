@@ -88,6 +88,30 @@ describe("ServerPage", () => {
     expect(shown.scripts).toBe(0);
   });
 
+  it("puts the map of an open location vote right after the vote", async () => {
+    const { page: shown } = await page(
+      baseView({
+        round: round(
+          "location_vote_open",
+          openVote("location", [
+            { label: "Lake", votes: 1, point: { lat: 47.5, lon: -121.7 } },
+          ]),
+        ),
+        plannedHike: plannedHike(),
+      }),
+    );
+    const order = [
+      "Location vote",
+      "Proposed locations on the map",
+      "Planned hike",
+    ].map((words) => shown.text.indexOf(words));
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // The map's own script, from this site; nothing inline.
+    expect(shown.scripts).toBe(1);
+    expect(shown.styleAttributes).toBe(0);
+  });
+
   it("has one h1 and one primary action", async () => {
     const { html } = await page(
       baseView({

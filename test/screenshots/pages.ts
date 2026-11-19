@@ -44,6 +44,11 @@ export interface ScreenshotPage {
    * shows the page. Defaults to on.
    */
   javascript?: boolean;
+  /**
+   * The page draws an interactive map: it is taken in a browser with WebGL
+   * (`launchBrowser` in `browser.ts`). A map on a page without it fails.
+   */
+  map?: boolean;
 }
 
 export interface ExcludedRoute {

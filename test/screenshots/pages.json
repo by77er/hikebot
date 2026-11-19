@@ -125,7 +125,8 @@
       "path": "/g/220000000000000101",
       "status": 200,
       "seed": "server-hike-map",
-      "user": "400000000000000001"
+      "user": "400000000000000001",
+      "map": true
     },
     {
       "name": "server-hike-map-no-js",
@@ -226,7 +227,8 @@
       "path": "/g/220000000000000101",
       "status": 200,
       "seed": "server-location-vote-map",
-      "user": "400000000000000001"
+      "user": "400000000000000001",
+      "map": true
     },
     {
       "name": "server-location-vote-voted",

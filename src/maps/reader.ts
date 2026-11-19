@@ -82,7 +82,8 @@ export class MapReader {
    * for serving as it is; `"empty"` when some archive covers the tile (its
    * zooms include `z` and its box overlaps the tile) but none has it, which
    * is the archives' way of saying there is nothing there; undefined
-   * outside every archive, or without map data.
+   * outside every archive, without map data, or when every archive that
+   * covers it could not be read.
    */
   async storedTile(
     z: number,
@@ -97,9 +98,10 @@ export class MapReader {
     for (const archive of byDetail(manifest.archives)) {
       if (z < archive.minzoom || z > archive.maxzoom) continue;
       if (!overlaps(archive.bbox, bounds)) continue;
-      covered = true;
       const data = await this.readTile(archive, z, x, y);
+      if (data === "error") continue;
       if (data) return data;
+      covered = true;
     }
     return covered ? "empty" : undefined;
   }
@@ -155,12 +157,13 @@ export class MapReader {
     return (await this.currentManifest())?.attribution;
   }
 
+  /** Undefined when the archive has no such tile; "error" when unreadable. */
   private async readTile(
     archive: ManifestArchive,
     z: number,
     x: number,
     y: number,
-  ): Promise<StoredTile | undefined> {
+  ): Promise<StoredTile | "error" | undefined> {
     try {
       const pmtiles = this.pmtiles(archive.key);
       const response = await pmtiles.getZxy(z, x, y);
@@ -171,7 +174,7 @@ export class MapReader {
       console.warn(
         `map archive ${archive.key} unreadable: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return undefined;
+      return "error";
     }
   }
 
