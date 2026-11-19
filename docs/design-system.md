@@ -598,9 +598,9 @@ Cairn meets WCAG 2.2 AA:
 | What                                            | Budget | Now         |
 | ----------------------------------------------- | ------ | ----------- |
 | The font file                                   | 32 KB  | 27 KB       |
-| All stylesheets, each gzipped, together         | 20 KB  | about 10 KB |
+| All stylesheets, each gzipped, together         | 20 KB  | about 15 KB |
 | The contour pattern                             | 12 KB  | 9 KB        |
-| Everything a page loads from Cairn, transferred | 64 KB  | about 41 KB |
+| Everything a page loads from Cairn, transferred | 64 KB  | about 46 KB |
 
 ## Designing a new page
 
