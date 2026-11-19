@@ -33,10 +33,8 @@
 
 1. Pass the files as the last argument of `createMessage` or `editMessage`
    in `src/discord/api.ts`, each a `FileUpload` (`name`, `data`,
-   `contentType`). The client sends the body as `payload_json` and each
-   file as `files[n]`, and adds an `attachments` entry naming each file.
-   Show a file in the message with a component that refers to it as
-   `attachment://<name>`:
+   `contentType`), and show a file in the message with a component that
+   refers to it as `attachment://<name>`:
 
    ```ts
    await discordApi(context.env).editMessage(
@@ -49,15 +47,16 @@
    );
    ```
 
-2. On an edit, choose what happens to the message's attachments: with
-   files, they replace the attachments, except those `body.attachments`
-   lists by id; without files and without `attachments`, the edit keeps
-   them; `attachments: []` removes them all.
+2. On an edit, pick how the message's attachments change: to replace
+   them, pass files, listing any to keep by id in `body.attachments`; to
+   keep them, pass neither files nor `attachments`; to remove them all, set
+   `attachments: []`.
 3. For an image field, such as a scheduled event's `image`, pass
    `imageData(bytes, "image/png")`.
 4. Test the request as the "file uploads" block of
-   `test/discord/api.test.ts` does, reading it back with
-   `request.formData()`, and run it:
+   `test/discord/api.test.ts` does: read it back with `request.formData()`,
+   the message from the `payload_json` field and the files from `files[0]`,
+   `files[1]` and so on, then run it:
 
    ```sh
    npx vitest run test/discord/api.test.ts
