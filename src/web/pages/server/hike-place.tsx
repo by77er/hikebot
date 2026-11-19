@@ -11,6 +11,7 @@ import type { WebView } from "../../../guild/web-view";
 import { Button } from "../../components/button";
 import { MapPinIcon } from "../../components/icons";
 import { MapLinks } from "../../components/map-links";
+import { adminPath } from "./admin-retry";
 import { MapPinForm } from "./map-pin-form";
 
 export function HikePlace({ view, csrf }: { view: WebView; csrf: string }) {
@@ -28,7 +29,7 @@ export function HikePlace({ view, csrf }: { view: WebView; csrf: string }) {
               <Button
                 variant="quiet"
                 icon={MapPinIcon}
-                href={`/g/${view.server.id}/map-pin`}
+                href={adminPath(view.server.id, "set-map-pin")}
               >
                 Change map pin
               </Button>

@@ -228,7 +228,7 @@ describe("the server's page about a planned hike", () => {
     ].map((match) => match[1]);
     expect(pageHours).toEqual(threadHours);
     // A member gets no Set map pin.
-    expect(page.body).not.toContain(`/g/${g.guildId}/map-pin`);
+    expect(page.body).not.toContain(`/g/${g.guildId}/admin/set-map-pin`);
   });
 
   it("lets an admin set the map pin from the page, which updates the thread and the event, and refuses a forged form and a member", async () => {
@@ -250,16 +250,18 @@ describe("the server's page about a planned hike", () => {
     expect(textOf(memberPage.body)).toMatch(
       /Where (This hike has no map pin|The map pin is being looked up)/,
     );
-    expect(memberPage.body).not.toContain(`action="/g/${g.guildId}/map-pin"`);
+    expect(memberPage.body).not.toContain(
+      `action="/g/${g.guildId}/admin/set-map-pin"`,
+    );
 
     // The owner signs in and finds the form.
     const owner = await signIn(g.owner.actor.userId, g);
     const page = await owner.get(`/g/${g.guildId}`);
-    expect(page.body).toContain(`action="/g/${g.guildId}/map-pin"`);
+    expect(page.body).toContain(`action="/g/${g.guildId}/admin/set-map-pin"`);
 
     // A forged form, from another site, is refused and changes nothing.
-    const forged = await owner.request(`/g/${g.guildId}/map-pin`, {
-      form: { round: "1", point: PARADISE },
+    const forged = await owner.request(`/g/${g.guildId}/admin/set-map-pin`, {
+      form: { target: "1", text: PARADISE },
       headers: {
         Origin: "https://evil.example",
         "Sec-Fetch-Site": "cross-site",
@@ -269,27 +271,38 @@ describe("the server's page about a planned hike", () => {
     // A member posting the form with their own token is refused too.
     const memberToken = formFields(memberPage.body, "/logout")?.csrf ?? "";
     expect(memberToken).not.toBe("");
-    const refused = await memberClient.request(`/g/${g.guildId}/map-pin`, {
-      form: { csrf: memberToken, round: "1", point: PARADISE },
-      headers: {
-        Origin: memberPage.url.origin,
-        "Sec-Fetch-Site": "same-origin",
+    const refused = await memberClient.request(
+      `/g/${g.guildId}/admin/set-map-pin`,
+      {
+        form: { csrf: memberToken, target: "1", text: PARADISE },
+        headers: {
+          Origin: memberPage.url.origin,
+          "Sec-Fetch-Site": "same-origin",
+        },
       },
-    });
+    );
     expect(refused.status).toBe(403);
-    expect(textOf(refused.body)).toContain("Only an admin can set the map pin");
+    expect(textOf(refused.body)).toContain("Only admins can do this");
     expect(messageText(threadMessage(g))).toContain(noPin);
 
     // Coordinates the panel cannot read come back with the error.
-    const unreadable = await owner.submitForm(page, `/g/${g.guildId}/map-pin`, {
-      point: "somewhere near the lake",
-    });
+    const unreadable = await owner.submitForm(
+      page,
+      `/g/${g.guildId}/admin/set-map-pin`,
+      {
+        text: "somewhere near the lake",
+      },
+    );
     expect(unreadable.status).toBe(400);
     expect(textOf(unreadable.body)).toContain("No coordinates could be read");
 
-    const set = await owner.submitForm(page, `/g/${g.guildId}/map-pin`, {
-      point: PARADISE,
-    });
+    const set = await owner.submitForm(
+      page,
+      `/g/${g.guildId}/admin/set-map-pin`,
+      {
+        text: PARADISE,
+      },
+    );
     expect(set.status).toBe(303);
     expect(set.location?.pathname).toBe(`/g/${g.guildId}`);
 
@@ -301,6 +314,10 @@ describe("the server's page about a planned hike", () => {
       expect(eventDescription(g)).toContain("46.78591");
     }, FORECAST_TIMEOUT);
     const after = textOf((await owner.get(`/g/${g.guildId}`)).body);
+    // The notice says what was set, in the panel's words.
+    expect(after).toContain(
+      "The map pin of Somewhere Nice is set to 46.78591, -121.73532.",
+    );
     expect(after).toContain("46.78591, -121.73532");
     expect(after).toContain("13:00 Overcast 50°F");
   });
@@ -313,7 +330,10 @@ describe("the server's page about a planned hike", () => {
       expect(messageText(threadMessage(g))).toMatch(/\n13:00 +50\/46 /);
     }, FORECAST_TIMEOUT);
     const owner = await signIn(g.owner.actor.userId, g);
-    for (const path of [`/g/${g.guildId}`, `/g/${g.guildId}/map-pin`]) {
+    for (const path of [
+      `/g/${g.guildId}`,
+      `/g/${g.guildId}/admin/set-map-pin`,
+    ]) {
       const page = await owner.get(path);
       expect(page.status).toBe(200);
       expect(page.headers.get("content-security-policy")).toBe(

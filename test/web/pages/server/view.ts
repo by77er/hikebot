@@ -233,6 +233,7 @@ export function adminAction(
       ...plain("Announce date vote", 2, "secondary"),
       note: "**Date vote announcement:** not posted.",
     },
+    "set-map-pin": plain("Set map pin", 12, "secondary"),
   };
   return { kind, ...base[kind], ...overrides };
 }
@@ -261,7 +262,6 @@ export function adminSection(
     ...overrides,
   };
 }
-
 
 /** A pin at Mailbox Peak, with the geocoder's name unless `name` is null. */
 export function mapPin(

@@ -41,7 +41,9 @@ describe("HikePlace", () => {
   });
 
   it("offers an admin Change map pin", () => {
-    expect(shown(hikePlace(), true)).toContain(`href="/g/${GUILD}/map-pin"`);
+    expect(shown(hikePlace(), true)).toContain(
+      `href="/g/${GUILD}/admin/set-map-pin"`,
+    );
   });
 
   it("says the pin is being looked up, and lets an admin set one meanwhile", async () => {
@@ -62,13 +64,13 @@ describe("HikePlace", () => {
     expect(html).not.toContain("<form");
   });
 
-  it("gives an admin the Set map pin form, posting to the server's map pin with the token and the hike's round", () => {
+  it("gives an admin the Set map pin form, posting the admin control with the token and the hike's round", () => {
     const html = shown(hikePlace({ pin: null }), true);
-    expect(html).toContain(`action="/g/${GUILD}/map-pin"`);
+    expect(html).toContain(`action="/g/${GUILD}/admin/set-map-pin"`);
     expect(html).toContain('method="post"');
     expect(html).toContain('name="csrf" value="csrf-token"');
-    expect(html).toContain('name="round" value="12"');
-    expect(html).toContain('name="point"');
+    expect(html).toContain('name="target" value="12"');
+    expect(html).toContain('name="text"');
     expect(html).toContain("Set map pin");
     expect(html).toContain("button--primary");
   });

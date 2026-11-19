@@ -1,16 +1,19 @@
 /**
  * The Set map pin form of a server's planned hike, as the admin panel's
  * modal asks it: a map link or coordinates, empty to remove the pin. It
- * posts to `/g/<guild id>/map-pin` with the CSRF token and the hike's
- * round, so a pin set for a hike that is no longer the one shown is
- * refused. On the server's page and on the Set map pin page.
+ * posts the admin control `set-map-pin` (`/g/<guild id>/admin/set-map-pin`)
+ * with the CSRF token, the hike's round as its target, so a pin set for a
+ * hike that is no longer the one shown is refused, and what was typed as
+ * its text. On the server's page and on the Set map pin page.
  */
 import { MAX_PIN_INPUT } from "../../../features/map-pin";
+import { TARGET_FIELD, TEXT_FIELD } from "../../admin/fields";
 import { CsrfField } from "../../auth/csrf";
 import { Button, type ButtonVariant } from "../../components/button";
 import { FormActions } from "../../components/form-actions";
 import { MapPinIcon } from "../../components/icons";
 import { TextField } from "../../components/text-field";
+import { adminPath } from "./admin-retry";
 
 /** The field's id, for the error summary's link. */
 export const MAP_PIN_FIELD = "map-pin-point";
@@ -42,15 +45,15 @@ export function MapPinForm({
   return (
     <form
       method="post"
-      action={`/g/${guildId}/map-pin`}
+      action={adminPath(guildId, "set-map-pin")}
       novalidate
       class="stack stack--loose"
     >
       <CsrfField token={csrf} />
-      <input type="hidden" name="round" value={String(roundId)} />
+      <input type="hidden" name={TARGET_FIELD} value={String(roundId)} />
       <TextField
         id={MAP_PIN_FIELD}
-        name="point"
+        name={TEXT_FIELD}
         label="Map link or coordinates"
         hint={MAP_PIN_HINT}
         maxLength={MAX_PIN_INPUT}
