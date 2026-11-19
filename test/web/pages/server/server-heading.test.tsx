@@ -21,6 +21,19 @@ describe("ServerHeading", () => {
     expect(await spokenText(html)).toContain("Switch server Ridge Walkers");
   });
 
+  it("offers Settings to an admin only", () => {
+    expect(render(<ServerHeading view={baseView()} />)).not.toContain(
+      "/settings",
+    );
+    const html = render(
+      <ServerHeading
+        view={baseView({ viewer: { userId: "1", isAdmin: true } })}
+      />,
+    );
+    expect(html).toContain(`href="/g/${GUILD}/settings"`);
+    expect(html).toContain("<span>Settings</span>");
+  });
+
   it("has no stepper with no round and no planned hike", () => {
     const html = render(<ServerHeading view={baseView()} />);
     expect(html).not.toContain("round-stepper");

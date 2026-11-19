@@ -9,13 +9,34 @@ holding that server's state. It receives Discord interactions over HTTP only,
 with no gateway connection. See [`docs/design.md`](docs/design.md) for the
 design and [`AGENTS.md`](AGENTS.md) for how to work on the code.
 
+## Settings
+
+A server's admins (its owner, and members with the admin role) set
+hikebot up for the server in either of two places, which show and change
+the same settings in the same way:
+
+- **In Discord**: run `/hike admin` and open **Settings**.
+- **On the web**: sign in at the bot's site, choose the server, and open
+  **Settings** under its name (`/g/<server id>/settings`). Each part (Admin
+  role, Channels, Time zone, Home area, Units, Schedule) has its own
+  **Save** button; roles and channels are picked by name from the server's
+  own lists.
+
+The settings are the admin role; the voting, announcements and hike threads
+channels (all three are needed before a vote can start); the time zone
+dates are planned in; the home area that locations are looked up near; the
+units of the weather forecast; and the weekly schedule below. A change made
+in one place shows in the other at once, and anything refused is refused in
+both with the same words.
+
 ## Weekly schedule
 
 A server's admins can let hikebot run the rounds by itself on a fixed day
 each week. In Discord, run `/hike admin`, open **Settings**, and under
 **Schedule** pick the weekday, the time (**Set schedule time**, `HH:MM` in
 the server's time zone) and how many days the date vote stays open, then
-click **Turn schedule on**. It needs the voting, announcements and hike
+click **Turn schedule on**; or, on the web settings page, set the same under
+**Schedule** and click **Save schedule**. It needs the voting, announcements and hike
 threads channels set first. With the defaults, Wednesday at 09:00:
 
 1. On a Wednesday, hikebot opens a location vote with no options; members

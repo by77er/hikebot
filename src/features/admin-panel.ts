@@ -1,6 +1,5 @@
 import {
   ButtonStyle,
-  ChannelType,
   ComponentType,
   SelectMenuDefaultValueType,
   type APIButtonComponentWithCustomId,
@@ -32,9 +31,7 @@ import {
   MAX_DATE_VOTE_DAYS,
   MIN_DATE_VOTE_DAYS,
   setupComplete,
-  type CadenceSettings,
   type GuildSettings,
-  type SettingField,
 } from "../guild/config";
 import { ephemeralNotice } from "../discord/responses";
 import { adminOnly } from "../guild/permissions";
@@ -43,7 +40,6 @@ import {
   DEFAULT_HIKE_TIME,
   WEEKDAY_NAMES,
   clockIn,
-  normalizeTimeZone,
 } from "../polls/dates";
 import {
   PollStore,
@@ -62,19 +58,41 @@ import type {
   Router,
 } from "../guild/router";
 import { UNAVAILABLE_MESSAGE } from "../guild/router";
-import { schedule } from "../guild/schedule";
-import { UNITS, type Units } from "../weather/forecast";
-import { WEATHER_JOB } from "./weather-state";
+import { UNITS } from "../weather/forecast";
+import {
+  changeSchedule,
+  checkAdminRole,
+  checkChannel,
+  checkDateVoteDays,
+  checkScheduleOn,
+  checkTimeOfDay,
+  checkTimeZone,
+  checkUnits,
+  checkWeekday,
+  dayCount,
+  listing,
+  missingSettings,
+  noticeMarkdown,
+  setAdminRole,
+  setChannel,
+  setTimeZone,
+  setUnits,
+  type Notice,
+  type ScheduleChange,
+} from "./settings";
+import {
+  CHANNEL_SETTINGS,
+  UNIT_NAMES,
+  type ChannelSetting,
+} from "./settings-catalogue";
 import {
   announcementStatus,
   type AnnouncementStatus,
 } from "./announcement-state";
 import {
   cadenceSnapshot,
-  changeCadence as changeSchedule,
   discordTime,
   nextCadenceAction,
-  rescheduleCadence,
   type CadenceAction,
 } from "./cadence-state";
 import {
@@ -182,42 +200,12 @@ export const POLL_NAMES: Record<PollKind, string> = {
 
 const NOT_SET = "not set";
 
-/** How the settings name each unit system. */
-const UNIT_NAMES: Record<Units, string> = {
-  imperial: "Imperial: °F, mph, inches, feet",
-  metric: "Metric: °C, km/h, millimetres, metres",
+/** The custom_id of each channel setting's select. */
+const CHANNEL_SELECT_IDS: Record<ChannelSetting["field"], string> = {
+  voteChannelId: ADMIN_PANEL_IDS.voteChannel,
+  announceChannelId: ADMIN_PANEL_IDS.announceChannel,
+  forumChannelId: ADMIN_PANEL_IDS.forumChannel,
 };
-
-/** The channel settings, the channel types each accepts and their names. */
-const CHANNEL_SETTINGS = [
-  {
-    field: "voteChannelId",
-    id: ADMIN_PANEL_IDS.voteChannel,
-    name: "Voting channel",
-    help: "Where the location and date polls are posted. Text channels only.",
-    types: [ChannelType.GuildText],
-  },
-  {
-    field: "announceChannelId",
-    id: ADMIN_PANEL_IDS.announceChannel,
-    name: "Announcements channel",
-    help: "Where results are announced. Text or announcement channels.",
-    types: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
-  },
-  {
-    field: "forumChannelId",
-    id: ADMIN_PANEL_IDS.forumChannel,
-    name: "Hike threads channel",
-    help: "The forum that gets a thread for each hike. Forum channels only.",
-    types: [ChannelType.GuildForum],
-  },
-] as const satisfies readonly {
-  field: SettingField;
-  id: string;
-  name: string;
-  help: string;
-  types: readonly ChannelType[];
-}[];
 
 export function loadAdminPanelState(
   storage: DurableObjectStorage,
@@ -810,13 +798,6 @@ function voters(n: number): string {
   return n === 1 ? "1 member has voted." : `${String(n)} members have voted.`;
 }
 
-/** The settings setup still needs, named as the panel shows them. */
-export function missingSettings(settings: GuildSettings): string[] {
-  return CHANNEL_SETTINGS.filter(
-    (channel) => settings[channel.field] === null,
-  ).map((channel) => channel.name.toLowerCase());
-}
-
 /**
  * The status view as a message body, for a follow-up job that replaces a
  * deferred panel update with `editOriginalInteractionResponse`.
@@ -872,10 +853,6 @@ function scheduleLines({
     `**Schedule:** on · ${WEEKDAY_NAMES[cadence.weekday] ?? "?"}s at ${cadence.time} (${settings.timezone}) · date vote ${dayCount(cadence.dateVoteDays)}`,
     next,
   ];
-}
-
-function dayCount(n: number): string {
-  return n === 1 ? "1 day" : `${String(n)} days`;
 }
 
 /** The Schedule part of the settings view: what it does and its controls. */
@@ -970,7 +947,7 @@ export function renderAdminSettings(
           textDisplay(`**${channel.name}**\n${channel.help}`),
           actionRow(
             channelSelect({
-              custom_id: channel.id,
+              custom_id: CHANNEL_SELECT_IDS[channel.field],
               placeholder: `Pick the ${channel.name.toLowerCase()}`,
               channel_types: [...channel.types],
               min_values: 0,
@@ -1067,19 +1044,9 @@ const saveAdminRole: ComponentHandler = adminOnly((interaction, context) => {
   const roleId = selected(interaction, ComponentType.RoleSelect);
   if (roleId === undefined)
     return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
-  if (roleId !== null && roleId === interaction.guild_id) {
-    return settingsUpdate(
-      context,
-      "The @everyone role cannot be the admin role. Pick another role.",
-    );
-  }
-  new GuildConfig(context.storage).set("adminRoleId", roleId);
-  return settingsUpdate(
-    context,
-    roleId === null
-      ? "Admin role cleared: only the server owner can use the panel."
-      : `Admin role set to <@&${roleId}>.`,
-  );
+  const refusal = checkAdminRole(interaction.guild_id ?? "", roleId);
+  if (refusal !== null) return settingsUpdate(context, refusal);
+  return settingsUpdate(context, setAdminRole(context.storage, roleId));
 });
 
 /**
@@ -1087,9 +1054,7 @@ const saveAdminRole: ComponentHandler = adminOnly((interaction, context) => {
  * the channel is in the interaction's `resolved` channels with a type the
  * setting takes.
  */
-function saveChannel(
-  channel: (typeof CHANNEL_SETTINGS)[number],
-): ComponentHandler {
+function saveChannel(channel: ChannelSetting): ComponentHandler {
   return adminOnly((interaction, context) => {
     const channelId = selected(interaction, ComponentType.ChannelSelect);
     if (channelId === undefined) {
@@ -1100,20 +1065,12 @@ function saveChannel(
         interaction.data.component_type === ComponentType.ChannelSelect
           ? interaction.data.resolved.channels[channelId]
           : undefined;
-      const allowed: readonly ChannelType[] = channel.types;
-      if (resolved === undefined || !allowed.includes(resolved.type)) {
-        return settingsUpdate(
-          context,
-          `That channel cannot be the ${channel.name.toLowerCase()}. ${channel.help}`,
-        );
-      }
+      const refusal = checkChannel(channel, resolved);
+      if (refusal !== null) return settingsUpdate(context, refusal);
     }
-    new GuildConfig(context.storage).set(channel.field, channelId);
     return settingsUpdate(
       context,
-      channelId === null
-        ? `${channel.name} cleared.`
-        : `${channel.name} set to <#${channelId}>.`,
+      setChannel(context.storage, channel, channelId),
     );
   });
 }
@@ -1123,28 +1080,19 @@ function saveChannel(
  * once, so the forecast is fetched again in them.
  */
 const saveUnits: ComponentHandler = adminOnly(async (interaction, context) => {
-  const picked =
+  const units = checkUnits(
     interaction.data.component_type === ComponentType.StringSelect
       ? interaction.data.values[0]
-      : undefined;
-  const units = UNITS.find((u) => u === picked);
-  if (units === undefined) {
+      : undefined,
+  );
+  if (units === null) {
     return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
   }
-  new GuildConfig(context.storage).setUnits(units);
-  await schedule(
-    context.storage,
-    WEATHER_JOB,
-    new PollStore(context.storage).now(),
-  );
-  return settingsUpdate(context, `Units set to ${units}.`);
+  return settingsUpdate(context, await setUnits(context.storage, units));
 });
 
 /** The longest time zone name the modal takes. */
 const MAX_TIMEZONE_INPUT = 64;
-
-const TIMEZONE_EXAMPLES =
-  "`America/Los_Angeles`, `Europe/Berlin` or `Asia/Kolkata`";
 
 /** Set time zone: opens the modal, prefilled with the current zone. */
 const openTimezoneModal: ComponentHandler = adminOnly(
@@ -1172,37 +1120,19 @@ const openTimezoneModal: ComponentHandler = adminOnly(
  */
 const saveTimezone: ModalHandler = adminOnly(
   async (interaction: APIModalSubmitInteraction, context, settings) => {
-    const typed =
-      textInputValue(interaction.data, ADMIN_PANEL_FIELDS.timezone) ?? "";
-    const zone = normalizeTimeZone(typed);
-    if (zone === null) {
-      const what =
-        typed.trim() === ""
-          ? "No time zone was entered"
-          : `\`${quotedInput(typed.trim())}\` is not a time zone`;
-      return {
-        response: ephemeralNotice(
-          `${what}, so it is still ${settings.timezone}. Enter an IANA name such as ${TIMEZONE_EXAMPLES}, or PT, MT, CT, ET or UTC.`,
-        ),
-      };
+    const zone = checkTimeZone(
+      textInputValue(interaction.data, ADMIN_PANEL_FIELDS.timezone) ?? "",
+      settings,
+    );
+    if (!zone.ok) {
+      return { response: ephemeralNotice(noticeMarkdown(zone.refusal)) };
     }
-    const changed = new GuildConfig(context.storage).setTimezone(zone);
-    await rescheduleCadence(
-      context.storage,
-      new PollStore(context.storage),
-      changed,
+    const notice = await setTimeZone(
+      context,
       interaction.guild_id ?? "",
+      zone.value,
     );
-    const components = renderAdminSettings(
-      loadAdminPanelState(context.storage),
-      `Time zone set to ${zone}.`,
-    );
-    return {
-      response:
-        interaction.message === undefined
-          ? ephemeralReply(components)
-          : update(components),
-    };
+    return settingsAnswer(interaction, context, notice);
   },
 );
 
@@ -1215,49 +1145,38 @@ const saveTimezone: ModalHandler = adminOnly(
 const toggleCadence: ComponentHandler = adminOnly(
   async (interaction, context, settings) => {
     const turnOn = !settings.cadence.enabled;
-    if (turnOn && !setupComplete(settings)) {
-      return settingsUpdate(
-        context,
-        `The schedule needs the ${listing(missingSettings(settings))}. Set them above, then turn it on.`,
-      );
-    }
-    await changeCadence(interaction, context, { enabled: turnOn });
-    const notice = turnOn
-      ? "The schedule is on."
-      : "The schedule is off. Open votes stay open until an admin closes them.";
-    return settingsUpdate(context, notice);
+    const refusal = turnOn ? checkScheduleOn(settings) : null;
+    if (refusal !== null) return settingsUpdate(context, refusal);
+    const [notice] = await changeCadence(interaction, context, {
+      enabled: turnOn,
+    });
+    return settingsUpdate(context, notice ?? []);
   },
 );
 
 /** The weekday select: moves the schedule to the picked day. */
 const saveCadenceDay: ComponentHandler = adminOnly(
   async (interaction, context) => {
-    const day = pickedNumber(interaction, 0, WEEKDAY_NAMES.length - 1);
+    const day = checkWeekday(picked(interaction));
     if (day === null) return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
-    await changeCadence(interaction, context, { weekday: day });
-    return settingsUpdate(
-      context,
-      `The schedule's day is ${WEEKDAY_NAMES[day] ?? "?"}.`,
-    );
+    const [notice] = await changeCadence(interaction, context, {
+      weekday: day,
+    });
+    return settingsUpdate(context, notice ?? []);
   },
 );
 
 /** The date vote length select. */
 const saveCadenceDays: ComponentHandler = adminOnly(
   async (interaction, context) => {
-    const days = pickedNumber(
-      interaction,
-      MIN_DATE_VOTE_DAYS,
-      MAX_DATE_VOTE_DAYS,
-    );
+    const days = checkDateVoteDays(picked(interaction));
     if (days === null) {
       return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
     }
-    await changeCadence(interaction, context, { dateVoteDays: days });
-    return settingsUpdate(
-      context,
-      `On the schedule, the date vote stays open ${dayCount(days)}.`,
-    );
+    const [notice] = await changeCadence(interaction, context, {
+      dateVoteDays: days,
+    });
+    return settingsUpdate(context, notice ?? []);
   },
 );
 
@@ -1283,81 +1202,71 @@ const openCadenceTimeModal: ComponentHandler = adminOnly(
 /** The schedule time modal: stores a valid `HH:MM`, or says what works. */
 const saveCadenceTime: ModalHandler = adminOnly(
   async (interaction: APIModalSubmitInteraction, context, settings) => {
-    const typed =
-      textInputValue(interaction.data, ADMIN_PANEL_FIELDS.cadenceTime) ?? "";
-    const time = parseTimeOfDay(typed);
-    if (time === null) {
-      return {
-        response: ephemeralNotice(
-          `\`${quotedInput(typed.trim())}\` is not a time, so the schedule's time is still ${settings.cadence.time}. Enter it as HH:MM, 24-hour, for example 09:00 or 18:30.`,
-        ),
-      };
-    }
-    await changeCadence(interaction, context, { time });
-    const components = renderAdminSettings(
-      loadAdminPanelState(context.storage),
-      `The schedule's time is ${time} (${settings.timezone}).`,
+    const time = checkTimeOfDay(
+      textInputValue(interaction.data, ADMIN_PANEL_FIELDS.cadenceTime) ?? "",
+      settings,
     );
-    return {
-      response:
-        interaction.message === undefined
-          ? ephemeralReply(components)
-          : update(components),
-    };
+    if (!time.ok) {
+      return { response: ephemeralNotice(noticeMarkdown(time.refusal)) };
+    }
+    const [notice] = await changeCadence(interaction, context, {
+      time: time.value,
+    });
+    return settingsAnswer(interaction, context, notice ?? []);
   },
 );
-
-/** `9:00` or `09:00` as `09:00`; null for anything else. */
-export function parseTimeOfDay(text: string): string | null {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
-  if (!match) return null;
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  if (hour > 23 || minute > 59) return null;
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-}
 
 /** Stores the schedule change and reschedules the job from it. */
 function changeCadence(
   interaction: APIMessageComponentInteraction | APIModalSubmitInteraction,
   context: HandlerContext,
-  change: Partial<Omit<CadenceSettings, "onSince">>,
-): Promise<GuildSettings> {
-  return changeSchedule(
-    context.storage,
-    new PollStore(context.storage),
-    change,
-    interaction.guild_id ?? "",
-  );
+  change: ScheduleChange,
+): Promise<Notice[]> {
+  return changeSchedule(context, interaction.guild_id ?? "", change);
 }
 
-/** The one value picked in a string select, as a whole number in range. */
-function pickedNumber(
+/** The one value picked in a string select. */
+function picked(
   interaction: APIMessageComponentInteraction,
-  min: number,
-  max: number,
-): number | null {
-  if (interaction.data.component_type !== ComponentType.StringSelect) {
-    return null;
-  }
-  const value = Number(interaction.data.values[0]);
-  return Number.isInteger(value) && value >= min && value <= max ? value : null;
+): string | undefined {
+  return interaction.data.component_type === ComponentType.StringSelect
+    ? interaction.data.values[0]
+    : undefined;
 }
 
-/** Typed text to quote: shortened and without backticks. */
-function quotedInput(text: string): string {
-  const plain = text.replaceAll("`", "'");
-  return plain.length <= 40 ? plain : `${plain.slice(0, 39)}…`;
-}
-
+/** Redraws the settings view with `notice` above it. */
 function settingsUpdate(
   context: HandlerContext,
-  notice: string,
+  notice: Notice,
 ): HandlerResult {
   return {
     response: update(
-      renderAdminSettings(loadAdminPanelState(context.storage), notice),
+      renderAdminSettings(
+        loadAdminPanelState(context.storage),
+        noticeMarkdown(notice),
+      ),
     ),
+  };
+}
+
+/**
+ * A modal's answer: the settings view with `notice`, in place of the panel
+ * message the modal came from, or as a new ephemeral reply without one.
+ */
+export function settingsAnswer(
+  interaction: APIModalSubmitInteraction,
+  context: HandlerContext,
+  notice: Notice,
+): HandlerResult {
+  const components = renderAdminSettings(
+    loadAdminPanelState(context.storage),
+    noticeMarkdown(notice),
+  );
+  return {
+    response:
+      interaction.message === undefined
+        ? ephemeralReply(components)
+        : update(components),
   };
 }
 
@@ -1373,13 +1282,6 @@ function selected(
   return interaction.data.values[0] ?? null;
 }
 
-/** `a`, `a and b`, `a, b and c`. */
-export function listing(items: string[]): string {
-  return items.length <= 1
-    ? items.join("")
-    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1] ?? ""}`;
-}
-
 function channelMention(id: string | null): string {
   return id === null ? NOT_SET : `<#${id}>`;
 }
@@ -1391,7 +1293,7 @@ export function registerAdminPanel(router: Router): Router {
   router.component(ADMIN_PANEL_IDS.back, showStatus);
   router.component(ADMIN_PANEL_IDS.role, saveAdminRole);
   for (const channel of CHANNEL_SETTINGS) {
-    router.component(channel.id, saveChannel(channel));
+    router.component(CHANNEL_SELECT_IDS[channel.field], saveChannel(channel));
   }
   router.component(ADMIN_PANEL_IDS.timezone, openTimezoneModal);
   router.modal(ADMIN_PANEL_IDS.timezone, saveTimezone);

@@ -53,6 +53,7 @@ export function baseView(overrides: Partial<WebView> = {}): WebView {
     log: { entries: [], page: 1, pageSize: 5, pages: 1, total: 0 },
     calendar: { url: `https://hikebot.example/calendar/${GUILD}/sig.ics` },
     admin: null,
+    settingsForm: null,
     ...overrides,
   };
 }

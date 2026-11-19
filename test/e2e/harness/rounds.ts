@@ -58,6 +58,20 @@ export interface SeededRound {
   eventId?: string;
 }
 
+/** Settings as `RoundPlayer.seedSettings` stores them. */
+export interface SeededSettings {
+  adminRoleId?: string;
+  timezone?: string;
+  homeArea?: { text: string; name: string; lat: number; lon: number };
+  units?: "imperial" | "metric";
+  cadence?: {
+    enabled: boolean;
+    weekday: number;
+    time: string;
+    dateVoteDays: number;
+  };
+}
+
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = [
   "Jan",
@@ -544,6 +558,53 @@ export class RoundPlayer {
       owner,
       at + 3 * 86_400_000,
       roundId,
+    );
+  }
+
+  /**
+   * Stores the guild's settings besides its channels, as an admin would
+   * have set them under Settings: the admin role, the time zone, the home
+   * area as the geocoder found it, the units and the weekly schedule. Only
+   * the columns `settings` gives change. Nothing is looked up or
+   * scheduled, so nothing waits: for the screenshots' seeds. Open the panel
+   * first (`setUpPanel`), so the object has its tables. Writes through the
+   * harness's access to the object's SQLite storage.
+   */
+  async seedSettings(g: TestGuild, settings: SeededSettings): Promise<void> {
+    const sql = await this.e2e.harness
+      .getWorker()
+      .getDurableObjectStorage("GUILD_HIKE", { name: g.guildId });
+    const columns: [string, string | number | null][] = [];
+    if (settings.adminRoleId !== undefined) {
+      columns.push(["admin_role_id", settings.adminRoleId]);
+    }
+    if (settings.timezone !== undefined) {
+      columns.push(["timezone", settings.timezone]);
+    }
+    if (settings.homeArea !== undefined) {
+      const area = settings.homeArea;
+      columns.push(
+        ["home_area", area.text],
+        ["home_name", area.name],
+        ["home_lat", area.lat],
+        ["home_lon", area.lon],
+      );
+    }
+    if (settings.units !== undefined) columns.push(["units", settings.units]);
+    if (settings.cadence !== undefined) {
+      const cadence = settings.cadence;
+      columns.push(
+        ["cadence_enabled", cadence.enabled ? 1 : 0],
+        ["cadence_weekday", cadence.weekday],
+        ["cadence_time", cadence.time],
+        ["cadence_date_vote_days", cadence.dateVoteDays],
+        ["cadence_on_since", cadence.enabled ? Date.UTC(2030, 4, 1) : null],
+      );
+    }
+    if (columns.length === 0) return;
+    await sql.exec(
+      `UPDATE guild_settings SET ${columns.map(([name]) => `${name} = ?`).join(", ")} WHERE id = 1`,
+      ...columns.map(([, value]) => value),
     );
   }
 

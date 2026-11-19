@@ -11,6 +11,7 @@ import {
   ADMIN_PANEL_IDS,
 } from "../../src/features/admin-panel";
 import { lookUpHomeArea } from "../../src/features/home-area";
+import { noticeMarkdown } from "../../src/features/settings";
 import { GuildConfig, type HomeArea } from "../../src/guild/config";
 import {
   callWorker,
@@ -255,10 +256,10 @@ describe("lookUpHomeArea", () => {
   it("returns the note and stores the place found", async () => {
     const guild = "200000000000000921";
     stubFetch(guild, () => Response.json(SEATTLE));
-    const note = await runInDurableObject(stub(guild), (_i, state) =>
+    const result = await runInDurableObject(stub(guild), (_i, state) =>
       lookUpHomeArea({ env, storage: state.storage }, "Seattle, Washington"),
     );
-    expect(note).toBe(
+    expect(result.ok && noticeMarkdown(result.value)).toBe(
       "Home area set to **Seattle, Washington**, found as Seattle, King County, Washington.",
     );
     expect(await homeArea(guild)).toEqual(STORED);

@@ -183,6 +183,13 @@ describe("DiscordApi routes", () => {
       auth: true,
     },
     {
+      name: "getGuildRoles",
+      call: (api) => api.getGuildRoles("40"),
+      method: "GET",
+      url: `${base}/guilds/40/roles`,
+      auth: true,
+    },
+    {
       name: "editOriginalInteractionResponse",
       call: (api) => api.editOriginalInteractionResponse("50", "tok", message),
       method: "PATCH",

@@ -3,7 +3,8 @@
  * the prefix `/g/*`; the rest of the path picks the page from
  * `SERVER_PAGES`, one entry per page, or from the admin controls'
  * `ADMIN_PAGES`; a POST picks the admin control from `ADMIN_ACTIONS`
- * (`src/web/admin/routes.tsx`). Each page starts with `requireServer`
+ * (`src/web/admin/routes.tsx`) or a form's target from `SERVER_ACTIONS`,
+ * one entry per action. Each page starts with `requireServer`
  * (`src/web/server-guard.tsx`), which signs the user in, checks the
  * session's list and reads the server as its member sees it.
  */
@@ -16,6 +17,7 @@ import { ServerPage } from "./pages/server/page";
 import { htmlResponse } from "./response";
 import type { WebHandler, WebRouter } from "./router";
 import { requireServer } from "./server-guard";
+import { saveSettings, settingsPage } from "./settings-routes";
 
 /** A page of the server `guildId`. */
 type ServerPageHandler = (
@@ -28,6 +30,12 @@ type ServerPageHandler = (
 const SERVER_PAGES = new Map<string, ServerPageHandler>([
   ["", serverPage],
   ["/log", hikeLogPage],
+  ["/settings", settingsPage],
+]);
+
+/** The actions (POST) by the path after `/g/<guild id>`. */
+const SERVER_ACTIONS = new Map<string, ServerPageHandler>([
+  ["/settings", saveSettings],
 ]);
 
 async function serverPage(request: Request, env: Env, guildId: string) {
@@ -68,8 +76,9 @@ function serverPath(
 }
 
 /**
- * Adds `/g/*` to `router`, for pages and admin controls' POSTs, answering
- * a path with no page or control with `notFound`.
+ * Adds `/g/*` to `router`, for pages, admin controls' POSTs and other
+ * actions, answering a path with no page, control or action with
+ * `notFound`.
  */
 export function addServerRoutes(router: WebRouter, notFound: WebHandler): void {
   router.get("/g/*", (request, env, ctx) => {
@@ -81,7 +90,8 @@ export function addServerRoutes(router: WebRouter, notFound: WebHandler): void {
   });
   router.post("/g/*", (request, env, ctx) => {
     const path = serverPath(new URL(request.url).pathname);
-    const action = path && ADMIN_ACTIONS.get(path.rest);
+    const action =
+      path && (ADMIN_ACTIONS.get(path.rest) ?? SERVER_ACTIONS.get(path.rest));
     if (!path || !action) return notFound(request, env, ctx);
     return action(request, env, path.guildId);
   });

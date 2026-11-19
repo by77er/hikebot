@@ -138,7 +138,7 @@ example is `/trails` again, now for signed-in members only.
 
 ## Add a page for a server
 
-The example is the server's settings at `/g/<guild id>/settings`; use your
+The example is the server's channels at `/g/<guild id>/channels`; use your
 page's path and file. "Web pages for a server" in `docs/design.md` says
 what the guard answers.
 
@@ -150,12 +150,12 @@ what the guard answers.
    admin sees:
 
    ```tsx
-   /** A server's settings at `/g/<guild id>/settings`. */
+   /** A server's channels at `/g/<guild id>/channels`. */
    import type { WebView } from "../../../guild/web-view";
    import { BackLink } from "../../components/back-link";
    import { Layout, type LayoutUser } from "../../layout";
 
-   export function SettingsPage({
+   export function ChannelsPage({
      user,
      view,
    }: {
@@ -163,13 +163,13 @@ what the guard answers.
      view: WebView;
    }) {
      return (
-       <Layout title={`Settings · ${view.server.name} · hikebot`} user={user}>
+       <Layout title={`Channels · ${view.server.name} · hikebot`} user={user}>
          <div class="stack stack--section">
            <BackLink href={`/g/${view.server.id}`}>
              Back to {view.server.name}
            </BackLink>
-           <h1>Settings</h1>
-           <p>Time zone: {view.settings.timeZone}</p>
+           <h1>Channels</h1>
+           <p>Votes: {view.settings.voteChannel?.name ?? "not set"}</p>
          </div>
        </Layout>
      );
@@ -183,26 +183,31 @@ what the guard answers.
    asked. Pass the hike log's page and size when the page shows the log:
 
    ```tsx
-   import { SettingsPage } from "./pages/server/settings";
+   import { ChannelsPage } from "./pages/server/channels";
 
-   async function settingsPage(request: Request, env: Env, guildId: string) {
+   async function channelsPage(request: Request, env: Env, guildId: string) {
      const server = await requireServer(request, env, guildId);
      if (server instanceof Response) return server;
      return htmlResponse(
-       <SettingsPage user={server.user} view={server.view} />,
+       <ChannelsPage user={server.user} view={server.view} />,
      );
    }
    ```
 
    An action (a POST) starts with `requireServer` too, which refuses it
    without a session; then follow "Add a form that changes something" from
-   its step 2, with `server.session` and `server.now`.
+   its step 2, with `server.session` and `server.now`, and register it with
+   one line in `SERVER_ACTIONS` instead of `SERVER_PAGES`. An action that
+   changes the server goes through a `GuildHike` method that decides again,
+   in the object, whether the user may (as `saveGuildSettings` in
+   `src/web/guild.ts` and `saveWebSettings` in `src/guild/web-view.ts` do
+   for the settings).
 
 3. Add one line for it to `SERVER_PAGES` there, the path after
    `/g/<guild id>` as its key:
 
    ```tsx
-     ["/settings", settingsPage],
+     ["/channels", channelsPage],
    ```
 
 4. Test it in `test/web/server-guard.test.tsx` or a test file of its own:
@@ -913,7 +918,10 @@ Here the component is `pill`; use your component's name.
    Discord API first. For the page a member sees after pressing Cancel at
    Discord, give `"path": "/auth/callback"` and `"cancel": true`. Add one
    entry per state worth seeing, such as `servers`, `servers-many` and
-   `servers-none`.
+   `servers-none`. A clock reading the Worker writes into a page (the time
+   now somewhere) goes in a `<time data-clock data-zone={zone}>`, which the
+   script sets to its frozen clock, since the Worker's clock cannot be
+   frozen.
 
    ```json
    {
@@ -981,16 +989,29 @@ Here the component is `pill`; use your component's name.
    }
    ```
 
-4. A `GET` route that is not a page (a file, a redirect, a plain-text
+4. For the page a form answers with itself, such as a refused form
+   (status 400), give the entry `"post"`: the form as a CSS selector and
+   the fields to fill in by name (a radio or checkbox by its value). The
+   script submits it in the browser after `path` loads and takes the page
+   that answers, which must answer with `status`:
+
+   ```json
+   "post": {
+     "form": "#schedule form",
+     "fields": { "cadence.enabled": "on" }
+   }
+   ```
+
+5. A `GET` route that is not a page (a file, a redirect, a plain-text
    answer) goes under `"excluded"` with its `route` as registered and the
    `reason` it has no screenshot.
-5. Run the test that compares the list with the web router's `GET` routes:
+6. Run the test that compares the list with the web router's `GET` routes:
 
    ```sh
    npx vitest run test/web/screenshot-pages.test.ts
    ```
 
-6. Follow "Take the screenshots", then "Review your own UI change as a
+7. Follow "Take the screenshots", then "Review your own UI change as a
    designer".
 
 ## Review your own UI change as a designer

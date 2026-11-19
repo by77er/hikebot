@@ -10,7 +10,8 @@
  *
  * Every run on the same commit writes the same bytes: each page gets a fresh
  * Worker with fixed seed data, Discord's CDN is answered with fixed pictures
- * (`discord-cdn.ts`), the browser's clock is frozen, its time zone
+ * (`discord-cdn.ts`), the browser's clock is frozen (and so is every
+ * clock reading the Worker wrote into a page, a `time[data-clock]`), its time zone
  * and language are fixed, animations and transitions are off, the device
  * scale factor is 1, fonts come from the browser package, never from the
  * machine, and the shot waits for the page's fonts and CSS images (such as
@@ -79,6 +80,11 @@ async function main(): Promise<void> {
     if (page.cancel && page.user === null) {
       throw new Error(
         `pages.json cancels sign-in for page ${page.name}, which has no user to sign in`,
+      );
+    }
+    if (page.post && page.user === null) {
+      throw new Error(
+        `pages.json posts a form for page ${page.name}, which has no user to sign in`,
       );
     }
     if (page.submit && page.user === null) {
@@ -213,7 +219,13 @@ async function capture(
     const session = await page.createCDPSession();
     await session.send("Emulation.setLocaleOverride", { locale: "en-US" });
 
-    const response = await page.goto(url.href, { waitUntil: "load" });
+    let response = await page.goto(url.href, { waitUntil: "load" });
+    if (entry.post && response) {
+      [response] = await Promise.all([
+        page.waitForNavigation({ waitUntil: "load" }),
+        page.evaluate(postForm(entry.post)),
+      ]);
+    }
     if (!response)
       throw new Error(`${entry.name}: ${url.href} gave no response`);
     if (response.status() !== entry.status) {
@@ -222,6 +234,7 @@ async function capture(
       );
     }
     await stopMotion(session);
+    await page.evaluate(FREEZE_PAGE_CLOCKS);
     await page.evaluate("document.fonts.ready.then(() => undefined)");
     await page.evaluate(CSS_IMAGES_READY);
     if (failures.length > 0) {
@@ -294,6 +307,27 @@ async function submit(
 }
 
 /**
+ * A script that fills in the form `post.form` with `post.fields` and
+ * submits it as a member's click on its button would. It runs through
+ * DevTools, outside the page's Content-Security-Policy. A string for the
+ * same reason as `FREEZE_CLOCK`.
+ */
+function postForm(post: NonNullable<ScreenshotPage["post"]>): string {
+  return `(() => {
+  const form = document.querySelector(${JSON.stringify(post.form)});
+  if (!(form instanceof HTMLFormElement)) throw new Error("no form " + ${JSON.stringify(post.form)});
+  const fields = ${JSON.stringify(post.fields)};
+  for (const control of form.elements) {
+    if (!(control.name in fields)) continue;
+    const value = fields[control.name];
+    if (control.type === "radio" || control.type === "checkbox") control.checked = control.value === value;
+    else control.value = value;
+  }
+  form.requestSubmit();
+})()`;
+}
+
+/**
  * Turns animations and transitions off with an inspector stylesheet, which
  * DevTools adds outside the page's Content-Security-Policy, so the page is
  * otherwise rendered exactly as a browser gets it.
@@ -326,6 +360,29 @@ const FREEZE_CLOCK = `(() => {
       property === "now" ? () => at : Reflect.get(target, property, receiver),
   });
 })();`;
+
+/**
+ * Sets every clock reading the Worker wrote into the page, a `time` element
+ * marked `data-clock` with its `data-zone` (such as the time now on the
+ * settings page), to `FROZEN_TIME` in that zone, written as the bot writes
+ * it (`Sat 02:00`): the Worker's clock cannot be frozen. A string for the
+ * same reason as `FREEZE_CLOCK`.
+ */
+const FREEZE_PAGE_CLOCKS = `(() => {
+  const at = new Date(${String(FROZEN_TIME)});
+  for (const clock of document.querySelectorAll("time[data-clock]")) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: clock.dataset.zone,
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(at);
+    const part = (type) => parts.find((p) => p.type === type)?.value ?? "";
+    clock.textContent = part("weekday") + " " + part("hour") + ":" + part("minute");
+    clock.dateTime = at.toISOString();
+  }
+})()`;
 
 /**
  * Resolves once every image the page's CSS uses (backgrounds and masks, on

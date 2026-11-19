@@ -7,6 +7,7 @@
  * years ahead, so every run renders the same page. Avatars and server icons
  * are hashes `discord-cdn.ts` answers with fixed pictures.
  */
+import { ChannelType } from "discord-api-types/v10";
 import {
   RoundPlayer,
   type SeededOption,
@@ -64,17 +65,19 @@ const guildId = (n: number) => String(200000000000000100n + BigInt(n));
 export const SERVER = { name: "Ridge Walkers", icon: picture(2) };
 
 /** What a seed of a server's page stores once the server is set up. */
-type ServerSteps = (play: RoundPlayer, g: TestGuild) => Promise<void>;
+type ServerSteps = (play: RoundPlayer, g: TestGuild, e2e: E2E) => Promise<void>;
 
 /**
  * The server SERVER, id 220000000000000101, with its panel set up and then
  * `steps` taken, and MEMBER_ID in it, signing in with it listed: a member
  * without roles, with `as: "admin"` the server's owner, or with
  * `as: "stranger"` a member who has left by the time they open the page.
+ * With `setUp` false, the panel is never opened: no channel is set.
  */
 function server(
   steps: ServerSteps = () => Promise.resolve(),
   as: "member" | "admin" | "stranger" = "member",
+  setUp = true,
 ): Seed {
   return async (e2e) => {
     const play = new RoundPlayer(e2e);
@@ -83,8 +86,8 @@ function server(
       ...(as === "admin" && { ownerId: MEMBER_ID }),
     });
     e2e.discord.addMember(g.guildId, MEMBER_ID);
-    await play.setUpPanel(g);
-    await steps(play, g);
+    if (setUp) await play.setUpPanel(g);
+    await steps(play, g, e2e);
     e2e.discord.addUser({
       id: MEMBER_ID,
       username: "ana.hikes",
@@ -217,6 +220,96 @@ const hikeLog: ServerSteps = async (play, g) => {
   }
 };
 
+/** The admin role of the settings seeds. */
+const HIKE_LEADS = "520000000000000101";
+
+/**
+ * The server's roles, and its channels named and in categories, as the
+ * settings page lists them: the guild's text, announcement and forum
+ * channels in Hiking, a general channel in none, and a voice channel no
+ * setting takes.
+ */
+const settingsDirectory: ServerSteps = (_play, g, e2e) => {
+  const { discord } = e2e;
+  discord.addRole(g.guildId, {
+    id: HIKE_LEADS,
+    name: "Hike leads",
+    position: 3,
+  });
+  discord.addRole(g.guildId, {
+    id: "520000000000000102",
+    name: "Trail crew",
+    position: 2,
+  });
+  discord.addRole(g.guildId, {
+    id: "520000000000000103",
+    name: "Members",
+    position: 1,
+  });
+  const hiking = "320000000000000110";
+  discord.addChannel({
+    id: hiking,
+    guildId: g.guildId,
+    type: ChannelType.GuildCategory,
+    name: "Hiking",
+    position: 1,
+  });
+  discord.addChannel({
+    id: "320000000000000111",
+    guildId: g.guildId,
+    name: "general",
+    position: 0,
+  });
+  discord.addChannel({
+    id: g.channels.text,
+    guildId: g.guildId,
+    name: "hike-votes",
+    parentId: hiking,
+    position: 2,
+  });
+  discord.addChannel({
+    id: g.channels.news,
+    guildId: g.guildId,
+    type: ChannelType.GuildAnnouncement,
+    name: "announcements",
+    parentId: hiking,
+    position: 3,
+  });
+  discord.addChannel({
+    id: g.channels.forum,
+    guildId: g.guildId,
+    type: ChannelType.GuildForum,
+    name: "hikes",
+    parentId: hiking,
+    position: 4,
+  });
+  discord.addChannel({
+    id: "320000000000000112",
+    guildId: g.guildId,
+    type: ChannelType.GuildVoice,
+    name: "Trailhead voice",
+    position: 5,
+  });
+  return Promise.resolve();
+};
+
+/** Every setting set, besides the channels the panel's set-up set. */
+const everySetting: ServerSteps = async (play, g, e2e) => {
+  await settingsDirectory(play, g, e2e);
+  await play.seedSettings(g, {
+    adminRoleId: HIKE_LEADS,
+    timezone: "America/Denver",
+    homeArea: {
+      text: "Seattle, Washington",
+      name: "Seattle, King County, Washington",
+      lat: 47.6038321,
+      lon: -122.330062,
+    },
+    units: "metric",
+    cadence: { enabled: true, weekday: 3, time: "09:00", dateVoteDays: 2 },
+  });
+};
+
 export const SEEDS: Record<string, Seed> = {
   /** A Worker that has never been used: no guilds, no hikes. */
   empty: () => Promise.resolve(),
@@ -292,11 +385,13 @@ export const SEEDS: Record<string, Seed> = {
   /** The date vote open for its owner, and Discord refusing the forum. */
   "server-date-vote-forum-refused-admin": (e2e) =>
     server(async (play, g) => {
-      await dateVote(play, g);
+      await dateVote(play, g, e2e);
       e2e.discord.failChannel(g.channels.forum, "missing-permissions");
     }, "admin")(e2e),
   "server-hike-planned": server(hikePlanned),
   "server-hike-planned-admin": server(hikePlanned, "admin"),
   "server-hike-log": server(hikeLog),
   "server-not-member": server(locationVote(), "stranger"),
+  "server-settings": server(everySetting, "admin"),
+  "server-settings-empty": server(settingsDirectory, "admin", false),
 };

@@ -32,6 +32,15 @@ export interface ScreenshotPage {
    * that leaves, such as the notice of an admin's action.
    */
   submit?: { from: string; action: string; fields?: Record<string, string> };
+  /**
+   * With a `user`: after the page loads, fill in its form `form` (a CSS
+   * selector) with `fields` (by control name; a radio or checkbox by its
+   * value) and submit it in the browser; the shot is of the page the form's
+   * answer is, which must answer with `status`. For a form that answers
+   * with a page, such as a refused one; for one that redirects, use
+   * `submit`.
+   */
+  post?: { form: string; fields: Partial<Record<string, string>> };
 }
 
 export interface ExcludedRoute {
