@@ -42,6 +42,7 @@
 @import url("components/text-field.css") layer(components);
 @import url("components/textarea.css") layer(components);
 /* Page styles, one file each, in alphabetical order, one line each. */
+@import url("pages/server.css") layer(components);
 @import url("pages/styleguide.css") layer(components);
 
 /*
