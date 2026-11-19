@@ -24,7 +24,7 @@ export interface MessagePageProps {
   action: MessageAction;
   /** Another way on, a link drawn as a quiet button. */
   secondary?: MessageAction;
-  /** The signed-in user, on a page only they can reach. */
+  /** The signed-in user, for the header's menu, as on their other pages. */
   user?: LayoutUser;
 }
 
