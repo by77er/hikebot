@@ -181,7 +181,7 @@ describe("the guard of a server's pages", () => {
     const response = await get(`/g/${guild}`, await signedIn(OWNER, [guild]));
     expect(response.status).toBe(200);
     expect((await outline(await response.text())).text).toContain(
-      "Start location vote in /hike admin in Discord",
+      "start one in Discord with /hike admin, then Start location vote.",
     );
   });
 

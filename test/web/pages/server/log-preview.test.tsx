@@ -41,7 +41,7 @@ describe("LogPreview", () => {
     expect(text).not.toContain("See the whole hike log");
   });
 
-  it("draws the planned hike as planned and the others as past", async () => {
+  it("draws the planned hike as planned and the others as past", () => {
     const view = baseView({
       log: logSection(2, 1, 5),
       plannedHike: plannedHike({ roundId: 2 }),

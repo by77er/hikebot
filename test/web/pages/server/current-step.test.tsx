@@ -99,7 +99,7 @@ describe("CurrentStep", () => {
       ),
     );
     expect(admin).toContain(
-      "start it with Start date vote in /hike admin in Discord",
+      "start it in Discord with /hike admin, then Start date vote.",
     );
   });
 
@@ -116,7 +116,7 @@ describe("CurrentStep", () => {
       ),
     );
     expect(admin).toContain(
-      "start one with Start location vote in /hike admin in Discord",
+      "start one in Discord with /hike admin, then Start location vote.",
     );
   });
 

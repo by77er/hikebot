@@ -186,7 +186,11 @@ so a name or title from Discord or a form cannot inject markup.
   description (`npm run screenshots:table`). The Undercurrent rule "A web
   UI pull request carries a design review and its screenshots" checks both
   in the `commands` check, by running `npm run description:check` on the
-  pull request event.
+  pull request event. Seeds set state up through the fake Discord API and
+  signed interactions, except a server's rounds and hikes, which
+  `RoundPlayer.seedRound` writes into the guild object's storage: the
+  script runs outside Vitest, where the harness's waits for the bot's
+  background work (`vi.waitFor`) cannot run.
 
 ## Web pages for a server
 
@@ -263,6 +267,53 @@ in-memory caches, so the next read asks Discord again; the owner cache in
 storage survives it. A member who leaves can still read the server for up
 to 60 seconds, and a renamed server or channel shows its old name for up to
 an hour.
+
+**Routes.** A server's pages live under `/g/<guild id>`. The web router
+matches the prefix `/g/*`, and `src/web/server-routes.tsx` picks the page
+from the rest of the path (a table with one entry per page); any other
+path under a server is the 404 page.
+
+- `GET /g/<guild id>`: the server's page (`src/web/pages/server/page.tsx`),
+  read-only. Its sections, top to bottom, one component per file in
+  `src/web/pages/server/`: the heading (Switch server back to `/servers`,
+  the server's icon and name, and the round stepper at the round's step:
+  Location vote for an open location vote, Date vote for a decided
+  location or an open date vote, Hike planned for a planned hike with no
+  round open, none with neither); the current step (an open vote's options
+  as a tally with the counts, the viewer's own votes marked, the time zone
+  named for dates, and Vote in Discord linking to the poll's message; a
+  decided location waiting for its date vote; with no round and no planned
+  hike an empty state, telling an admin to start a vote from `/hike admin`
+  in Discord); the planned hike as a full hike card (location, details,
+  date and time in the server's time zone with the zone named, links to the
+  thread and the event); the hike log's five latest hikes, with a link to
+  the whole log when it has more; and the calendar address in a read-only
+  field, with the bot's sentence on it and Subscribe, the address as a
+  `webcal:` link. The read asks for a log page of five.
+- `GET /g/<guild id>/log?page=<n>`: the hike log, newest first, ten a page
+  (`HIKES_PER_PAGE`), as compact hike cards with Newer and Older; a page
+  that is not a number is the first, and the read clamps one past either
+  end, as the bot's log buttons are.
+
+In a log, the hike that is the view's planned hike is drawn as planned and
+every other as a past hike.
+
+**The guard.** Every page and action under `/g/<guild id>` starts with
+`requireServer(request, env, guildId, log)` (`src/web/server-guard.tsx`),
+which answers in this order:
+
+1. Signed out: a `GET` is redirected to `/login?next=<path and query>`, so
+   sign-in comes back to it; any other method gets the 403 refused page.
+2. A server the session's list does not hold: the 404 page, before the
+   `GUILD_HIKE` binding is touched.
+3. `readGuild`: `not_member` is a 403 page, "You are not a member of this
+   server any more", with Refresh servers (`/login?next=/servers`) and
+   Choose a server; `unavailable` is a 503 page, "Discord could not be
+   reached", with Try again (the same page; for an action, the server's
+   page). Neither shows the server's name or anything else of it, nor
+   anything Discord answered.
+4. Otherwise the request gets the session, the clock, the layout's user and
+   the view, with the viewer's admin flag from the read.
 
 ## Sign-in and sessions
 

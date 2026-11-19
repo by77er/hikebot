@@ -105,12 +105,8 @@ example is `/trails` again, now for signed-in members only.
      })
    ```
 
-3. For a page of one server, such as `/g/<guild id>`, register a prefix
-   (`/g/*`), take the id from the path, and answer with
-   `requireGuild(session, guildId)` first, which is the 404 page for a
-   server the session does not list. The session's list is only a hint:
-   before showing anything of the server, check with the bot's token that
-   the user is still a member and has the roles the page needs.
+3. For a page of one server, under `/g/<guild id>`, follow "Add a page for
+   a server" instead.
 4. Unit test it in `test/web/routes.test.ts`: send a session cookie made
    with `sessionCookie` from `src/web/auth/session.tsx` (with
    `issuedAt: Date.now()`, since the route reads the real clock), and check
@@ -139,6 +135,176 @@ example is `/trails` again, now for signed-in members only.
    npx vitest run test/web
    npx vitest run --project e2e test/e2e/sign-in.test.ts
    ```
+
+## Add a page for a server
+
+A server's pages live under `/g/<guild id>`; "Web pages for a server" in
+`docs/design.md` says what the guard answers. The example is the server's
+settings at `/g/<guild id>/settings`; use your page's path and file.
+
+1. Write the page in `src/web/pages/server/<page>.tsx`, taking the user and
+   the view, as "Add a page that needs a signed-in user" says. Show only
+   what the view holds; if it lacks something, add it as "Add a field to
+   the web view" in `src/guild/AGENTS.md` says, never by reading the
+   guild object otherwise. Use `view.viewer.isAdmin` for what only an
+   admin sees:
+
+   ```tsx
+   /** A server's settings at `/g/<guild id>/settings`. */
+   import type { WebView } from "../../../guild/web-view";
+   import { BackLink } from "../../components/back-link";
+   import { Layout, type LayoutUser } from "../../layout";
+
+   export function SettingsPage({
+     user,
+     view,
+   }: {
+     user: LayoutUser;
+     view: WebView;
+   }) {
+     return (
+       <Layout title={`Settings · ${view.server.name} · hikebot`} user={user}>
+         <div class="stack stack--section">
+           <BackLink href={`/g/${view.server.id}`}>
+             Back to {view.server.name}
+           </BackLink>
+           <h1>Settings</h1>
+           <p>Time zone: {view.settings.timeZone}</p>
+         </div>
+       </Layout>
+     );
+   }
+   ```
+
+2. In `src/web/server-routes.tsx`, write its handler, starting with
+   `requireServer`, which signs the user in, turns away a server the
+   session does not list, and reads the server with the bot's token,
+   answering for a user who is not a member or when Discord cannot be
+   asked. Pass the hike log's page and size when the page shows the log:
+
+   ```tsx
+   import { SettingsPage } from "./pages/server/settings";
+
+   async function settingsPage(request: Request, env: Env, guildId: string) {
+     const server = await requireServer(request, env, guildId);
+     if (server instanceof Response) return server;
+     return htmlResponse(
+       <SettingsPage user={server.user} view={server.view} />,
+     );
+   }
+   ```
+
+   An action (a POST) starts with `requireServer` too, which refuses it
+   without a session; then follow "Add a form that changes something" from
+   its step 2, with `server.session` and `server.now`.
+
+3. Add one line for it to `SERVER_PAGES` there, the path after
+   `/g/<guild id>` as its key:
+
+   ```tsx
+     ["/settings", settingsPage],
+   ```
+
+4. Test it in `test/web/server-guard.test.tsx` or a test file of its own:
+   pass the router a `GUILD_HIKE` binding whose objects answer `webView`
+   with a fixed view, as `answeringNamespace` there does, with the view
+   from `baseView` in `test/web/pages/server/view.ts`, and check that a
+   server the session does not list is the 404 page without reaching the
+   binding, as "Check that a route turns a request away before it reaches
+   a guild object" says. Run them:
+
+   ```sh
+   npx vitest run test/web
+   ```
+
+5. Add an end-to-end scenario to `test/e2e/server-page.test.ts`: play the
+   state with `RoundPlayer` ("Play a hike round in an end-to-end scenario"
+   in `test/AGENTS.md`), add the user to the guild with
+   `e2e.discord.addMember`, sign them in with the guild in their list, and
+   request the page:
+
+   ```sh
+   npx vitest run --project e2e test/e2e/server-page.test.ts
+   ```
+
+6. Add it to the screenshots as "Add a page to the screenshots" says, with
+   a `server(...)` seed from `test/screenshots/seeds.ts`, whose server is
+   `/g/220000000000000101`; add the admin's view too where it differs.
+
+## Add a section to the server's page
+
+The server's page (`src/web/pages/server/page.tsx`) only lists its
+sections, one line each; each section is a component in its own file that
+takes the view and decides for itself whether it shows anything. The
+example adds the hike's map.
+
+1. Write the section in `src/web/pages/server/<section>.tsx`, with a
+   comment at the top saying where on the page it sits and what it shows.
+   It takes `{ view }: { view: WebView }`, returns `null` when it has
+   nothing to show, and starts with an `h2` (or a component whose heading
+   is level 2), so the page's outline holds:
+
+   ```tsx
+   /**
+    * The server's page, after the planned hike: the planned hike's map
+    * picture. Nothing while no hike is planned or it has no picture.
+    */
+   import type { WebView } from "../../../guild/web-view";
+
+   export function HikeMap({ view }: { view: WebView }) {
+     const hike = view.plannedHike;
+     if (hike?.mapPictureKey == null) return null;
+     return (
+       <section class="stack" aria-labelledby="hike-map">
+         <h2 id="hike-map">Map</h2>
+         <img
+           src={`/g/${view.server.id}/map.png`}
+           alt={`Map of ${hike.location.label}`}
+         />
+       </section>
+     );
+   }
+   ```
+
+2. Import it in `src/web/pages/server/page.tsx` and add one line for it
+   where it belongs in the page's order:
+
+   ```tsx
+           <PlannedHike view={view} />
+           <HikeMap view={view} />
+           <LogPreview view={view} />
+   ```
+
+3. Test it in `test/web/pages/server/<section>.test.tsx`, one test per
+   state it shows, from the fixed views in `test/web/pages/server/view.ts`
+   (add a builder there for a state it lacks), including text with markup
+   in it, which must arrive as text:
+
+   ```tsx
+   import { describe, expect, it } from "vitest";
+   import { HikeMap } from "../../../../src/web/pages/server/hike-map";
+   import { render } from "../../components/render";
+   import { baseView, plannedHike } from "./view";
+
+   describe("HikeMap", () => {
+     it("shows nothing without a map picture", () => {
+       expect(
+         render(<HikeMap view={baseView({ plannedHike: plannedHike() })} />),
+       ).toBe("");
+     });
+   });
+   ```
+
+4. If the order of the sections changed, update the order test in
+   `test/web/pages/server/page.test.tsx`, then run the tests:
+
+   ```sh
+   npx vitest run test/web/pages/server
+   ```
+
+5. Add a screenshot of each state it shows, as "Add a page to the
+   screenshots" says, and follow "Review your own UI change as a
+   designer".
 
 ## Add a form that changes something
 
@@ -720,6 +886,27 @@ Here the component is `pill`; use your component's name.
        () => true,
        { globalName: "Ana Hiker", avatar: MISSING_PICTURE },
      ),
+   ```
+
+   For a server's page, use `server(steps, as)` there: it sets up the
+   server `/g/220000000000000101` with its panel and signs `MEMBER_ID` in
+   as a member, as its owner (`"admin"`) or as a member who has left
+   (`"stranger"`). `steps` stores the server's rounds and hikes with
+   `play.seedRound` from `test/e2e/harness/rounds.ts`, which writes them
+   into the guild's object without posting anything: the script runs
+   outside Vitest, where waiting for the bot's posts (`eventually`) cannot
+   run. Give each round a fixed `startedAt` and dates written out:
+
+   ```ts
+   "server-date-vote": server((play, g) =>
+     play.seedRound(g, {
+       status: "date_voting",
+       startedAt: Date.UTC(2030, 5, 2, 18),
+       locations: [{ label: "Snow Lake", voters: [MEMBER_ID] }],
+       location: "Snow Lake",
+       dates: [{ label: "2030-06-15 11:00", voters: [MEMBER_ID] }],
+     }),
+   ),
    ```
 
 3. A `GET` route that is not a page (a file, a redirect, a plain-text

@@ -34,7 +34,7 @@ function NoRound({ view }: { view: WebView }) {
   return (
     <EmptyState title="No hike is being planned">
       {view.viewer.isAdmin
-        ? "The next hike starts with a location vote. You are an admin: start one with Start location vote in /hike admin in Discord."
+        ? "The next hike starts with a location vote. You are an admin: start one in Discord with /hike admin, then Start location vote."
         : "The next hike starts with a location vote. When an admin starts one, it shows here and in Discord."}
     </EmptyState>
   );
@@ -48,15 +48,18 @@ function LocationDecided({
   isAdmin: boolean;
 }) {
   return (
-    <Card title="Location vote" footer={<StatusPill status="decided" />}>
+    <Card title="Location vote">
       <div class="stack stack--tight">
+        <p>
+          <StatusPill status="decided" />
+        </p>
         <p>
           <strong>{round.location?.label}</strong> won the location vote.
         </p>
         {round.location?.details && <p>{round.location.details}</p>}
         <p class="u-muted">
           {isAdmin
-            ? "The date vote is next. You are an admin: start it with Start date vote in /hike admin in Discord."
+            ? "The date vote is next. You are an admin: start it in Discord with /hike admin, then Start date vote."
             : "The date vote is next. When an admin starts it, it shows here and in Discord."}
         </p>
       </div>
@@ -69,40 +72,35 @@ function OpenVote({ view, round }: { view: WebView; round: WebRoundSection }) {
   const isDate = round.step === "date_vote_open";
   const title = isDate ? "Date vote" : "Location vote";
   return (
-    <Card title={title} footer={<StatusPill status="open" />}>
+    <Card title={title}>
       <div class="stack">
-        {isDate && round.location && (
+        <div class="stack stack--tight">
           <p>
-            Where: <strong>{round.location.label}</strong>
+            <StatusPill status="open" />
           </p>
-        )}
+          {isDate && round.location && (
+            <p>
+              Where: <strong>{round.location.label}</strong>
+            </p>
+          )}
+          {isDate && (
+            <p class="u-muted">Times are in {view.settings.timeZone}.</p>
+          )}
+        </div>
         {vote === null ? (
           <p>The vote is being opened in Discord.</p>
         ) : (
-          <VoteTally
-            vote={vote}
-            isDate={isDate}
-            timeZone={view.settings.timeZone}
-          />
+          <VoteTally vote={vote} isDate={isDate} />
         )}
       </div>
     </Card>
   );
 }
 
-function VoteTally({
-  vote,
-  isDate,
-  timeZone,
-}: {
-  vote: WebOpenVote;
-  isDate: boolean;
-  timeZone: string;
-}) {
+function VoteTally({ vote, isDate }: { vote: WebOpenVote; isDate: boolean }) {
   const voted = vote.options.some((option) => option.viewerVoted);
   return (
     <>
-      {isDate && <p class="u-muted">Times are in {timeZone}.</p>}
       <TallyList
         label={isDate ? "Dates" : "Locations"}
         options={vote.options.map((option) => ({
