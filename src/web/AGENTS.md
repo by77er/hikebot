@@ -138,9 +138,9 @@ example is `/trails` again, now for signed-in members only.
 
 ## Add a page for a server
 
-A server's pages live under `/g/<guild id>`; "Web pages for a server" in
-`docs/design.md` says what the guard answers. The example is the server's
-settings at `/g/<guild id>/settings`; use your page's path and file.
+The example is the server's settings at `/g/<guild id>/settings`; use your
+page's path and file. "Web pages for a server" in `docs/design.md` says
+what the guard answers.
 
 1. Write the page in `src/web/pages/server/<page>.tsx`, taking the user and
    the view, as "Add a page that needs a signed-in user" says. Show only
@@ -233,10 +233,8 @@ settings at `/g/<guild id>/settings`; use your page's path and file.
 
 ## Add a section to the server's page
 
-The server's page (`src/web/pages/server/page.tsx`) only lists its
-sections, one line each; each section is a component in its own file that
-takes the view and decides for itself whether it shows anything. The
-example adds the hike's map.
+The example adds the hike's map to the server's page,
+`src/web/pages/server/page.tsx`.
 
 1. Write the section in `src/web/pages/server/<section>.tsx`, with a
    comment at the top saying where on the page it sits and what it shows.

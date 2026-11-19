@@ -144,6 +144,7 @@ describe("the guard of a server's pages", () => {
     expect(page.text).not.toContain("Ridge Walkers");
     expect(page.text).not.toContain("Listed name");
     expect(page.text).not.toContain("Calendar");
+    expect(page.text).toContain("Signed in as Ana.");
   });
 
   it("asks to try again when Discord cannot be asked, with no detail from it", async () => {
@@ -161,6 +162,7 @@ describe("the guard of a server's pages", () => {
     expect(html).toContain(`href="/g/${guild}/log?page=2"`);
     expect(page.text).not.toContain("Internal Server Error");
     expect(page.text).not.toContain("Ridge Walkers");
+    expect(page.text).toContain("Signed in as Ana.");
   });
 
   it("shows a member the server's page", async () => {
