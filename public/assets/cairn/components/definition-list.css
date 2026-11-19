@@ -1,0 +1,51 @@
+/* Definition list: one hairline row per setting; name over value on a phone, one line from the breakpoint. */
+
+.definition-list {
+  border-block-start: var(--border-width) solid var(--color-border);
+}
+
+.definition-list__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 var(--space-3);
+  align-items: center;
+  padding-block: var(--space-3);
+  border-block-end: var(--border-width) solid var(--color-border);
+}
+
+.definition-list__name {
+  grid-column: 1;
+  font-weight: var(--font-weight-semibold);
+}
+
+.definition-list__value {
+  grid-column: 1;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.definition-list__value--not-set {
+  color: var(--color-text-muted);
+}
+
+.definition-list__action {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  margin: 0;
+}
+
+@media (min-width: 48rem) {
+  .definition-list__row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+  }
+
+  .definition-list__value {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .definition-list__action {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}

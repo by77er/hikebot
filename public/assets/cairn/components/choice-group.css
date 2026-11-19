@@ -1,0 +1,35 @@
+/* Choice group: a borderless fieldset, legend like a label, one 44px row per choice. */
+
+.choice-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice-group--error {
+  border-inline-start: var(--space-1) solid var(--color-danger);
+  padding-inline-start: var(--space-3);
+}
+
+.choice-group__legend {
+  float: inline-start;
+  width: 100%;
+  margin-block-end: var(--space-1);
+  padding: 0;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.choice-group__legend + * {
+  clear: both;
+}
+
+.choice-group > :not(legend) + * {
+  margin-block-start: var(--space-1);
+}
+
+.choice-group__choices {
+  display: flex;
+  flex-direction: column;
+}

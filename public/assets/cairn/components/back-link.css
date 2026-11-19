@@ -1,0 +1,23 @@
+/* Back link: an arrow and where it goes, a 44px link above the heading. */
+
+.back-link {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  padding-block: calc((var(--target-min) - var(--line-height-body)) / 2);
+  font-weight: var(--font-weight-semibold);
+}
+
+.back-link[data-preview="hover"] {
+  text-decoration-thickness: var(--border-width-strong);
+}
+
+.back-link[data-preview="active"] {
+  color: var(--color-text);
+}
+
+.back-link__icon {
+  flex: none;
+  margin-block-start: calc((var(--line-height-body) - var(--icon-size)) / 2);
+}

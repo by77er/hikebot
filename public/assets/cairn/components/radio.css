@@ -1,0 +1,54 @@
+/* Radio: a 24px circle; chosen, a pine ring round a pine dot drawn as a border (kept in forced colours). */
+
+.radio {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: var(--choice-size);
+  height: var(--choice-size);
+  background: var(--color-surface);
+  border: var(--border-width-strong) solid var(--color-border-strong);
+  border-radius: 50%;
+  cursor: pointer;
+  transition-property: border-color;
+  transition-duration: var(--duration-quick);
+  transition-timing-function: var(--easing-standard);
+}
+
+.radio::before {
+  content: "";
+  border: calc(var(--choice-size) / 4 - var(--border-width-strong)) solid
+    var(--color-primary);
+  border-radius: 50%;
+  visibility: hidden;
+}
+
+.radio:not(:checked, :disabled, [aria-invalid="true"]):where(
+    :hover,
+    [data-preview="hover"]
+  ),
+.choice__item:hover .radio:not(:checked, :disabled, [aria-invalid="true"]) {
+  border-color: var(--color-text);
+}
+
+.radio:checked {
+  border-color: var(--color-primary);
+}
+
+.radio:checked::before {
+  visibility: visible;
+}
+
+.radio[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+.radio:disabled {
+  background: var(--color-surface-subtle);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+}
+
+.radio:disabled::before {
+  border-color: var(--color-text-muted);
+}

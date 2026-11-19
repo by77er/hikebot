@@ -9,6 +9,8 @@ import type { SchemeTokens } from "../../tokens";
 export interface SectionProps {
   /** Token values from the stylesheet, for both colour schemes. */
   tokens: SchemeTokens;
+  /** The page's query, for a section whose example form submits to it. */
+  query?: URLSearchParams;
 }
 
 export interface StyleguideSection {
@@ -55,6 +57,27 @@ export function StateList({
         <li key={state}>
           {example}
           <span class="styleguide-states__label">{state}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * One example per state in a single column, each under its state's name:
+ * for components as wide as their column, such as form controls.
+ */
+export function ExampleList({
+  examples,
+}: {
+  examples: { state: string; example: ComponentChildren }[];
+}) {
+  return (
+    <ul class="stack stack--loose list-reset">
+      {examples.map(({ state, example }) => (
+        <li class="stack stack--tight" key={state}>
+          <p class="styleguide-states__label">{state}</p>
+          {example}
         </li>
       ))}
     </ul>

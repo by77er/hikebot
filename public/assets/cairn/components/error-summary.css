@@ -1,0 +1,42 @@
+/* Error summary: a danger banner with a 2px boundary and a 44px link per field in error. */
+
+.error-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  max-width: var(--width-task);
+  padding: var(--space-4);
+  border: var(--border-width-strong) solid var(--color-danger);
+  border-inline-start-width: var(--space-1);
+  border-radius: var(--radius-control);
+  background: var(--color-danger-subtle);
+  color: var(--color-text);
+}
+
+.error-summary__icon {
+  color: var(--color-danger);
+  margin-block-start: calc((var(--line-height-h3) - var(--icon-size)) / 2);
+}
+
+.error-summary__title {
+  font-size: var(--font-size-h3);
+  line-height: var(--line-height-h3);
+  font-weight: var(--font-weight-bold);
+}
+
+.error-summary__list {
+  margin-block-start: var(--space-1);
+  padding: 0;
+  list-style: none;
+}
+
+.error-summary__list li + li {
+  margin: 0;
+}
+
+.error-summary__list a {
+  display: inline-block;
+  padding-block: calc((var(--target-min) - var(--line-height-body)) / 2);
+  font-weight: var(--font-weight-semibold);
+}

@@ -1,0 +1,57 @@
+/* Checkbox: a 24px box; checked, pine with a tick drawn in borders (kept in forced colours). */
+
+.checkbox {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: var(--choice-size);
+  height: var(--choice-size);
+  background: var(--color-surface);
+  border: var(--border-width-strong) solid var(--color-border-strong);
+  border-radius: var(--radius-blaze);
+  cursor: pointer;
+  transition-property: background-color, border-color;
+  transition-duration: var(--duration-quick);
+  transition-timing-function: var(--easing-standard);
+}
+
+.checkbox::before {
+  content: "";
+  width: calc(var(--choice-size) / 4);
+  height: calc(var(--choice-size) / 2);
+  border-inline-end: var(--border-width-strong) solid var(--color-on-primary);
+  border-block-end: var(--border-width-strong) solid var(--color-on-primary);
+  transform: translateY(-15%) rotate(45deg);
+  visibility: hidden;
+}
+
+.checkbox:not(:checked, :disabled, [aria-invalid="true"]):where(
+    :hover,
+    [data-preview="hover"]
+  ),
+.choice__item:hover .checkbox:not(:checked, :disabled, [aria-invalid="true"]) {
+  border-color: var(--color-text);
+}
+
+.checkbox:checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.checkbox:checked::before {
+  visibility: visible;
+}
+
+.checkbox[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+.checkbox:disabled {
+  background: var(--color-surface-subtle);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+}
+
+.checkbox:disabled::before {
+  border-color: var(--color-text-muted);
+}

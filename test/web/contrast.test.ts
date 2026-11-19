@@ -68,6 +68,42 @@ describe("the tokens in tokens.css", () => {
     }
   });
 
+  it("cover the form controls on the backgrounds forms sit on, in both schemes", () => {
+    const results = checkPairings(tokens);
+    const expected = [
+      ["color-border-strong", "non-text", "control boundary"],
+      ["color-danger", "non-text", "field in error"],
+      ["color-primary", "non-text", "checked box and radio"],
+      ["color-on-primary", "text", "tick on a checked box"],
+      ["color-text-muted", "text", "hint and limit"],
+      ["color-danger", "text", "error text"],
+      ["color-text", "text", "label and typed text"],
+    ] as const;
+    for (const [foreground, kind, what] of expected) {
+      const backgrounds =
+        foreground === "color-on-primary"
+          ? ["color-primary"]
+          : ["color-bg", "color-surface"];
+      for (const background of backgrounds) {
+        for (const scheme of ["light", "dark"] as const) {
+          const result = results.find(
+            (r) =>
+              r.scheme === scheme &&
+              r.foreground === foreground &&
+              r.background === background &&
+              r.kind === kind,
+          );
+          expect(
+            result,
+            `${what}: ${foreground} on ${background}, ${scheme}`,
+          ).toBeDefined();
+          expect(result?.minimum).toBe(kind === "text" ? 4.5 : 3);
+          expect(result?.passes, `${what}, ${scheme}`).toBe(true);
+        }
+      }
+    }
+  });
+
   it("fail the check when a token changes to a value with too little contrast", () => {
     const paler = css.replace(
       /--color-text-muted: #[0-9a-f]{6};/,

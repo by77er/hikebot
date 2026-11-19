@@ -160,6 +160,45 @@ in `docs/design.md` says which POSTs are refused.
    </form>;
    ```
 
+   Build the form from the design system's form components, as "Forms" in
+   `docs/design-system.md` says: `novalidate` on the form, a form row per
+   field (`TextField`, `Textarea`, `Select`, `ChoiceGroup`), then
+   `FormActions` with the submit Button and the way back. Give each field
+   the value it had, so the page can come back with what was typed:
+
+   ```tsx
+   import { Button } from "../components/button";
+   import { ErrorSummary } from "../components/error-summary";
+   import { FormActions } from "../components/form-actions";
+   import { TextField } from "../components/text-field";
+
+   <>
+     {errors.name !== undefined && (
+       <ErrorSummary
+         title="The trail was not added."
+         errors={[{ field: "trail-name", message: errors.name }]}
+       />
+     )}
+     <form method="post" action="/trails" novalidate>
+       <CsrfField token={csrf} />
+       <TextField
+         id="trail-name"
+         name="name"
+         label="Trail name"
+         required
+         maxLength={80}
+         autoComplete="off"
+         value={typed.name}
+         error={errors.name}
+       />
+       <FormActions>
+         <Button variant="primary">Add trail</Button>
+         <Button href="/trails">Back</Button>
+       </FormActions>
+     </form>
+   </>;
+   ```
+
 2. Register the target with `.post`. Read the session (a POST cannot be
    sent back after sign-in, so refuse instead of redirecting), check the
    POST, then do the work and redirect with `303` so a reload does not
@@ -177,7 +216,9 @@ in `docs/design.md` says which POSTs are refused.
        const form = await checkPost(request, env, session, now);
        if (form instanceof Response) return form;
        const name = form.get("name");
-       // check the name, and the user's rights with the bot's token, then save it
+       // check the name, and the user's rights with the bot's token; if the
+       // check fails, answer with the page again, given what was typed and
+       // the errors, and a <title> starting with "Error: "; then save it
        return seeOther("/trails");
      })
    ```
@@ -456,9 +497,16 @@ Here the component is `pill`; use your component's name.
    entries in alphabetical order, and take the screenshots again:
 
    ```sh
-   npx vitest run test/web/screenshot-pages.test.ts test/web/routes.test.ts
+   npx vitest run test/web/screenshot-pages.test.ts test/web/routes.test.ts test/web/styleguide-pages.test.ts
    npm run screenshots
    ```
+
+   Point a form on the component's page at the page itself
+   (`method="get" action="/styleguide/pill#pill"`) and read what it sent
+   from the section's `query` prop; point a form that must post at the
+   same path, and show a message when `query` has `posted`. Show the
+   states of a component as wide as its column, such as a form control,
+   with `ExampleList` from `section.tsx` instead of `StateList`.
 
 ## Add an icon
 

@@ -213,7 +213,7 @@ export const PAIRINGS: Pairing[] = [
       foreground: "color-primary",
       background,
       kind: "non-text",
-      use: "Primary button boundary",
+      use: "Primary button boundary, checked box and radio",
     },
     {
       foreground: "color-danger",
@@ -222,6 +222,12 @@ export const PAIRINGS: Pairing[] = [
       use: "Danger button boundary",
     },
   ]),
+  ...["color-bg", "color-surface"].map((background): Pairing => ({
+    foreground: "color-danger",
+    background,
+    kind: "non-text",
+    use: "Field in error: boundary and bar",
+  })),
   ...onSurfaces("color-focus", "non-text", "Focus ring"),
   ...onSurfaces("color-accent", "non-text", "Trail blaze"),
   ...["info", "success", "danger"].map((tone): Pairing => ({

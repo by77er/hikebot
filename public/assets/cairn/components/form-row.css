@@ -1,0 +1,98 @@
+/* Form row: label, hint, error, control, limit; in error, a danger bar as well as the words. */
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.form-row > .input,
+.form-row > .select {
+  margin-block-start: var(--space-1);
+}
+
+.form-row__label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.form-row__required {
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-muted);
+}
+
+.form-row__hint {
+  color: var(--color-text-muted);
+}
+
+.form-row__error {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  color: var(--color-danger);
+  font-weight: var(--font-weight-semibold);
+}
+
+.form-row__error-icon {
+  flex: none;
+  margin-block-start: calc((var(--line-height-body) - var(--icon-size)) / 2);
+}
+
+.form-row__limit {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.form-row--error,
+.choice--error {
+  border-inline-start: var(--space-1) solid var(--color-danger);
+  padding-inline-start: var(--space-3);
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.choice__item {
+  display: grid;
+  grid-template-columns: var(--choice-size) minmax(0, 1fr);
+  column-gap: var(--space-3);
+  align-items: start;
+}
+
+.choice__input {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  margin-block-start: calc((var(--target-min) - var(--choice-size)) / 2);
+}
+
+.choice__label {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-height: var(--target-min);
+  padding-block: calc((var(--target-min) - var(--line-height-body)) / 2);
+  padding-inline-start: calc(var(--choice-size) + var(--space-3));
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.choice__hint {
+  grid-column: 2;
+  margin-block-start: calc(-1 * var(--space-2));
+  padding-block-end: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.choice__input:disabled + .choice__label {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
