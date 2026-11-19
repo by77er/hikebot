@@ -1204,7 +1204,7 @@ dark page, and members compare the web map with the picture in Discord.
 | The font file                                   | 32 KB  | 27 KB       |
 | All stylesheets, each gzipped, together         | 26 KB  | about 25 KB |
 | The contour pattern                             | 12 KB  | 9 KB        |
-| Everything a page loads from Cairn, transferred | 64 KB  | about 53 KB |
+| Everything a page loads from Cairn, transferred | 64 KB  | about 56 KB |
 
 The stylesheets' budget is 26 KB rather than 20 KB, for three reasons.
 Each file is compressed on its own, and one file per component means 33
@@ -1217,6 +1217,11 @@ markup, in place of MapLibre's stylesheet (72 KB, about 10 KB gzipped,
 with colours of its own) that pages would otherwise load. Raise it again
 only with the same kind of reason, and first look for rules components can
 share.
+
+The interactive map's files are outside this budget, as they are not
+Cairn's: MapLibre GL JS and its worker (about 450 KB gzipped together) and
+the map's own script load only on a page with a map, under the versioned
+path, so a browser fetches them once a deploy.
 
 ## Designing a new page
 
