@@ -176,11 +176,11 @@ describe("GET /maps/style.json", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/json");
     expect(response.headers.get("Cache-Control")).toBe(SHORT_CACHE_CONTROL);
-    const style = (await response.json()) as {
+    const style = await response.json<{
       sources: Record<string, Record<string, unknown>>;
       glyphs?: string;
       sprite?: string;
-    };
+    }>();
     expect(validateStyleMin(style as never)).toEqual([]);
     expect(style.sources.hikebot).toMatchObject({
       type: "vector",
