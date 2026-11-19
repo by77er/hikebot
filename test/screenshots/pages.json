@@ -29,13 +29,6 @@
       "user": "400000000000000001"
     },
     {
-      "name": "admin-start-date-vote",
-      "path": "/g/220000000000000101/admin/start-date-vote",
-      "status": 200,
-      "seed": "server-location-decided-admin",
-      "user": "400000000000000001"
-    },
-    {
       "name": "admin-start-location-vote",
       "path": "/g/220000000000000101/admin/start-location-vote",
       "status": 200,
