@@ -30,6 +30,7 @@
 @import url("components/form-row.css") layer(components);
 @import url("components/hike-card.css") layer(components);
 @import url("components/icon.css") layer(components);
+@import url("components/map-view.css") layer(components);
 @import url("components/pagination.css") layer(components);
 @import url("components/radio.css") layer(components);
 @import url("components/round-stepper.css") layer(components);

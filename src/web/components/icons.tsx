@@ -221,10 +221,27 @@ export function MessagesSquareIcon(props: IconProps) {
   );
 }
 
+export function MinusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 12h14" />
+    </Icon>
+  );
+}
+
 export function MountainIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="m8 3 4 8 5-5 5 15H2L8 3z" />
+    </Icon>
+  );
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 12h14" />
+      <path d="M12 5v14" />
     </Icon>
   );
 }
@@ -300,7 +317,9 @@ export const ICONS = {
   MapIcon,
   MapPinIcon,
   MessagesSquareIcon,
+  MinusIcon,
   MountainIcon,
+  PlusIcon,
   TriangleAlertIcon,
   UserIcon,
   UsersIcon,
