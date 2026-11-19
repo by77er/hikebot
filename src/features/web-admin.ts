@@ -16,11 +16,17 @@ import {
 import { START_DATES_FIELD, startDateVoteOnSchedule } from "./date-vote";
 import { START_LOCATIONS_FIELD } from "./location-vote";
 import {
+  CANCEL_QUESTION,
+  closeQuestion,
+  type ConfirmQuestion,
+} from "./poll-ui";
+import {
   cancelRound,
   closeVote,
   dateVoteRefusal,
   defaultDates,
   locationVoteRefusal,
+  pollWordings,
   postVoteMessage,
   retryAnnouncement,
   retryHikeDay,
@@ -57,7 +63,20 @@ export interface WebAdminAction {
   style: "primary" | "secondary" | "quiet" | "danger";
   /** For a retry, the panel's line on what failed; null otherwise. */
   note: string | null;
+  /**
+   * For a control that asks first (Close, Cancel round, Withdraw date
+   * vote), the question and what it does, in the panel's words; null for
+   * the others.
+   */
+  confirm: ConfirmQuestion | null;
 }
+
+/** What the web page asks before it withdraws a date vote. */
+export const WITHDRAW_QUESTION: ConfirmQuestion = {
+  question: "Withdraw the date vote?",
+  consequence:
+    "The date vote is taken back with its dates and votes, and its message shows it as cancelled. The location stays decided, so you can start the date vote again.",
+};
 
 /** A start form's field, as the panel's start modal has it. */
 export interface WebStartField {
@@ -92,30 +111,9 @@ export function adminSection(source: WebViewSource): WebAdminSection | null {
     guildId: source.guildId,
     store: source.store,
   };
-  const state = loadAdminPanelState(source.storage);
-  const actions: WebAdminAction[] = [];
-  for (const action of panelActions(state)) {
-    if (action.kind === "set-map-pin") continue;
-    if (
-      action.kind === "cancel-round" &&
-      state.round?.status === "date_voting"
-    ) {
-      const poll = state.round.datePoll;
-      if (poll?.status === "open") {
-        actions.push({
-          kind: "withdraw-date-vote",
-          label: "Withdraw date vote",
-          target: poll.id,
-          style: "quiet",
-          note: null,
-        });
-      }
-    }
-    actions.push({ ...action, kind: action.kind, note: action.note ?? null });
-  }
   const refusal = locationVoteRefusal(context);
   return {
-    actions,
+    actions: webAdminActions(source.storage),
     setupMissing: refusal?.code === "setup_incomplete" ? refusal.message : null,
     locationsField: { ...START_LOCATIONS_FIELD },
     datesField: {
@@ -123,6 +121,48 @@ export function adminSection(source: WebViewSource): WebAdminSection | null {
       value: dateVoteRefusal(context) === null ? defaultDates(context) : [],
     },
   };
+}
+
+/**
+ * The controls the web page offers now, in the panel's order: the panel's
+ * (`panelActions`) but Set map pin, with Withdraw date vote before Cancel
+ * round while a date vote is open.
+ */
+export function webAdminActions(
+  storage: DurableObjectStorage,
+): WebAdminAction[] {
+  const state = loadAdminPanelState(storage);
+  const wordings = pollWordings();
+  const polls = [state.round?.locationPoll, state.round?.datePoll];
+  const actions: WebAdminAction[] = [];
+  for (const action of panelActions(state)) {
+    if (action.kind === "set-map-pin") continue;
+    const datePoll = state.round?.datePoll;
+    if (action.kind === "cancel-round" && datePoll?.status === "open") {
+      actions.push({
+        kind: "withdraw-date-vote",
+        label: "Withdraw date vote",
+        target: datePoll.id,
+        style: "quiet",
+        note: null,
+        confirm: WITHDRAW_QUESTION,
+      });
+    }
+    const closing = polls.find((poll) => poll?.id === action.target);
+    const wording = closing && wordings[closing.kind];
+    actions.push({
+      ...action,
+      kind: action.kind,
+      note: action.note ?? null,
+      confirm:
+        action.kind === "cancel-round"
+          ? CANCEL_QUESTION
+          : action.kind === "close-vote" && wording
+            ? closeQuestion(wording)
+            : null,
+    });
+  }
+  return actions;
 }
 
 /** The control a web form posted. */
@@ -152,6 +192,11 @@ export type WebAdminOutcome =
        * it goes on in the object (and a close in its durable flow).
        */
       finishing: boolean;
+      /**
+       * The retries offered once the work is done, each with the panel's
+       * line on what failed; none while `finishing`.
+       */
+      retries: WebAdminAction[];
     };
 
 /**
@@ -184,9 +229,16 @@ export async function runWebAdminAction(
         `the web action ${request.action} went on after its answer and failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     });
-    return { kind: "done", notes: [], finishing: true };
+    return { kind: "done", notes: [], finishing: true, retries: [] };
   }
-  return { kind: "done", notes, finishing: false };
+  return {
+    kind: "done",
+    notes,
+    finishing: false,
+    retries: webAdminActions(context.storage).filter(
+      (action) => action.note !== null,
+    ),
+  };
 }
 
 /** Calls the round action `request` names, as the panel's handler does. */

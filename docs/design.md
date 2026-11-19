@@ -603,6 +603,7 @@ now)` returns the payload, or null when the token is malformed, changed,
   | `oauth-state` | The sealed OAuth `state`, checked on the callback            |
   | `csrf`        | A form's CSRF token, bound to the session                    |
   | `calendar`    | A calendar feed address, so it can be shared without sign-in |
+  | `notice`      | The result of an admin's action, carried across its redirect |
 
 - A calendar feed address is `/calendar/<guild id>/<signature>.ics` with the
   signature `sign(SIGNING_SECRET, "calendar", <guild id>)`

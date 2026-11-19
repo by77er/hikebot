@@ -704,6 +704,31 @@ export function renderConfirm(
   ];
 }
 
+/** A question the panel asks before it acts, and what acting does. */
+export interface ConfirmQuestion {
+  question: string;
+  consequence: string;
+}
+
+/** What the panel asks before it closes a vote of `wording`'s kind. */
+export function closeQuestion(wording: PollWording): ConfirmQuestion {
+  return {
+    question: `Close the ${wording.name} now?`,
+    consequence: `The ${wording.noun} with the most votes wins; a tie is broken at random. Members can no longer vote, and the result is announced.`,
+  };
+}
+
+/** What the panel asks before it cancels a round. */
+export const CANCEL_QUESTION: ConfirmQuestion = {
+  question: "Cancel this round?",
+  consequence:
+    "Any open vote closes without a result and its votes are discarded. You can start a new round afterwards.",
+};
+
+function asked({ question, consequence }: ConfirmQuestion): string {
+  return `**${question}** ${consequence}`;
+}
+
 /** Close, first click: checks the poll can close and asks to confirm. */
 function askClose(wordings: PollWordings): ComponentHandler {
   return adminOnly((interaction, context) => {
@@ -716,7 +741,7 @@ function askClose(wordings: PollWordings): ComponentHandler {
     return {
       response: update(
         renderConfirm(
-          `**Close the ${wording.name} now?** The ${wording.noun} with the most votes wins; a tie is broken at random. Members can no longer vote, and the result is announced.`,
+          asked(closeQuestion(wording)),
           button({
             custom_id: POLL_IDS.closeConfirm(poll.id),
             label: `Close ${wording.name}`,
@@ -1034,7 +1059,7 @@ const askCancel: ComponentHandler = adminOnly((interaction, context) => {
   return {
     response: update(
       renderConfirm(
-        "**Cancel this round?** Any open vote closes without a result and its votes are discarded. You can start a new round afterwards.",
+        asked(CANCEL_QUESTION),
         button({
           custom_id: POLL_IDS.cancelConfirm(check.round.id),
           label: "Cancel round",
