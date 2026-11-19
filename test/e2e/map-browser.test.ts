@@ -28,6 +28,8 @@ const PLACES = [
 
 let browser: Browser;
 let path: string;
+/** A server whose location vote has one place inside the map data. */
+let onePlacePath: string;
 let cookie: string;
 let member: PageClient;
 
@@ -51,17 +53,33 @@ beforeAll(async () => {
     startedAt: Date.UTC(2030, 5, 20, 18),
     locations: PLACES,
   });
+  const lone = play.guild(2, { name: "Lake Walkers" });
+  e2e.discord.addMember(lone.guildId, VIEWER);
+  await play.setUpPanel(lone);
+  await play.seedRound(lone, {
+    status: "location_voting",
+    startedAt: Date.UTC(2030, 5, 20, 18),
+    locations: [
+      { label: "Little Si", point: { lat: 47.4987, lon: -121.756 } },
+      // Outside the sample map data: listed, but not on the map.
+      { label: "Snow Lake", point: { lat: 47.4555, lon: -121.4507 } },
+    ],
+  });
   e2e.discord.addUser({
     id: VIEWER,
     username: "ana",
     globalName: "Ana",
-    guilds: [{ id: g.guildId, name: "Ridge Walkers" }],
+    guilds: [
+      { id: g.guildId, name: "Ridge Walkers" },
+      { id: lone.guildId, name: "Lake Walkers" },
+    ],
   });
   const client = new PageClient(e2e.url);
   expect((await client.signIn({ id: VIEWER })).status).toBe(303);
   cookie = client.cookieHeader();
   member = client;
   path = `/g/${g.guildId}`;
+  onePlacePath = `/g/${lone.guildId}`;
   browser = await launchBrowser({ webgl: true });
 }, 120_000);
 
@@ -82,7 +100,7 @@ interface Opened {
  * running or, with `script: false`, with every script answered empty, as a
  * browser without JavaScript shows it.
  */
-async function open({ script = true } = {}): Promise<Opened> {
+async function open({ script = true, at = path } = {}): Promise<Opened> {
   const page = await browser.newPage();
   const requests: string[] = [];
   const tiles: Opened["tiles"] = [];
@@ -117,7 +135,7 @@ async function open({ script = true } = {}): Promise<Opened> {
       for (const entry of list.getEntries()) window.__shifts += entry.value;
     }).observe({ type: "layout-shift", buffered: true });
   })()`);
-  const response = await page.goto(new URL(path, e2e.url).href, {
+  const response = await page.goto(new URL(at, e2e.url).href, {
     waitUntil: "load",
   });
   expect(response?.status()).toBe(200);
@@ -276,3 +294,15 @@ it("serves the stored picture to a member only, and the tiles to anyone", async 
     "application/vnd.mapbox-vector-tile",
   );
 });
+
+it("draws a vote's one place on the map as its numbered marker, not as a hike's pin", async () => {
+  const { page } = await open({ at: onePlacePath });
+  await settled(page);
+  expect(await texts(page, ".map-view__pin")).toEqual([]);
+  expect(await texts(page, ".map-view__marker")).toEqual(["1"]);
+  expect(await texts(page, ".map-view__name")).toEqual([
+    "Little Si",
+    "Snow Lake",
+  ]);
+  await page.close();
+}, 120_000);
