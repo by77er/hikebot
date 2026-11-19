@@ -708,7 +708,7 @@ colour means updating `CAIRN` and the map tokens it feeds.
 | `roadMajor`            | `--map-road-major`             | `#ffffff` | `--color-surface`                          | Major roads, such as the road to a trailhead.            |
 | `roadMajorCasing`      | `--map-road-major-casing`      | `#566059` | `--color-text-muted`                       | Their edges.                                             |
 | `roadMinor`            | `--map-road-minor`             | `#ffffff` | `--color-surface`                          | Minor roads and streets.                                 |
-| `roadMinorCasing`      | `--map-road-minor-casing`      | `#7d8781` | `--color-border-strong`                    | Their edges.                                             |
+| `roadMinorCasing`      | `--map-road-minor-casing`      | `#a9afa9` | `65% --color-border-strong in --color-bg`  | Their edges.                                             |
 | `roadMotorway`         | `--map-road-motorway`          | `#ced0cb` | `35% --color-border-strong in --color-bg`  | Motorways, kept quiet.                                   |
 | `roadMotorwayCasing`   | `--map-road-motorway-casing`   | `#7d8781` | `--color-border-strong`                    | Their edges.                                             |
 | `rail`                 | `--map-rail`                   | `#566059` | `--color-text-muted`                       | Railways.                                                |
@@ -781,8 +781,9 @@ wide. The style is tuned at zooms 11, 12 and 14 on the samples for that:
 
 1. **The pin** is the only orange shape and the largest mark: the blaze,
    13 by 28 logical pixels on an 8-pixel pointer whose tip is on the point.
-2. **Trails** are the widest dashed lines, 2.3 logical pixels at zooms 11
-   and 12 and 2.6 at 14, over a paper halo, drawn above every road.
+2. **Trails** are the widest dashed lines, 2.8 logical pixels at zoom 11,
+   where few trails are in the data and each must show, 2.5 at 12 and 2.6
+   at 14, over a paper halo, drawn above every road.
 3. **Summits** are labelled first: semibold, 15.5 to 17 logical pixels,
    with the height on a second line, and they win every overlap with other
    labels (`LABEL_PRIORITY`: peaks, then water, towns, villages,

@@ -76,7 +76,7 @@ export const RECIPES = {
   roadMajor: { token: "color-surface" },
   roadMajorCasing: { token: "color-text-muted" },
   roadMinor: { token: "color-surface" },
-  roadMinorCasing: { token: "color-border-strong" },
+  roadMinorCasing: { token: "color-border-strong", amount: 0.65 },
   rail: { token: "color-text-muted" },
   /** Footpaths and trails, what a hiker looks for: the blaze, weathered. */
   path: { token: "color-accent", amount: 0.6, into: "color-text" },
@@ -169,8 +169,8 @@ export const WIDTHS = {
     [14, 1],
   ],
   path: [
-    [11, 2.3],
-    [12, 2.3],
+    [11, 2.8],
+    [12, 2.5],
     [14, 2.6],
     [16, 3.2],
   ],
