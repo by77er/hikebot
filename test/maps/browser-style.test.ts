@@ -103,6 +103,15 @@ describe("browserStyle", () => {
     }
   });
 
+  it("labels only features with a name, as the picture does", () => {
+    for (const layer of style.layers) {
+      if (layer.type !== "symbol") continue;
+      expect(JSON.stringify(layer.filter), layer.id).toContain(
+        '["has","name"]',
+      );
+    }
+  });
+
   it("names the peak triangle the browser draws, at the picture's size", () => {
     expect(style.metadata).toEqual({
       "hikebot:peak": {
