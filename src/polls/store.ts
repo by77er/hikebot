@@ -405,7 +405,11 @@ function refuseResting(
  * refusal; with a `window`, those are the round's (`CADENCE_WINDOW_DAYS`
  * after the date vote closes), and they may all have passed.
  */
-function proposeDays(first: string, last: string, window: boolean): string {
+export function proposeDays(
+  first: string,
+  last: string,
+  window: boolean,
+): string {
   if (!window) return `Propose a day from ${first} to ${last}.`;
   return first <= last
     ? `Propose a day from ${first} to ${last}: the ${String(CADENCE_WINDOW_DAYS)} days after the date vote closes.`

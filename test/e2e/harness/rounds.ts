@@ -432,6 +432,22 @@ export class RoundPlayer {
   }
 
   /**
+   * Stores the weekly schedule as turned on at `onSince`, as Schedule in
+   * the panel does, without scheduling its job: for the screenshots'
+   * seeds, whose open date vote then offers the round's days, fixed by the
+   * seeded vote, rather than days from today. Open the panel first.
+   */
+  async seedSchedule(g: TestGuild, onSince: number): Promise<void> {
+    const sql = await this.e2e.harness
+      .getWorker()
+      .getDurableObjectStorage("GUILD_HIKE", { name: g.guildId });
+    await sql.exec(
+      "UPDATE guild_settings SET cadence_enabled = 1, cadence_on_since = ?",
+      onSince,
+    );
+  }
+
+  /**
    * Stores `round` in the guild's object as the bot would have stored it
    * after members played it that far: its location vote, and from
    * `date_voting` on its date vote, each option with the members who voted
@@ -487,7 +503,8 @@ export class RoundPlayer {
            VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
           pollId,
           label,
-          label.toLowerCase(),
+          // The bot keys a date by its value, a location by its label.
+          option.label.toLowerCase(),
           option.details ?? null,
           kind === "date" ? option.label : null,
           owner,

@@ -7,32 +7,50 @@
  */
 import type { WebView } from "../../../guild/web-view";
 import type { AdminNotice } from "../../admin/notice";
+import type { Flash } from "../../flash";
 import { Layout, type LayoutUser } from "../../layout";
+import { ActionNotice } from "./action-notice";
 import { AdminControls } from "./admin-controls";
 import { AdminNoticeBanner } from "./admin-notice";
 import { CalendarAddress } from "./calendar-address";
 import { CurrentStep } from "./current-step";
+import type { PageForms } from "./forms";
 import { LogPreview } from "./log-preview";
 import { PlannedHike } from "./planned-hike";
+import { ProposeDate } from "./propose-date";
+import { ProposeLocation } from "./propose-location";
 import { ServerHeading } from "./server-heading";
 
 export function ServerPage({
   user,
   view,
   notice = null,
+  forms,
+  flash = null,
 }: {
   user: LayoutUser;
   view: WebView;
   /** What an admin's action just came to, from its redirect. */
   notice?: AdminNotice | null;
+  /** The forms' CSRF token, and a member's refused action to show. */
+  forms: PageForms;
+  /** The banner of the member's last action, shown once. */
+  flash?: Flash | null;
 }) {
+  const title = `${view.server.name} · hikebot`;
   return (
-    <Layout title={`${view.server.name} · hikebot`} user={user}>
+    <Layout
+      title={forms.refusal === null ? title : `Error: ${title}`}
+      user={user}
+    >
       <div class="stack stack--section">
         <ServerHeading view={view} />
         <AdminNoticeBanner view={view} notice={notice} csrf={user.csrf} />
-        <CurrentStep view={view} />
+        <ActionNotice view={view} forms={forms} flash={flash} />
+        <CurrentStep view={view} forms={forms} />
         <AdminControls view={view} notice={notice} csrf={user.csrf} />
+        <ProposeLocation view={view} forms={forms} />
+        <ProposeDate view={view} forms={forms} />
         <PlannedHike view={view} />
         <LogPreview view={view} />
         <CalendarAddress view={view} />

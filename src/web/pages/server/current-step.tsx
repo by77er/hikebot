@@ -1,25 +1,29 @@
 /**
  * The server's page, second section: the card of the step the round is at.
- * An open vote shows its options as a tally, the viewer's own votes marked,
- * and Vote in Discord, linking to the poll's message; a decided location
- * waiting for its date vote says so. With no round and no planned hike, an
+ * An open vote shows its options as a form to vote with (`VoteForm`), the
+ * viewer's own votes ticked, and a link to the poll's message in Discord;
+ * a decided location waiting for its date vote says so. With no round and no planned hike, an
  * empty state says what happens next, and tells an admin where to start a
  * vote. With no round and a planned hike, the planned hike's section is the
  * page's news and this one shows nothing.
  */
-import type {
-  WebOpenVote,
-  WebRoundSection,
-} from "../../../features/round-section";
+import type { WebRoundSection } from "../../../features/round-section";
 import type { WebView } from "../../../guild/web-view";
 import { Button } from "../../components/button";
 import { Card } from "../../components/card";
 import { EmptyState } from "../../components/empty-state";
 import { DiscordIcon } from "../../components/icons";
 import { StatusPill } from "../../components/status-pill";
-import { TallyList } from "../../components/tally-list";
+import type { PageForms } from "./forms";
+import { VoteForm } from "./vote-form";
 
-export function CurrentStep({ view }: { view: WebView }) {
+export function CurrentStep({
+  view,
+  forms,
+}: {
+  view: WebView;
+  forms: PageForms;
+}) {
   const { round } = view;
   if (round === null) {
     return view.plannedHike === null ? <NoRound view={view} /> : null;
@@ -27,7 +31,7 @@ export function CurrentStep({ view }: { view: WebView }) {
   if (round.step === "location_decided") {
     return <LocationDecided round={round} isAdmin={view.viewer.isAdmin} />;
   }
-  return <OpenVote view={view} round={round} />;
+  return <OpenVote view={view} round={round} forms={forms} />;
 }
 
 function NoRound({ view }: { view: WebView }) {
@@ -67,7 +71,15 @@ function LocationDecided({
   );
 }
 
-function OpenVote({ view, round }: { view: WebView; round: WebRoundSection }) {
+function OpenVote({
+  view,
+  round,
+  forms,
+}: {
+  view: WebView;
+  round: WebRoundSection;
+  forms: PageForms;
+}) {
   const vote = round.vote;
   const isDate = round.step === "date_vote_open";
   const title = isDate ? "Date vote" : "Location vote";
@@ -90,47 +102,22 @@ function OpenVote({ view, round }: { view: WebView; round: WebRoundSection }) {
         {vote === null ? (
           <p>The vote is being opened in Discord.</p>
         ) : (
-          <VoteTally vote={vote} isDate={isDate} />
+          <>
+            <VoteForm view={view} vote={vote} forms={forms} />
+            {vote.messageUrl === null ? (
+              <p class="u-muted">
+                The vote's message is being posted in Discord.
+              </p>
+            ) : (
+              <div class="cluster">
+                <Button href={vote.messageUrl} icon={DiscordIcon}>
+                  See the vote in Discord
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </Card>
-  );
-}
-
-function VoteTally({ vote, isDate }: { vote: WebOpenVote; isDate: boolean }) {
-  const voted = vote.options.some((option) => option.viewerVoted);
-  return (
-    <>
-      <TallyList
-        label={isDate ? "Dates" : "Locations"}
-        options={vote.options.map((option) => ({
-          id: String(option.optionId),
-          label: option.label,
-          details: option.details,
-          votes: option.votes,
-          yourVote: option.viewerVoted,
-        }))}
-        voterCount={vote.voterCount}
-        empty={
-          isDate
-            ? "No date has been proposed yet."
-            : "No location has been proposed yet."
-        }
-      />
-      <p>
-        {voted
-          ? "You have voted. You can change your votes in Discord."
-          : "You have not voted yet."}
-      </p>
-      {vote.messageUrl === null ? (
-        <p class="u-muted">The vote's message is being posted in Discord.</p>
-      ) : (
-        <div class="cluster">
-          <Button variant="primary" href={vote.messageUrl} icon={DiscordIcon}>
-            Vote in Discord
-          </Button>
-        </div>
-      )}
-    </>
   );
 }

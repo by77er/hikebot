@@ -8,7 +8,7 @@ import { webRouter } from "../../src/web/routes";
 import list from "../screenshots/pages.json";
 import type { PageList } from "../screenshots/pages";
 
-const { pages, excluded }: PageList = list;
+const { pages, excluded } = list as PageList;
 const routes = webRouter.paths("GET");
 
 /** Whether `route` answers `path`, as the router matches them. */

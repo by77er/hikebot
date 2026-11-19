@@ -1,10 +1,15 @@
 /**
- * The one way a page reads a server, and an admin's action changes it:
- * through its `GuildHike` object's `webView` and `adminAction` methods,
- * never its storage.
+ * The one way a page reads a server, and an action changes it: through
+ * its `GuildHike` object's `webView`, `adminAction`, `webVote` and
+ * `webPropose` methods, never its storage.
  */
 import type { WebAdminRequest } from "../features/web-admin";
-import type { WebActionResult } from "../guild/web-action";
+import type {
+  WebActionResult,
+  WebMemberResult,
+  WebProposeRequest,
+  WebVoteRequest,
+} from "../guild/web-action";
 import type { WebViewResult } from "../guild/web-view";
 
 /** A Discord snowflake: 17 to 20 digits. */
@@ -46,4 +51,32 @@ export async function actOnGuild(
   }
   const stub = env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(guildId));
   return stub.adminAction({ guildId, userId, ...request });
+}
+
+/**
+ * Saves the member's votes from the web page through the guild object,
+ * which asks Discord first that they are still a member. Ids that cannot
+ * be Discord's are `not_member` without waking an object.
+ */
+export async function voteInGuild(
+  env: Env,
+  request: WebVoteRequest,
+): Promise<WebMemberResult> {
+  if (!SNOWFLAKE.test(request.guildId) || !SNOWFLAKE.test(request.userId)) {
+    return { kind: "not_member" };
+  }
+  const stub = env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(request.guildId));
+  return stub.webVote(request);
+}
+
+/** Adds the member's proposal from the web page, as `voteInGuild` votes. */
+export async function proposeInGuild(
+  env: Env,
+  request: WebProposeRequest,
+): Promise<WebMemberResult> {
+  if (!SNOWFLAKE.test(request.guildId) || !SNOWFLAKE.test(request.userId)) {
+    return { kind: "not_member" };
+  }
+  const stub = env.GUILD_HIKE.get(env.GUILD_HIKE.idFromName(request.guildId));
+  return stub.webPropose(request);
 }

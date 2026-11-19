@@ -46,7 +46,11 @@ import {
   type HandlerResult,
   type Router,
 } from "../guild/router";
-import { isPollError } from "../polls/errors";
+import {
+  isPollError,
+  type PollError,
+  type PollErrorCode,
+} from "../polls/errors";
 import {
   MAX_DETAILS_LENGTH,
   PollStore,
@@ -655,19 +659,14 @@ function saveVotes(wordings: PollWordings): ComponentHandler {
         before.options.map((o) => o.id),
     );
     const kept = before.viewerVotes.filter((id) => !listed.has(id));
-    let poll: PollView;
-    try {
-      poll = store.setVotes(pollId, userId, [...kept, ...picked]);
-    } catch (error) {
-      if (isPollError(error, "poll_closed")) {
-        return { response: update([textDisplay(VOTE_CLOSED_MESSAGE)]) };
-      }
-      if (isPollError(error)) {
-        return { response: update([textDisplay(error.message)]) };
-      }
-      throw error;
+    const outcome = await castVotes(context, userId, pollId, [
+      ...kept,
+      ...picked,
+    ]);
+    if (!outcome.ok) {
+      return { response: update([textDisplay(outcome.message)]) };
     }
-    await scheduleRefresh(context.storage, pollId, store.now());
+    const poll = outcome.value;
     const chosen = poll.options
       .filter((o) => poll.viewerVotes.includes(o.id))
       .map((o) => `**${o.label}**`);
@@ -681,6 +680,53 @@ function saveVotes(wordings: PollWordings): ComponentHandler {
       ),
     };
   };
+}
+
+/**
+ * What a member's vote or proposal came to: the stored result, or why it
+ * was refused, in the sentence the bot answers with (Discord markdown, such
+ * as `**Lake**`). `code` is the store's refusal, or `unavailable` for a
+ * poll or option that is not there.
+ */
+export type MemberOutcome<T> =
+  | { ok: true; value: T }
+  | { ok: false; code: PollErrorCode | "unavailable"; message: string };
+
+/** The refusal of a poll or option that is not there. */
+export const UNAVAILABLE: MemberOutcome<never> = {
+  ok: false,
+  code: "unavailable",
+  message: UNAVAILABLE_MESSAGE,
+};
+
+/** The bot's sentence for a vote the store refused. */
+export function voteRefusal(error: PollError): string {
+  if (error.code === "poll_closed") return VOTE_CLOSED_MESSAGE;
+  if (error.code === "poll_not_found") return UNAVAILABLE_MESSAGE;
+  return error.message;
+}
+
+/**
+ * Replaces `userId`'s votes in the poll with exactly `optionIds` through
+ * `setVotes` and marks the poll message for the debounced refresh. The
+ * Vote select and the web page's vote form both cast votes with it.
+ */
+export async function castVotes(
+  context: HandlerContext,
+  userId: string,
+  pollId: number,
+  optionIds: readonly number[],
+): Promise<MemberOutcome<PollView>> {
+  const store = new PollStore(context.storage);
+  let poll: PollView;
+  try {
+    poll = store.setVotes(pollId, userId, optionIds);
+  } catch (error) {
+    if (!isPollError(error)) throw error;
+    return { ok: false, code: error.code, message: voteRefusal(error) };
+  }
+  await scheduleRefresh(context.storage, pollId, store.now());
+  return { ok: true, value: poll };
 }
 
 /** A view of the panel asking the admin to confirm an action. */
