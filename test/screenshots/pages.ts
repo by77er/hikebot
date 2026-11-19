@@ -28,10 +28,17 @@ export interface ScreenshotPage {
   /**
    * With a `user`: once, before the page's screenshots, open `from` and
    * submit its form that posts to `action`, with `fields` over the form's
-   * own, as the browser would; the page is then opened with the cookies
-   * that leaves, such as the notice of an admin's action.
+   * own (a list sends a field once per value), as the browser would; the
+   * page is then opened with the cookies that leaves, such as the notice
+   * of an admin's action. When the form answers with anything but a
+   * redirect, such as a refused proposal shown with its error, the shots
+   * are of that answer, at `path`, and `status` is its status.
    */
-  submit?: { from: string; action: string; fields?: Record<string, string> };
+  submit?: {
+    from: string;
+    action: string;
+    fields?: Record<string, string | string[]>;
+  };
 }
 
 export interface ExcludedRoute {

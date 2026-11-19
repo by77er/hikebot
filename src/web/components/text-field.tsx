@@ -9,7 +9,8 @@
 import type { Preview } from "./button";
 import { describedBy, FormRow, type FieldText } from "./form-row";
 
-export type TextFieldType = "text" | "url" | "email" | "search" | "tel";
+export type TextFieldType =
+  "text" | "url" | "email" | "search" | "tel" | "date" | "time";
 
 export type InputMode =
   "text" | "numeric" | "decimal" | "url" | "email" | "tel" | "search";
@@ -28,6 +29,12 @@ export interface TextFieldProps extends FieldText {
   spellCheck?: boolean;
   /** Enforced with `maxlength` and said under the field. */
   maxLength?: number;
+  /**
+   * For `date` and `time`: the earliest and latest value the browser's
+   * picker offers (`YYYY-MM-DD`, `HH:MM`). The server checks them again.
+   */
+  min?: string;
+  max?: string;
   /** `short` for a value of a few characters, such as a date. */
   width?: "full" | "short";
   disabled?: boolean;
@@ -48,6 +55,8 @@ export function TextField({
   autoComplete,
   spellCheck,
   maxLength,
+  min,
+  max,
   width = "full",
   disabled,
   readOnly,
@@ -76,6 +85,8 @@ export function TextField({
         spellcheck={spellCheck}
         autoCapitalize={spellCheck === false ? "none" : undefined}
         maxLength={maxLength}
+        min={min}
+        max={max}
         required={required}
         disabled={disabled}
         readOnly={readOnly}

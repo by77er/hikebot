@@ -194,9 +194,9 @@ what the guard answers.
    }
    ```
 
-   An action (a POST) starts with `requireServer` too, which refuses it
-   without a session; then follow "Add a form that changes something" from
-   its step 2, with `server.session` and `server.now`.
+   For an action (a POST) on the server, follow "Add an action a member
+   can take on a server's page", or "Add an admin action to a server's
+   page" for one only admins may take.
 
 3. Add one line for it to `SERVER_PAGES` there, the path after
    `/g/<guild id>` as its key:
@@ -475,6 +475,138 @@ in `docs/design.md` says which POSTs are refused.
    npx vitest run test/web
    npx vitest run --project e2e test/e2e/sign-in.test.ts
    ```
+
+## Add an action a member can take on a server's page
+
+The example lets a member withdraw a location they proposed, with
+`POST /g/<guild id>/polls/<poll id>/withdraw`; use your action's name,
+path, fields and feature file. "Web pages for a server" in
+`docs/design.md` says how an action is checked and answered.
+
+1. Do the action in the feature's own code, in one function that the
+   Discord control's handler calls too, so both follow the same rules and
+   say the same words. It takes the handler context, the member's user id,
+   the poll and what they sent, writes through the store, marks the poll
+   message for a refresh ("Refresh a poll message after a change" in
+   `src/features/AGENTS.md`), and returns a `MemberOutcome` from
+   `src/features/poll-ui.ts`, a refusal carrying the bot's sentence:
+
+   ```ts
+   export async function withdrawLocation(
+     context: HandlerContext,
+     userId: string,
+     pollId: number,
+     optionId: number,
+   ): Promise<MemberOutcome<OptionView>> {
+     const store = new PollStore(context.storage);
+     try {
+       const option = store.withdrawOption(pollId, optionId, userId);
+       await scheduleRefresh(context.storage, pollId, store.now());
+       return { ok: true, value: option };
+     } catch (error) {
+       if (!isPollError(error)) throw error;
+       return { ok: false, code: error.code, message: withdrawRefusal(error) };
+     }
+   }
+   ```
+
+2. Add the guild object's method for the web in
+   `src/guild/web-action.ts`: it starts with `memberNow`, which asks
+   Discord whether the user is a member at this moment, and turns the
+   outcome into a `WebMemberResult`, with the banner the page shows once:
+
+   ```ts
+   export async function webWithdraw(
+     context: HandlerContext,
+     cache: WebViewCache,
+     request: WebWithdrawRequest,
+     options: ActionOptions = {},
+   ): Promise<WebMemberResult> {
+     const member = await memberNow(context, cache, request, options);
+     if ("kind" in member) return member;
+     const { userId, pollId, optionId } = request;
+     const outcome = await withdrawLocation(context, userId, pollId, optionId);
+     if (!outcome.ok) return refusal(outcome);
+     return {
+       kind: "done",
+       banner: `Withdrew ${outcome.value.label}.`,
+       note: null,
+     };
+   }
+   ```
+
+   Give `GuildHike` (`src/guild/guild-hike.ts`) a one-line RPC method
+   that calls it, as `webVote` does, and `src/web/guild.ts` a function
+   that calls the method, as `voteInGuild` does.
+
+3. Add the form target to `SERVER_ACTIONS` in
+   `src/web/server-routes.tsx`, one line, and its handler: it starts with
+   `requireServerAction`, which refuses a request without a session, a
+   valid CSRF token or a same-origin request before the guild object is
+   reached, reads the fields, calls the guild, and answers with `answer`,
+   given what was sent, so a refusal shows the form as it was:
+
+   ```tsx
+     [/^\/polls\/(\d{1,15})\/withdraw$/, withdraw],
+   ```
+
+   ```tsx
+   async function withdraw(
+     request: Request,
+     env: Env,
+     guildId: string,
+     pollId: number,
+   ) {
+     const action = await requireServerAction(request, env, guildId);
+     if (action instanceof Response) return action;
+     const optionId = Number(action.form.get("option"));
+     const result = await withdrawInGuild(env, {
+       guildId,
+       userId: action.session.userId,
+       pollId,
+       optionId,
+     });
+     return answer(request, env, guildId, pollId, action, result, {
+       form: "withdraw",
+       optionId,
+     });
+   }
+   ```
+
+4. Add the form's name and what it sends to `FormName` and `Refusal` in
+   `src/web/pages/server/forms.ts`, with a path function beside
+   `votesPath` and a case in `offersForm` saying when the page shows the
+   form. Put the form in its section, as "Add a form that changes
+   something" step 1 says, with `<CsrfField token={forms.csrf} />`; take
+   its refusal with `refusalFor(view, forms, "withdraw")` and show the
+   sentence with `BotSentence`, in an `ErrorSummary` above the form and on
+   its field, the field keeping what was sent. Whatever the form needs to
+   offer comes from the view ("Add a field to the web view" in
+   `src/guild/AGENTS.md`).
+5. Test it:
+   - the feature function in `test/features/<feature>.test.ts`, and that
+     the Discord control still answers as before;
+   - the guild's method in `test/guild/web-member-action.test.ts`: done, each
+     refusal code with the bot's sentence and nothing stored, and a member
+     who left since the page's read refused;
+   - the route in `test/web/server-actions.test.tsx`: the fields reach the
+     guild object, a done action redirects with the banner, and a request
+     without a session, a token, with another user's token or from
+     another site is refused before the binding is reached;
+   - the form in `test/web/pages/server/<section>.test.tsx`: its markup,
+     the accessible name of each field, and one test per refusal code
+     with the sentence and the input kept;
+   - an end-to-end scenario in `test/e2e/member-web.test.ts` that submits
+     the form with `client.submitForm` and waits with `eventually` for the
+     poll message in the fake Discord to change.
+
+   ```sh
+   npx vitest run test/guild/web-member-action.test.ts test/web/server-actions.test.tsx test/web/pages/server
+   npx vitest run --project e2e test/e2e/member-web.test.ts
+   ```
+
+6. Add a screenshot of the form, of its refusal and of the banner, as "Add
+   a page to the screenshots" says, with `submit` for the last two.
 
 ## Add a static asset
 
@@ -969,15 +1101,22 @@ Here the component is `pill`; use your component's name.
    ```
 
 3. For a page that shows what a form did, such as the server's page after
-   an admin's action, give the entry `"submit"`: the page whose form to
-   submit, the form's `action` and the `fields` over its own. The script
-   submits it once, signed in as `user`, and opens `path` with the
-   cookies that leaves:
+   an admin's action or a member's saved vote, give the entry `"submit"`:
+   the page whose form to submit, the form's `action` and the `fields`
+   over its own (a list for a field sent once per value, such as ticked
+   boxes). The script submits it once, signed in as `user`, and opens
+   `path` with the cookies that leaves. When the form answers with the
+   page itself instead of a redirect, such as a refused proposal, the
+   shots are of that answer, and `status` is its status. Seeded ids are
+   fixed, since each page gets a fresh Worker: the first seeded round's
+   location vote is poll `1`, its date vote poll `2`, and the first
+   option `"1"`:
 
    ```json
    "submit": {
-     "from": "/g/220000000000000101/admin/close-vote?target=2",
-     "action": "/g/220000000000000101/admin/close-vote"
+     "from": "/g/220000000000000101",
+     "action": "/g/220000000000000101/polls/1/votes",
+     "fields": { "option": ["1", "3"] }
    }
    ```
 

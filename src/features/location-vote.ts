@@ -54,6 +54,7 @@ import {
   cooldownMessage,
   labelKey,
   type OptionPlace,
+  type OptionView,
   type PastLocation,
   type PollView,
   type RestingLocation,
@@ -61,12 +62,14 @@ import {
 import { POLL_CONTROL_IDS, adminPanelUpdate } from "./admin-panel";
 import { givenPlace, scheduleNewLookup } from "./locate";
 import {
+  UNAVAILABLE,
   VOTE_CLOSED_MESSAGE,
   actorOf,
   answerPanel,
   roundContext,
   scheduleRefresh,
   shorten,
+  type MemberOutcome,
   type PollWording,
 } from "./poll-ui";
 import { locationVoteRefusal, startLocationVote } from "./round-actions";
@@ -222,7 +225,7 @@ function pollIdArg(customIdValue: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-const TOO_MANY = `This vote already has ${String(MAX_OPTIONS)} locations, the most it can hold. Vote for one of them instead.`;
+export const TOO_MANY = `This vote already has ${String(MAX_OPTIONS)} locations, the most it can hold. Vote for one of them instead.`;
 
 function added(labelText: string): string {
   return `Added **${labelText}** to the location vote. Use **Vote** to vote for it.`;
@@ -285,9 +288,6 @@ export function renderSuggestAgain(
   notice?: string,
 ): APIMessageTopLevelComponent[] {
   const offer = suggestable(past);
-  const resting = past
-    .filter((p) => p.cooldownHikesLeft > 0)
-    .sort((a, b) => b.cooldownHikesLeft - a.cooldownHikesLeft);
   const body: APIComponentInContainer[] = [
     textDisplay(
       notice ??
@@ -320,13 +320,25 @@ export function renderSuggestAgain(
       }),
     ),
   );
-  if (resting.length > 0) {
-    const names = resting.map(
-      (p) => `**${p.label}** (${hikesLeft(p.cooldownHikesLeft)})`,
-    );
-    body.push(textDisplay(`Resting: ${names.join(", ")}`));
-  }
+  const line = restingLine(past);
+  if (line !== null) body.push(textDisplay(line));
   return [container(body)];
+}
+
+/**
+ * The line naming the past locations that rest after a recent hike, with
+ * the hikes left, the longest rest first: "Resting: **Eagle Peak** (2 more
+ * hikes), **Lake** (1 more hike)". Null when none rests.
+ */
+export function restingLine(past: readonly PastLocation[]): string | null {
+  const resting = past
+    .filter((p) => p.cooldownHikesLeft > 0)
+    .sort((a, b) => b.cooldownHikesLeft - a.cooldownHikesLeft);
+  if (resting.length === 0) return null;
+  const names = resting.map(
+    (p) => `**${p.label}** (${hikesLeft(p.cooldownHikesLeft)})`,
+  );
+  return `Resting: ${names.join(", ")}`;
 }
 
 /** The longest map link or coordinates the propose modal takes. */
@@ -422,31 +434,16 @@ const pickPastLocation: ComponentHandler = async (interaction, context) => {
     interaction.data.component_type === ComponentType.StringSelect
       ? Number(interaction.data.values[0])
       : NaN;
-  const store = new PollStore(context.storage);
-  const source = Number.isSafeInteger(picked) ? store.getOption(picked) : null;
-  if (
-    pollId === null ||
-    source === null ||
-    store.getPoll(source.pollId)?.kind !== "location"
-  ) {
+  if (pollId === null) {
     return { response: update([textDisplay(UNAVAILABLE_MESSAGE)]) };
   }
   const userId = userIdOf(interaction);
-  let notice: string;
-  try {
-    const option = store.addOption(pollId, {
-      label: source.label,
-      details: source.details,
-      proposedBy: userId,
-      ...copiedPlace(source.place),
-    });
-    await scheduleRefresh(context.storage, pollId, store.now());
-    await scheduleNewLookup(context.storage, store, store.now());
-    notice = added(option.label);
-  } catch (error) {
-    if (!isPollError(error)) throw error;
-    notice = proposalRefusal(error, source.label);
+  const outcome = await suggestAgain(context, userId, pollId, picked);
+  if (!outcome.ok && outcome.code === "unavailable") {
+    return { response: update([textDisplay(outcome.message)]) };
   }
+  const notice = outcome.ok ? added(outcome.value.label) : outcome.message;
+  const store = new PollStore(context.storage);
   const poll = store.getPoll(pollId);
   if (
     !poll ||
@@ -478,32 +475,123 @@ const saveProposal: ModalHandler = async (interaction, context) => {
   if (pollId === null) {
     return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
   }
+  const outcome = await proposeLocation(
+    context,
+    interaction.member?.user.id ?? "",
+    pollId,
+    {
+      name: textInputValue(interaction.data, LOCATION_IDS.name) ?? "",
+      details: textInputValue(interaction.data, LOCATION_IDS.details) ?? null,
+      map: textInputValue(interaction.data, LOCATION_IDS.map) ?? null,
+    },
+  );
+  if (!outcome.ok) return { response: ephemeralNotice(outcome.message) };
+  const { option, unreadMap } = outcome.value;
+  const unread = unreadMap ? ` ${UNREAD_MAP_NOTE}` : "";
+  return { response: ephemeralNotice(`${added(option.label)}${unread}`) };
+};
+
+/** What a member writes in Propose a location. */
+export interface LocationProposal {
+  name: string;
+  details: string | null;
+  /** The map link or coordinates. */
+  map: string | null;
+}
+
+/** A location a member added. */
+export interface AddedLocation {
+  option: OptionView;
+  /** The map field held something, but no coordinates the bot can read. */
+  unreadMap: boolean;
+}
+
+/** Said after the confirmation when the map field held no coordinates. */
+export const UNREAD_MAP_NOTE =
+  "The map field holds no coordinates I can read (short links are not opened), so the location will be looked up by its name; an admin can set its pin if it wins.";
+
+/**
+ * Adds a location `userId` proposed to the open location poll, with the
+ * coordinates written in its map field, name or details if any, marks the
+ * poll message for a refresh and schedules the lookup of a location
+ * without coordinates. The modal and the web page's form both propose
+ * with it; a refusal carries the bot's sentence.
+ */
+export async function proposeLocation(
+  context: HandlerContext,
+  userId: string,
+  pollId: number,
+  proposal: LocationProposal,
+): Promise<MemberOutcome<AddedLocation>> {
   const store = new PollStore(context.storage);
-  const name = textInputValue(interaction.data, LOCATION_IDS.name) ?? "";
-  const details = textInputValue(interaction.data, LOCATION_IDS.details);
-  const map = textInputValue(interaction.data, LOCATION_IDS.map)?.trim();
-  const place = givenPlace([map, name, details]);
+  if (store.getPoll(pollId)?.kind !== "location") return UNAVAILABLE;
+  const map = proposal.map?.trim() ?? "";
+  const place = givenPlace([map, proposal.name, proposal.details]);
   try {
     const option = store.addOption(pollId, {
-      label: name,
-      details: details ?? null,
-      proposedBy: interaction.member?.user.id ?? "",
+      label: proposal.name,
+      details: proposal.details,
+      proposedBy: userId,
       ...(place === undefined ? {} : { place }),
     });
     await scheduleRefresh(context.storage, pollId, store.now());
     await scheduleNewLookup(context.storage, store, store.now());
-    const unread =
-      map && givenPlace([map]) === undefined
-        ? ` The map field holds no coordinates I can read (short links are not opened), so the location will be looked up by its name; an admin can set its pin if it wins.`
-        : "";
-    return { response: ephemeralNotice(`${added(option.label)}${unread}`) };
+    return {
+      ok: true,
+      value: {
+        option,
+        unreadMap: map !== "" && givenPlace([map]) === undefined,
+      },
+    };
   } catch (error) {
-    if (isPollError(error)) {
-      return { response: ephemeralNotice(proposalRefusal(error, name.trim())) };
-    }
-    throw error;
+    if (!isPollError(error)) throw error;
+    return {
+      ok: false,
+      code: error.code,
+      message: proposalRefusal(error, proposal.name.trim()),
+    };
   }
-};
+}
+
+/**
+ * Puts the past location whose newest option is `sourceOptionId` on the
+ * open location poll again, with its saved label, details and place and
+ * `userId` as proposer, and marks the poll message for a refresh. The
+ * suggest-again select and the web page's form both use it.
+ */
+export async function suggestAgain(
+  context: HandlerContext,
+  userId: string,
+  pollId: number,
+  sourceOptionId: number,
+): Promise<MemberOutcome<OptionView>> {
+  const store = new PollStore(context.storage);
+  const source = Number.isSafeInteger(sourceOptionId)
+    ? store.getOption(sourceOptionId)
+    : null;
+  if (source === null || store.getPoll(source.pollId)?.kind !== "location") {
+    return UNAVAILABLE;
+  }
+  if (store.getPoll(pollId)?.kind !== "location") return UNAVAILABLE;
+  try {
+    const option = store.addOption(pollId, {
+      label: source.label,
+      details: source.details,
+      proposedBy: userId,
+      ...copiedPlace(source.place),
+    });
+    await scheduleRefresh(context.storage, pollId, store.now());
+    await scheduleNewLookup(context.storage, store, store.now());
+    return { ok: true, value: option };
+  } catch (error) {
+    if (!isPollError(error)) throw error;
+    return {
+      ok: false,
+      code: error.code,
+      message: proposalRefusal(error, source.label),
+    };
+  }
+}
 
 /** Registers the location vote's start and propose controls. */
 export function registerLocationVote(router: Router): Router {

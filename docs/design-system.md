@@ -837,7 +837,7 @@ its styles in `public/assets/cairn/components/`, its unit test in
     until the vote closes."), the tally list with each row's label as a
     real checkbox's `<label>` (checked for the saved votes, described by
     the row's count), and one primary **Vote** button right after the
-    list. It does not stick to the foot of the screen: a sticky bar sits
+    list (its words from `submit`: the server's page says **Save votes**). It does not stick to the foot of the screen: a sticky bar sits
     over the top of the list until the list is scrolled to, and the list
     stays short enough (details folded past six options) to reach the
     end. The form sends every checked option's id under one name, so the route
@@ -858,7 +858,9 @@ its styles in `public/assets/cairn/components/`, its unit test in
     boundary, 44px tall, the full width of its column) in a form row.
   - _Variants:_ full width, or `short` (`--width-input-short`) for a value
     of a few characters such as a date. `type` is `text` unless only a URL,
-    an email address or a telephone number is valid; `inputMode` asks for
+    an email address or a telephone number is valid, or the browser's own
+    picker helps: `date` and `time`, with `min` and `max` naming the days
+    the server accepts (it checks them again); `inputMode` asks for
     the phone's keyboard (`numeric` for digits); `autoComplete` is `off`
     for things that are not about the member (a location's name) and an
     autofill token where the member's own data helps (`address-level2` for

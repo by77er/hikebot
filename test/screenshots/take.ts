@@ -160,21 +160,25 @@ async function capture(
   entry: ScreenshotPage,
   viewport: ViewportName,
   scheme: (typeof SCHEMES)[number],
-  submitted: { path: string; cookie: string } | null,
+  submitted: Submitted | null,
 ): Promise<Uint8Array> {
   const context = await browser.createBrowserContext();
   try {
     const page = await context.newPage();
     const failures: string[] = [];
-    const { path, cookie } = submitted ?? (await signedIn(base, entry));
+    const { path, cookie, answer } = submitted ?? (await signedIn(base, entry));
     const url = new URL(path, base);
     // The session (or, for a cancelled sign-in, the state) cookie, sent the
     // way the browser would send the one the Worker set.
     if (cookie !== "") await page.setExtraHTTPHeaders({ Cookie: cookie });
     // Avatars and server icons come from the stand-in for Discord's CDN.
     await page.setRequestInterception(true);
+    // A form's answer that is not a redirect is the page, as it came.
     page.on("request", (request) => {
-      const reply = cdnReply(request.url());
+      const reply =
+        answer && request.isNavigationRequest() && request.url() === url.href
+          ? answer
+          : cdnReply(request.url());
       void (reply ? request.respond(reply) : request.continue());
     });
     page.on("requestfailed", (request) => {
@@ -245,10 +249,7 @@ async function capture(
  * page opens its own path with no cookie; a cancelled sign-in opens the
  * callback address Discord sent back, with the state cookie.
  */
-async function signedIn(
-  base: URL,
-  entry: ScreenshotPage,
-): Promise<{ path: string; cookie: string }> {
+async function signedIn(base: URL, entry: ScreenshotPage): Promise<Submitted> {
   if (entry.user === null) return { path: entry.path, cookie: "" };
   const client = new PageClient(base);
   const user = { id: entry.user };
@@ -265,15 +266,21 @@ async function signedIn(
   return { path: entry.path, cookie: client.cookieHeader() };
 }
 
+/** Where a page's shots open after its `submit`, and with what. */
+interface Submitted {
+  path: string;
+  cookie: string;
+  /** The form's answer, when it was not a redirect: shown as the page. */
+  answer?: { status: number; headers: Record<string, string>; body: string };
+}
+
 /**
  * Signs the page's `user` in, opens `submit.from` and submits its form, as
  * a browser would, and returns the path to open and the cookies to send:
- * the session and whatever the submission set.
+ * the session and whatever the submission set; with the answer itself when
+ * it was not a redirect.
  */
-async function submit(
-  base: URL,
-  entry: ScreenshotPage,
-): Promise<{ path: string; cookie: string }> {
+async function submit(base: URL, entry: ScreenshotPage): Promise<Submitted> {
   const { submit: form, user } = entry;
   if (!form || user === null) throw new Error(`${entry.name} submits nothing`);
   const client = new PageClient(base);
@@ -285,12 +292,18 @@ async function submit(
   }
   const from = await client.get(form.from);
   const answer = await client.submitForm(from, form.action, form.fields);
-  if (answer.status !== 303) {
-    throw new Error(
-      `${entry.name}: submitting ${form.action} answered ${String(answer.status)}`,
-    );
+  if (answer.status === 303) {
+    return { path: entry.path, cookie: client.cookieHeader() };
   }
-  return { path: entry.path, cookie: client.cookieHeader() };
+  return {
+    path: entry.path,
+    cookie: client.cookieHeader(),
+    answer: {
+      status: answer.status,
+      headers: Object.fromEntries(answer.headers),
+      body: answer.body,
+    },
+  };
 }
 
 /**

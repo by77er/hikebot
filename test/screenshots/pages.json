@@ -71,6 +71,21 @@
       "user": "400000000000000001"
     },
     {
+      "name": "server-date-vote-refused",
+      "path": "/g/220000000000000101",
+      "status": 422,
+      "seed": "server-date-vote",
+      "user": "400000000000000001",
+      "submit": {
+        "from": "/g/220000000000000101",
+        "action": "/g/220000000000000101/polls/2/options",
+        "fields": {
+          "date": "2030-06-15",
+          "time": "11:00"
+        }
+      }
+    },
+    {
       "name": "server-empty",
       "path": "/g/220000000000000101",
       "status": 200,
@@ -155,6 +170,36 @@
       "user": "400000000000000001"
     },
     {
+      "name": "server-location-vote-refused",
+      "path": "/g/220000000000000101",
+      "status": 422,
+      "seed": "server-location-vote",
+      "user": "400000000000000001",
+      "submit": {
+        "from": "/g/220000000000000101",
+        "action": "/g/220000000000000101/polls/1/options",
+        "fields": {
+          "name": "snow lake",
+          "details": "From the Alpental lot again, as last year.",
+          "map": ""
+        }
+      }
+    },
+    {
+      "name": "server-location-vote-saved",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-location-vote",
+      "user": "400000000000000001",
+      "submit": {
+        "from": "/g/220000000000000101",
+        "action": "/g/220000000000000101/polls/1/votes",
+        "fields": {
+          "option": ["1", "3"]
+        }
+      }
+    },
+    {
       "name": "server-location-vote-voted",
       "path": "/g/220000000000000101",
       "status": 200,
@@ -205,6 +250,13 @@
       "path": "/g/220000000000000101",
       "status": 200,
       "seed": "server-schedule",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-suggest-again",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-suggest-again",
       "user": "400000000000000001"
     },
     {

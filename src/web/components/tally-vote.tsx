@@ -4,7 +4,8 @@
  * votes, inside a `<form method="post">` with one **Vote** button, so it
  * works without JavaScript: the form sends every checked option's id under
  * `name`, and the route replaces the member's votes with them, as the
- * bot's vote select does. Put the CSRF field and any other hidden fields
+ * bot's vote select does. The button says **Vote** unless given `submit`,
+ * such as "Save votes". Put the CSRF field and any other hidden fields
  * in `hidden`. The instructions are the group's legend. With no options
  * there is nothing to vote for: it shows the list's `empty` sentence and
  * no form.
@@ -26,6 +27,8 @@ export interface TallyVoteProps extends Omit<
   instructions: string;
   /** Hidden fields: the CSRF token, the poll's id. */
   hidden?: ComponentChildren;
+  /** The button's words. Defaults to "Vote". */
+  submit?: string;
 }
 
 export function TallyVote({
@@ -33,6 +36,7 @@ export function TallyVote({
   name = "option",
   instructions,
   hidden,
+  submit = "Vote",
   ...list
 }: TallyVoteProps) {
   if (list.options.length === 0) {
@@ -47,7 +51,7 @@ export function TallyVote({
       </fieldset>
       <div class="tally-vote__actions">
         <Button variant="primary" icon={VoteIcon}>
-          Vote
+          {submit}
         </Button>
       </div>
     </form>

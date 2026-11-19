@@ -10,8 +10,13 @@ import { Router } from "./router";
 import { applyMigrations } from "./schema";
 import {
   runWebAction,
+  webPropose,
+  webVote,
   type WebActionRequest,
   type WebActionResult,
+  type WebMemberResult,
+  type WebProposeRequest,
+  type WebVoteRequest,
 } from "./web-action";
 import {
   readWebView,
@@ -108,6 +113,30 @@ export class GuildHike extends DurableObject<Env> {
    */
   adminAction(request: WebActionRequest): Promise<WebActionResult> {
     return runWebAction(
+      { env: this.env, storage: this.ctx.storage },
+      this.webViewCache,
+      request,
+    );
+  }
+
+  /**
+   * A member's votes saved from the web page, after asking Discord that
+   * they are still a member. See `webVote`.
+   */
+  webVote(request: WebVoteRequest): Promise<WebMemberResult> {
+    return webVote(
+      { env: this.env, storage: this.ctx.storage },
+      this.webViewCache,
+      request,
+    );
+  }
+
+  /**
+   * A member's proposal from the web page, after asking Discord that they
+   * are still a member. See `webPropose`.
+   */
+  webPropose(request: WebProposeRequest): Promise<WebMemberResult> {
+    return webPropose(
       { env: this.env, storage: this.ctx.storage },
       this.webViewCache,
       request,
