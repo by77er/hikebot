@@ -33,6 +33,7 @@ import {
   validateScheduledEventEdit,
   validateUploadFields,
   validateUploadSize,
+  validateThreadEdit,
   type Rule,
   type Violation,
 } from "./validate";
@@ -67,6 +68,8 @@ export interface FakeChannel {
   type: ChannelType;
   name: string;
   parent_id?: string;
+  /** A thread's state: archived threads take no message edits. */
+  thread_metadata?: { archived: boolean; locked: boolean };
 }
 
 /** A guild scheduled event as the fake stores and returns it. */
@@ -366,6 +369,40 @@ export class FakeDiscord {
    */
   failNextUpload(channelId: string, status: 413 | 500 = 500): void {
     this.failingUploads.set(channelId, status);
+  }
+
+  /**
+   * Archives a thread, as Discord does after its inactivity period or a
+   * moderator does by hand; `locked` locks it too.
+   */
+  archiveThread(threadId: string, locked = false): void {
+    const thread = this.channels.get(threadId);
+    if (!thread?.thread_metadata)
+      throw new Error(`${threadId} is not a thread`);
+    thread.thread_metadata = { archived: true, locked };
+  }
+
+  /**
+   * Deletes a channel or thread with its messages, as a member with Manage
+   * Channels or Manage Threads does; requests on it then answer 404, code
+   * 10003, Unknown Channel.
+   */
+  deleteChannel(channelId: string): void {
+    this.channels.delete(channelId);
+    for (const [id, message] of this.messages) {
+      if (message.channel_id === channelId) this.messages.delete(id);
+    }
+  }
+
+  /**
+   * Deletes a scheduled event, as a member with Manage Events does; editing
+   * it then answers 404, code 10070.
+   */
+  deleteScheduledEvent(guildId: string, eventId: string): void {
+    this.events.set(
+      guildId,
+      (this.events.get(guildId) ?? []).filter((e) => e.id !== eventId),
+    );
   }
 
   /**
@@ -804,6 +841,10 @@ export class FakeDiscord {
     if (match && method === "POST") {
       return this.startForumThread(match[1] ?? "", body);
     }
+    match = /^\/channels\/([^/]+)$/.exec(path);
+    if (match && method === "PATCH") {
+      return this.modifyThread(match[1] ?? "", body);
+    }
     match = /^\/guilds\/([^/]+)\/scheduled-events$/.exec(path);
     if (match && method === "POST") {
       return this.createScheduledEvent(match[1] ?? "", body);
@@ -894,6 +935,9 @@ export class FakeDiscord {
     if (message?.channel_id !== channelId) {
       return discordError(404, 10008, "Unknown Message");
     }
+    if (this.channels.get(channelId)?.thread_metadata?.archived) {
+      return refusal(400, 50083, "Thread is archived", RULES.archivedThread);
+    }
     return this.edit(message, body, upload);
   }
 
@@ -974,6 +1018,7 @@ export class FakeDiscord {
       type: ChannelType.PublicThread,
       name: request.name,
       parent_id: channelId,
+      thread_metadata: { archived: false, locked: false },
     };
     this.channels.set(thread.id, thread);
     // A forum thread's starter message has the thread's id.
@@ -985,6 +1030,32 @@ export class FakeDiscord {
         message: messageObject(message, this.applicationId),
       },
     };
+  }
+
+  /**
+   * Modify Channel, for a thread: sets `archived` and `locked`. The bot
+   * created the thread, so it may unarchive it even when locked ("If
+   * `locked` is true, then the user must have created the thread or have
+   * `MANAGE_THREADS`", https://docs.discord.com/developers/topics/threads).
+   * https://docs.discord.com/developers/resources/channel#modify-channel
+   */
+  private modifyThread(channelId: string, body: unknown): Reply {
+    const gate = this.channelGate(channelId);
+    if (gate) return gate;
+    const thread = this.channels.get(channelId);
+    if (!thread?.thread_metadata) {
+      return notFound(
+        "the fake modifies only threads with PATCH /channels/{id}",
+      );
+    }
+    const violations = validateThreadEdit(body);
+    if (violations.length > 0) return invalid(violations);
+    const o = body as { archived?: boolean; locked?: boolean };
+    thread.thread_metadata = {
+      archived: o.archived ?? thread.thread_metadata.archived,
+      locked: o.locked ?? thread.thread_metadata.locked,
+    };
+    return { status: 200, body: thread };
   }
 
   private createScheduledEvent(guildId: string, body: unknown): Reply {

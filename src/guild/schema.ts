@@ -146,6 +146,19 @@ export const migrations: readonly Migration[] = [
     name: "0008_round_map_picture",
     sql: "ALTER TABLE rounds ADD COLUMN map_picture_key TEXT",
   },
+  {
+    // The latest weather forecast of a completed round's hike (JSON), when
+    // it was last fetched and when what it shows last changed; and the
+    // units the server's forecasts are in (null is imperial).
+    name: "0009_weather",
+    sql: `
+      ALTER TABLE rounds ADD COLUMN forecast TEXT;
+      ALTER TABLE rounds ADD COLUMN forecast_fetched_at INTEGER;
+      ALTER TABLE rounds ADD COLUMN forecast_updated_at INTEGER;
+      ALTER TABLE guild_settings ADD COLUMN units TEXT
+        CHECK (units IN ('imperial', 'metric'));
+    `,
+  },
 ];
 
 /**

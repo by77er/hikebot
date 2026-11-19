@@ -549,6 +549,64 @@ describe("edits, follow-ups and threads are checked too", () => {
     );
   });
 
+  it("refuses an edit in an archived thread until the thread is unarchived, and archives it again", async () => {
+    const created = await call("POST", `/channels/${FORUM_CHANNEL}/threads`, {
+      name: "Archived hike",
+      message: v2(text("Hike details")),
+    });
+    const { id } = created.body as { id: string };
+    discord.archiveThread(id);
+    const edit = () =>
+      call("PATCH", `/channels/${id}/messages/${id}`, v2(text("New details")));
+    const archived = await edit();
+    expect(archived).toMatchObject({
+      status: 400,
+      body: {
+        code: 50083,
+        rule: RULES.archivedThread.id,
+        docs: RULES.archivedThread.docs,
+      },
+    });
+    refused.add(RULES.archivedThread.id);
+    expect(discord.takeRejections()).toEqual([]);
+    expect(
+      await call("PATCH", `/channels/${id}`, { archived: false }),
+    ).toMatchObject({
+      status: 200,
+      body: { id, thread_metadata: { archived: false, locked: false } },
+    });
+    expect(await edit()).toMatchObject({ status: 200 });
+    expect(discord.channelMessages(id).map(messageText)).toEqual([
+      "New details",
+    ]);
+    expect(
+      await call("PATCH", `/channels/${id}`, { archived: true }),
+    ).toMatchObject({ status: 200 });
+    expect(discord.channel(id)?.thread_metadata).toEqual({
+      archived: true,
+      locked: false,
+    });
+    expectRefused(
+      await call("PATCH", `/channels/${id}`, { archived: "no" }),
+      RULES.threadEdit,
+    );
+    expectRefused(await call("PATCH", `/channels/${id}`, {}), RULES.threadEdit);
+  });
+
+  it("answers 404 for a deleted thread and a deleted event", async () => {
+    const created = await call("POST", `/channels/${FORUM_CHANNEL}/threads`, {
+      name: "Deleted hike",
+      message: v2(text("Hike details")),
+    });
+    const { id } = created.body as { id: string };
+    discord.deleteChannel(id);
+    expect(
+      await call("PATCH", `/channels/${id}/messages/${id}`, v2(text("x"))),
+    ).toMatchObject({ status: 404, body: { code: 10003 } });
+    expect(discord.channelMessages(id)).toEqual([]);
+    expect(discord.takeRejections()).toEqual([]);
+  });
+
   it("refuses a forum thread in a channel that is not a forum", async () => {
     expectRefused(
       await call("POST", `/channels/${TEXT_CHANNEL}/threads`, {
@@ -1013,6 +1071,14 @@ describe("scheduled events", () => {
     );
     discord.grantCreateEvents(guild);
     expect(discord.scheduledEvents(guild)[0]?.description).toBeNull();
+    discord.deleteScheduledEvent(guild, id);
+    expect(discord.scheduledEvents(guild)).toEqual([]);
+    expectStateRefusal(
+      await call("PATCH", `${path(guild)}/${id}`, { description: "x" }),
+      404,
+      10070,
+      RULES.unknownScheduledEvent,
+    );
   });
 
   it("sets, replaces and removes an event's cover from image data, and refuses anything else", async () => {

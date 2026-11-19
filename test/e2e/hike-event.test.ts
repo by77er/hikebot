@@ -87,7 +87,7 @@ describe("the hike event", () => {
       entity_type: 3,
       entity_id: null,
       entity_metadata: { location: "Lake Loop" },
-      description: `Hike thread: https://discord.com/channels/${g.guildId}/${thread?.id ?? ""}`,
+      description: `Weather: No forecast: this hike has no map pin. An admin can set one from /hike admin.\n\nHike thread: https://discord.com/channels/${g.guildId}/${thread?.id ?? ""}`,
       // Lake Loop has no map pin, so no map picture for a cover.
       image: null,
     });

@@ -31,15 +31,29 @@ function appliedNames(storage: DurableObjectStorage): string[] {
     .map((row) => row.name);
 }
 
-/** Takes the database back from 0008_round_map_picture to 0007_guild_cadence. */
+/** Takes the database back from 0009_weather to 0008_round_map_picture. */
+function undoWeather(storage: DurableObjectStorage): void {
+  for (const column of [
+    "forecast",
+    "forecast_fetched_at",
+    "forecast_updated_at",
+  ]) {
+    storage.sql.exec(`ALTER TABLE rounds DROP COLUMN ${column}`);
+  }
+  storage.sql.exec("ALTER TABLE guild_settings DROP COLUMN units");
+  storage.sql.exec("DELETE FROM _migrations WHERE name = '0009_weather'");
+}
+
+/** Takes the database back from 0009_weather to 0007_guild_cadence. */
 function undoMapPicture(storage: DurableObjectStorage): void {
+  undoWeather(storage);
   storage.sql.exec("ALTER TABLE rounds DROP COLUMN map_picture_key");
   storage.sql.exec(
     "DELETE FROM _migrations WHERE name = '0008_round_map_picture'",
   );
 }
 
-/** Takes the database back from 0008_round_map_picture to 0006_places. */
+/** Takes the database back from 0009_weather to 0006_places. */
 function undoCadence(storage: DurableObjectStorage): void {
   undoMapPicture(storage);
   for (const column of [
@@ -219,6 +233,7 @@ describe("migrations", () => {
           cadence_time: "09:00",
           cadence_date_vote_days: 2,
           cadence_on_since: null,
+          units: null,
         },
       ]);
       state.storage.sql.exec(
@@ -525,6 +540,66 @@ describe("migrations", () => {
       expect(
         state.storage.sql.exec("SELECT map_picture_key FROM rounds").one(),
       ).toEqual({ map_picture_key: "pictures/a.png" });
+    });
+  });
+
+  it("add the forecast columns and the units to a database at 0008, keeping its rounds and settings", async () => {
+    const stub = stubFor("schema-weather");
+    await runInDurableObject(stub, (_instance, state) => {
+      undoWeather(state.storage);
+      state.storage.sql.exec(
+        `INSERT INTO rounds (status, thread_id, event_id, started_by, started_at, ended_by, ended_at)
+         VALUES ('complete', '61', '71', '21', 1, '21', 2)`,
+      );
+      state.storage.sql.exec(
+        "UPDATE guild_settings SET timezone = 'Europe/Berlin' WHERE id = 1",
+      );
+      expect(appliedNames(state.storage)).toEqual(
+        shipped.slice(0, shipped.indexOf("0009_weather")),
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(appliedNames(state.storage)).toEqual(shipped);
+      expect(
+        state.storage.sql.exec("SELECT * FROM rounds").toArray(),
+      ).toMatchObject([
+        {
+          status: "complete",
+          thread_id: "61",
+          event_id: "71",
+          forecast: null,
+          forecast_fetched_at: null,
+          forecast_updated_at: null,
+        },
+      ]);
+      expect(
+        state.storage.sql
+          .exec("SELECT timezone, units FROM guild_settings")
+          .one(),
+      ).toEqual({ timezone: "Europe/Berlin", units: null });
+      expect(() =>
+        state.storage.sql.exec("UPDATE guild_settings SET units = 'nautical'"),
+      ).toThrow();
+      state.storage.sql.exec(
+        "UPDATE rounds SET forecast = '{}', forecast_fetched_at = 3, forecast_updated_at = 2",
+      );
+      state.storage.sql.exec("UPDATE guild_settings SET units = 'metric'");
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(
+        state.storage.sql
+          .exec("SELECT forecast, forecast_fetched_at FROM rounds")
+          .one(),
+      ).toEqual({ forecast: "{}", forecast_fetched_at: 3 });
+      expect(
+        state.storage.sql.exec("SELECT units FROM guild_settings").one(),
+      ).toEqual({ units: "metric" });
     });
   });
 

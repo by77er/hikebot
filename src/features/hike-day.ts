@@ -2,7 +2,9 @@
  * The hike-day announcement: on the morning of a planned hike, the
  * `hike:day-of` job posts one message in the announcements channel that
  * points to everything about it: where and when, the location's details,
- * its map links when it has a pin, the hike thread, the Discord event and the calendar address. The date
+ * its map links when it has a pin, the weather over the hike's hours
+ * (fetched just before), the hike thread, the Discord event and the
+ * calendar address. The date
  * vote's close step plans it and schedules the job; the job posts each
  * announcement that is due and schedules itself for the next one. It is
  * posted at most once per round: a cut-off or failed post shows on the
@@ -50,6 +52,14 @@ import {
   type CloseStep,
 } from "./poll-ui";
 import { retryHikeDay } from "./round-actions";
+import { updateForecast } from "./weather";
+import {
+  WEATHER_JOB,
+  hikeHoursOf,
+  roundPoint,
+  weatherTexts,
+  withinForecast,
+} from "./weather-state";
 
 /** The job that posts the hike-day announcements that are due. */
 export const HIKE_DAY_JOB = "hike:day-of";
@@ -78,6 +88,8 @@ export interface HikeDay {
   eventId: string | null;
   /** The guild's calendar feed address. */
   calendar: string;
+  /** The weather's lines (`weatherTexts`), none to leave it out. */
+  weather: string[];
 }
 
 /** One part of the announcement: its lines, none to leave it out. */
@@ -101,6 +113,7 @@ export const HIKE_DAY_SECTIONS: readonly HikeDaySection[] = [
     location.place?.point
       ? [placeLine(location.place.point, location.place.name)]
       : [],
+  ({ weather }) => weather,
   ({ threadId }) =>
     threadId === null ? [] : [`**Hike thread:** <#${threadId}>`],
   ({ guildId, eventId }) =>
@@ -138,14 +151,15 @@ function decided(
 }
 
 /**
- * What the announcement of `round` draws on, or null when the round has no
- * decided location and date.
+ * What the announcement of `round` draws on at `now`, or null when the
+ * round has no decided location and date.
  */
 export function hikeDayOf(
   round: RoundView,
   guildId: string,
   timeZone: string,
   calendar: string,
+  now: number,
 ): HikeDay | null {
   const location = decided(round, "locationPoll");
   const date = decided(round, "datePoll");
@@ -161,6 +175,7 @@ export function hikeDayOf(
     threadId: round.threadId,
     eventId: round.eventId,
     calendar,
+    weather: weatherTexts(round, timeZone, now)?.summary ?? [],
   };
 }
 
@@ -173,8 +188,10 @@ const RETRY = "click Post hike-day announcement";
 /**
  * Posts the announcement of round `roundId`, read again so it has the
  * latest thread and event, in the announcements channel and records where
- * on the round; on failure records why, for the panel. The caller has
- * claimed it with `claimHikeDay`.
+ * on the round; on failure records why, for the panel. Fetches the
+ * forecast first, when the hike has a pin and is within Open-Meteo's
+ * days, then runs the weather job so the thread and the event show it
+ * too. The caller has claimed it with `claimHikeDay`.
  */
 export async function postHikeDay(
   roundId: number,
@@ -183,6 +200,17 @@ export async function postHikeDay(
 ): Promise<Posted> {
   const store = new PollStore(context.storage);
   const settings = new GuildConfig(context.storage).get();
+  const before = store.getRound(roundId);
+  const hike = before && hikeHoursOf(before, settings.timezone);
+  if (
+    before &&
+    hike &&
+    roundPoint(before) !== null &&
+    withinForecast(hike, settings.timezone, store.now()) &&
+    (await updateForecast(context, before, settings.timezone, settings.units))
+  ) {
+    await schedule(context.storage, WEATHER_JOB, store.now());
+  }
   const round = store.getRound(roundId);
   const fail = (reason: string): Posted => {
     recordHikeDayFailure(context.storage, roundId, guildId, reason);
@@ -201,6 +229,7 @@ export async function postHikeDay(
       guildId,
       settings.timezone,
       await calendarAddress(context.env, guildId),
+      store.now(),
     );
   if (!day) {
     return fail(

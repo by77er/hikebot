@@ -766,6 +766,66 @@ or two from now. The example is the weekly schedule's job in
    pgrep -x workerd || echo "no workerd left"
    ```
 
+## Answer forecasts in an end-to-end scenario
+
+1. Before the job that fetches the forecast runs, set the weather of the
+   fake forecast API `e2e.weather` (`test/e2e/harness/fake-open-meteo.ts`)
+   with `setWeather`. Give the values in metric units (°C, mm, km/h, cm, m);
+   the fake converts them to the units each request asks for and gives the
+   same values for every hour of every requested day. `setWeather({})`
+   restores the default weather:
+
+   ```ts
+   e2e.weather.setWeather({
+     code: 71,
+     temperature: -3,
+     feelsLike: -8,
+     chance: 80,
+     snowfall: 2,
+     sunrise: "07:20",
+     sunset: "16:35",
+   });
+   ```
+
+2. To make the forecast fail, set the failure before the job runs and lift
+   it in a `finally`, so the file's other tests get forecasts; hold answers
+   the same way:
+
+   ```ts
+   e2e.weather.failAlways(503);
+   try {
+     // act, then wait for what the bot shows about the failure
+   } finally {
+     e2e.weather.clearFailures();
+   }
+   // const release = e2e.weather.hold(); ... release();
+   ```
+
+3. To have the bot fetch the forecast again at once after changing the
+   weather, set the hike's map pin again from the panel (Set map pin) or
+   pick other units under Settings; each runs the weather job. Wait for the
+   forecast on the hike's thread and scheduled event with `eventually`; to
+   wait for the request itself, use
+   `e2e.weather.nextRequest(match, timeoutMs)`:
+
+   ```ts
+   await eventually(() => {
+     const [thread] = e2e.discord.threads(g.channels.forum);
+     const [first] = e2e.discord.channelMessages(thread?.id ?? "");
+     expect(messageText(first ?? {})).toContain("°F");
+     const [event] = e2e.discord.scheduledEvents(g.guildId);
+     expect(event?.description).toContain("°F");
+   });
+   ```
+
+4. Read what the bot asked in `e2e.weather.requests` (`query`, `userAgent`,
+   `at`), and run the file:
+
+   ```sh
+   npx vitest run --project e2e test/e2e/weather.test.ts
+   pgrep -x workerd || echo "no workerd left"
+   ```
+
 ## Teach the fake Discord API a new route or limit
 
 1. For a new route, add the REST method to `DiscordApi` first, then add the

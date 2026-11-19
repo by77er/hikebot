@@ -22,6 +22,7 @@ const empty: GuildSettings = {
   timezone: "America/Los_Angeles",
   homeArea: null,
   cadence: DEFAULT_CADENCE,
+  units: "imperial",
 };
 
 describe("GuildConfig", () => {
@@ -52,6 +53,20 @@ describe("GuildConfig", () => {
       expect(config.set("adminRoleId", null).adminRoleId).toBeNull();
       expect(config.get().voteChannelId).toBe("12");
     });
+  });
+
+  it("defaults the units to imperial until an admin picks metric, and keeps them across restarts", async () => {
+    const stub = stubFor("config-units");
+    await runInDurableObject(stub, (_instance, state) => {
+      const config = new GuildConfig(state.storage);
+      expect(config.get().units).toBe("imperial");
+      expect(config.setUnits("metric")).toEqual({ ...empty, units: "metric" });
+    });
+    await evictDurableObject(stub);
+    const settings = await runInDurableObject(stub, (_instance, state) =>
+      new GuildConfig(state.storage).get(),
+    );
+    expect(settings.units).toBe("metric");
   });
 
   it("defaults the time zone to America/Los_Angeles until one is set", async () => {

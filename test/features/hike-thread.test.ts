@@ -194,6 +194,7 @@ function round(location: PollView, date: PollView): RoundView {
     eventId: null,
     mapPictureKey: null,
     dayOf: null,
+    forecast: null,
     startedBy: OWNER,
     startedAt: 0,
     endedBy: OWNER,

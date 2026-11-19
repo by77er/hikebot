@@ -710,8 +710,9 @@ nothing is decided.
 
 Each guild's settings are one row of `guild_settings` in its `GuildHike`
 database (migration `0002_guild_settings`, with `timezone` added by
-`0003_guild_timezone`, the home area by `0006_places` and the schedule's
-columns by `0007_guild_cadence`; read and written by `GuildConfig` in
+`0003_guild_timezone`, the home area by `0006_places`, the schedule's
+columns by `0007_guild_cadence` and the units by `0009_weather`; read and
+written by `GuildConfig` in
 `src/guild/config.ts`):
 
 | Column                   | Meaning                                                           |
@@ -733,6 +734,7 @@ columns by `0007_guild_cadence`; read and written by `GuildConfig` in
 | `cadence_time`           | The schedule's time of day, `HH:MM` (default `09:00`)             |
 | `cadence_date_vote_days` | Days the date vote stays open on the schedule, 1 to 3 (default 2) |
 | `cadence_on_since`       | When the schedule was last turned on; null while it is off        |
+| `units`                  | `imperial` or `metric`: the units of the weather forecast         |
 
 Every column but `id` and the schedule's is null until it is set; the
 schedule's have their defaults (`DEFAULT_CADENCE`; `cadence_on_since` is
@@ -744,7 +746,10 @@ is judged there, and a hike's start instant is computed there. A null
 `timezone` means the default, `America/Los_Angeles` (`DEFAULT_TIMEZONE` in
 `src/polls/dates.ts`); `GuildConfig.get()` returns the effective zone as a
 non-null `timezone`, so callers never handle null. An admin sets it from the
-panel's Settings view; it is not part of setup.
+panel's Settings view; it is not part of setup. Likewise a null `units` is
+`imperial` (°F, mph, inches; the default zone is Pacific), and an admin
+picks `metric` (°C, km/h, millimetres) from the Units select under
+Settings.
 
 ## Admin panel
 
@@ -876,8 +881,11 @@ All tables live in the guild's `GuildHike` SQLite database.
   scheduled event), `map_picture_key` (the `MAPS` bucket key of the map
   picture its thread and event show, migration `0008_round_map_picture`),
   `day_of_channel_id` / `day_of_message_id` (the
-  hike-day announcement, once posted), `started_by` / `started_at`, and
-  `ended_by` / `ended_at` (set on complete or cancel).
+  hike-day announcement, once posted), `forecast` /
+  `forecast_fetched_at` / `forecast_updated_at` (the latest weather
+  forecast of the hike as JSON, when it was fetched and when what it shows
+  last changed; migration `0009_weather`, see "Weather"), `started_by` /
+  `started_at`, and `ended_by` / `ended_at` (set on complete or cancel).
 - `polls`: belongs to a round; `kind` is `location` or `date` (one of each per
   round at most); `status` is `open` or `closed`. `channel_id` /
   `message_id` locate its Discord message. On close: `winner_option_id`,
@@ -1573,7 +1581,9 @@ contributors`. Labels, details and place names are bounded (80, 300 and
   characters. While the round has a map picture, the heading and the
   details are followed by a media gallery showing the message's
   `hike-map.png` attachment, then the rest from the place line on (see
-  "Hike map picture"). When the pin changes (Set map pin), the message is edited.
+  "Hike map picture"). After the head comes the hike's hourly weather
+  forecast (see "Weather"). When the pin changes (Set map pin), the
+  message is edited.
   The thread is created before the event, so the event step edits this
   message once the event exists (see "Hike event"); a thread created later
   by **Create hike thread** has the link from the start.
@@ -1627,7 +1637,8 @@ Interested and get Discord's reminder.
   name, "OpenStreetMap:" and "Google Maps:" with the two map links as plain
   URLs, and "© OpenStreetMap contributors"; then "Hike thread:" and the
   thread's link (`https://discord.com/channels/<guild>/<thread>`) when the
-  thread exists; left out when there is none of them. When the pin changes
+  thread exists, with the compact weather forecast before the thread's
+  link (see "Weather"); left out when there is none of them. When the pin changes
   (Set map pin), the description is edited with `editGuildScheduledEvent`
   (`PATCH /guilds/{guild.id}/scheduled-events/{event.id}`).
 - **Cover image** (`image`): the hike's map picture, set by the map picture
@@ -1636,8 +1647,8 @@ Interested and get Discord's reminder.
 Discord allows a name and a location of 1-100 characters and a description
 of up to 1000. A label is at most 80 characters and details at most 300, but
 `hikeEventRequest` shortens each with "…" (on a code point boundary) to fit
-anyway, keeping the map links and the thread link whole, so a request is
-never refused for its length.
+anyway, keeping the map links, the weather and the thread link whole, so a
+request is never refused for its length.
 
 The event's id is stored on the round with `setRoundEvent`. The step then
 edits the thread's first message (whose id is the thread's) to add the
@@ -1809,7 +1820,10 @@ Coming? Say so in <#thread>, so the group knows who to expect.
 The start is written in the server's time zone and as Discord timestamps,
 which each member sees in their own zone. When the location has a map pin,
 its place line with both map links follows the details, and the message
-ends with `-# © OpenStreetMap contributors` (see "Locating hikes"). The details, the thread, the
+ends with `-# © OpenStreetMap contributors` (see "Locating hikes"). After
+the place comes "**Weather:**" with the forecast's summary over the hike's
+hours, fetched from Open-Meteo just before the post, and its credit, or why
+there is no forecast (see "Weather"). The details, the thread, the
 event and the invitation (which needs the thread) are left out when the
 hike has none. The body is the list `HIKE_DAY_SECTIONS`: each section is a
 function from the hike (`HikeDay`: location, date, start, thread, event,
@@ -1950,8 +1964,145 @@ pin and runs the hooks it is given; the panel uses its two halves,
 `MAP_PIN_HOOKS` in `src/features/index.ts`: the hike thread's first
 message and the event's description are edited when they exist, then the
 map picture is drawn again for the new pin and replaces the old one on both
-(see "Hike map picture"); a feature that shows the pin (a web page) adds its
-hook there.
+(see "Hike map picture"), and the weather job runs for a planned hike (see
+"Weather"); a feature that shows the pin (a web page) adds its hook there.
+
+## Weather
+
+A planned hike shows an hourly weather forecast for its day, from
+Open-Meteo, on its surfaces: the hike thread's first message, the Discord
+event's description and the hike-day announcement. The client and the
+formatter are in `src/weather/`; the job and what each surface shows are in
+`src/features/weather.ts` and `weather-state.ts`.
+
+**Open-Meteo** (https://open-meteo.com/en/docs) needs no key for
+non-commercial use, "Less than 10'000 API calls per day, 5'000 per hour and
+600 per minute" (https://open-meteo.com/en/terms); its data is CC BY 4.0
+and is credited, with a link, wherever it is shown: "Weather data by
+Open-Meteo.com" (https://open-meteo.com/en/licence). The bot makes at most
+one request an hour per planned hike, plus one per Set map pin, units
+change or hike-day announcement. The request is
+`GET <OPEN_METEO_BASE>/v1/forecast` with the pin's `latitude` and
+`longitude`, the hourly variables `temperature_2m`,
+`apparent_temperature`, `precipitation_probability`, `precipitation`,
+`weather_code`, `wind_speed_10m`, `wind_gusts_10m`, `snowfall`,
+`freezing_level_height` and `uv_index`, `daily=sunrise,sunset`, the
+server's `timezone`, `start_date` and `end_date`, and the server's units
+(`temperature_unit`, `wind_speed_unit`, `precipitation_unit`: fahrenheit,
+mph and inch, or celsius, kmh and mm). With inches Open-Meteo gives
+snowfall in inches and the freezing level in feet, otherwise in
+centimetres and metres; the elevation of the point it forecast for is
+always in metres. It has a 10-second timeout and the User-Agent
+`hikebot (+https://github.com/by77er/hikebot)`.
+
+**Times.** Open-Meteo writes local times in the requested zone with one
+`utc_offset_seconds` for the whole answer, taken at the time of the
+request: "Daylight saving time (DST) changes within the requested range are
+ignored". The client turns each local time into an instant with that
+offset, and the formatter writes instants in the server's time zone itself,
+so a forecast fetched before a change of the clocks for a hike after it
+shows the right hours. For the same reason the dates asked for reach an
+hour beyond the block on each side.
+
+**The 16 days.** Open-Meteo forecasts 16 days, today included. A hike is
+within them when the last day of its block (two hours after its end) is at
+most 15 days after today in the server's time zone; the forecast of a hike
+further ahead appears at midnight 15 days before that day.
+
+**What the thread shows**, under `### Weather` after the head of its first
+message: one row per hour from two hours before the start to two hours
+after the end (the event's `HIKE_DURATION_HOURS`), nine rows, in a
+fixed-width block that reads on a phone, with the conditions last so a
+narrow screen wraps only the words:
+
+```text
+### Weather
+Times in America/Los_Angeles; temperature/feels-like (°F), chance and amount of rain or snow (inches), wind/gusts (mph).
+           °F rain    in    mph
+11:00   31/23  14%  0.00    6/5  Overcast
+...
+17:00   26/18  31%  0.00    6/7  Light snow
+Sunrise 07:18 · Sunset 16:27
+Freezing level down to 3,150 ft (the forecast point is at 5,440 ft)
+Snowfall: 0.06 in over these hours
+-# Updated <t:…:f> · checked every hour · [Weather data by Open-Meteo.com](https://open-meteo.com/)
+```
+
+The conditions are words for the WMO weather code (`src/weather/wmo.ts`,
+from Open-Meteo's table, shortened). Under the block: the hike day's
+sunrise and sunset; the freezing level when it comes within 1,500 m (5,000
+ft) above the forecast point, since a hike climbs from there; the UV index
+when it reaches 6, "high" on the WHO's scale; and the snowfall when there
+is any. The chance, amount, gusts, snowfall and UV of a row cover the hour
+before it, as Open-Meteo defines them.
+
+**What the event shows**, before the thread's link: a summary over the
+hike's hours, one line per two hours from the start to the end, the time
+the forecast last changed written out in the server's time zone, and the
+credit with its link as a plain URL:
+
+```text
+Weather: 8 to 11°C, up to 95% chance of rain, gusts up to 85 km/h
+10:00 Rain, 8°C, rain 90%, gusts 68 km/h
+12:00 Heavy rain, 10°C, rain 95%, gusts 85 km/h
+14:00 Showers, 10°C, rain 90%, gusts 68 km/h
+Updated Mon, 23 Nov 2026 · 08:00 (America/Los_Angeles)
+Weather data by Open-Meteo.com: https://open-meteo.com/
+```
+
+The weather is kept whole and the location's details give way, so the
+description stays within Discord's 1000 characters with the longest
+details, place name and forecast; the thread's message stays within 4000.
+The hike-day announcement has the summary line and the credit.
+
+**When there is no forecast**, each surface says why: "No forecast: this
+hike has no map pin. An admin can set one from /hike admin."; "The forecast
+appears 16 days before the hike."; or, until the first answer arrives, "No
+forecast yet. It is checked every hour." A forecast fetched for an earlier
+pin is not shown.
+
+**The `weather:refresh` job.** The date vote's last close step, "plan the
+forecast", records the round under `weather:<round id>` in `storage.kv`
+(with the guild id) and runs the job at once. For each recorded round the
+job forgets it once the round is not a completed hike or the hike is over;
+when the hike has a pin and is within the 16 days it fetches the forecast,
+keeps the hours of the block (and an hour each side) and stores it on the
+round with the time (`setRoundForecast`); then it brings the thread and the
+event up to date. It schedules itself an hour later while such a hike has
+not ended, or for the moment the 16 days reach a hike further ahead; a hike
+without a pin needs no run until Set map pin, whose hook (in
+`MAP_PIN_HOOKS`) runs the job at once, as picking units does.
+
+**Edited only on change.** The record keeps, per surface, the weather text
+it last showed; every writer (the job, the thread's creation, the event's,
+the map pin hooks) records it after Discord took the edit. The job edits a
+surface only when its text differs. The "Updated" time is the time what
+the forecast shows last changed: a fetch whose rendering is the same keeps
+it (only `forecast_fetched_at` moves), so an unchanged forecast causes no
+edits hour after hour.
+
+**Failures.** A fetch that fails (an error status, an unreadable answer, no
+answer in 10 s) is logged; the stored forecast stays and the job tries
+again on its next hourly run. An edit Discord answers with 404 (the thread
+or its first message, or the event, was deleted) marks that surface gone:
+it is not tried again, and the other surface is still kept up to date. Any
+other refused edit is logged and tried again on the next run. Archived
+threads take no message edits ("Users cannot edit messages, add reactions,
+use application commands, or join archived threads.",
+https://docs.discord.com/developers/topics/threads; code 50083): when an
+edit is refused that way, the bot, which created the thread and so may
+unarchive it even when locked, sets `archived` to false
+(`PATCH /channels/{thread.id}`), edits the message and archives the thread
+again. Archiving needs Manage Threads in some cases ("Otherwise, requires
+the `MANAGE_THREADS` permission",
+https://docs.discord.com/developers/resources/channel#modify-channel); if
+it is refused that is logged, and the thread archives itself after its
+inactivity period.
+
+**For other code.** `RoundView.forecast` is the stored forecast with its
+fetch and "Updated" times (`StoredForecast` in `src/weather/forecast.ts`),
+for the web page and anything else that shows the weather;
+`weatherTexts(round, timeZone, now)` gives each surface's text.
 
 ## Map data
 

@@ -6,6 +6,7 @@ import {
   todayIn,
   windowFrom,
 } from "./dates";
+import type { StoredForecast } from "../weather/forecast";
 import { PollError } from "./errors";
 import { defaultRandom, pickWinner, type RandomSource } from "./tally";
 
@@ -131,6 +132,8 @@ export interface RoundView {
   mapPictureKey: string | null;
   /** The hike-day announcement, once posted. */
   dayOf: { channelId: string; messageId: string } | null;
+  /** The latest weather forecast of the hike, once one was fetched. */
+  forecast: StoredForecast | null;
   startedBy: string;
   startedAt: number;
   endedBy: string | null;
@@ -209,6 +212,9 @@ type RoundRow = {
   map_picture_key: string | null;
   day_of_channel_id: string | null;
   day_of_message_id: string | null;
+  forecast: string | null;
+  forecast_fetched_at: number | null;
+  forecast_updated_at: number | null;
   started_by: string;
   started_at: number;
   ended_by: string | null;
@@ -1014,6 +1020,22 @@ export class PollStore {
   }
 
   /**
+   * Stores the round's latest forecast with when it was fetched and when
+   * what it shows last changed, replacing the one before.
+   */
+  setRoundForecast(roundId: number, stored: StoredForecast): void {
+    this.roundRow(roundId);
+    this.sql.exec(
+      `UPDATE rounds SET forecast = ?, forecast_fetched_at = ?,
+         forecast_updated_at = ? WHERE id = ?`,
+      JSON.stringify(stored.forecast),
+      stored.fetchedAt,
+      stored.updatedAt,
+      roundId,
+    );
+  }
+
+  /**
    * The location option whose place lookup is due by `now`, the longest
    * due first: one of an open poll, or the decided location of a round.
    * Null when none is due.
@@ -1332,6 +1354,16 @@ export class PollStore {
           : {
               channelId: row.day_of_channel_id,
               messageId: row.day_of_message_id,
+            },
+      forecast:
+        row.forecast === null ||
+        row.forecast_fetched_at === null ||
+        row.forecast_updated_at === null
+          ? null
+          : {
+              forecast: JSON.parse(row.forecast) as StoredForecast["forecast"],
+              fetchedAt: row.forecast_fetched_at,
+              updatedAt: row.forecast_updated_at,
             },
       startedBy: row.started_by,
       startedAt: row.started_at,

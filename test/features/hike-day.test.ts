@@ -49,6 +49,9 @@ const FORUM = "300000000000000003";
 const THREAD = "900000000000000001";
 const EVENT = "950000000000000001";
 const LA = "America/Los_Angeles";
+/** What the weather line says of a hike without a map pin. */
+const NO_PIN =
+  "No forecast: this hike has no map pin. An admin can set one from /hike admin.";
 const BERLIN = "Europe/Berlin";
 
 let signer: Signer;
@@ -331,6 +334,7 @@ const DAY: HikeDay = {
   threadId: THREAD,
   eventId: EVENT,
   calendar: "https://hikebot.example/calendar/200000000000000001/sig.ics",
+  weather: [],
 };
 
 describe("the announcement", () => {
@@ -473,6 +477,7 @@ describe("the hike:day-of job", () => {
         "## Hike today: Lake Loop",
         `**Starts:** ${written}, <t:${startsAt}:t> in your time zone, <t:${startsAt}:R>`,
         "Meet at the north trailhead.",
+        `**Weather:** ${NO_PIN}`,
         `**Hike thread:** <#${THREAD}>`,
         `**Discord event:** https://discord.com/events/${guild}/${EVENT}`,
         `**Calendar:** ${calendar}`,
