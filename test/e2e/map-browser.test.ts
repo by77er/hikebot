@@ -30,6 +30,8 @@ let browser: Browser;
 let path: string;
 /** A server whose location vote has one place inside the map data. */
 let onePlacePath: string;
+/** A server whose location vote has places only outside the map data. */
+let noDataPath: string;
 let cookie: string;
 let member: PageClient;
 
@@ -65,6 +67,16 @@ beforeAll(async () => {
       { label: "Snow Lake", point: { lat: 47.4555, lon: -121.4507 } },
     ],
   });
+  const far = play.guild(3, { name: "Coast Walkers" });
+  e2e.discord.addMember(far.guildId, VIEWER);
+  await play.setUpPanel(far);
+  await play.seedRound(far, {
+    status: "location_voting",
+    startedAt: Date.UTC(2030, 5, 20, 18),
+    locations: [
+      { label: "Snow Lake", point: { lat: 47.4555, lon: -121.4507 } },
+    ],
+  });
   e2e.discord.addUser({
     id: VIEWER,
     username: "ana",
@@ -72,6 +84,7 @@ beforeAll(async () => {
     guilds: [
       { id: g.guildId, name: "Ridge Walkers" },
       { id: lone.guildId, name: "Lake Walkers" },
+      { id: far.guildId, name: "Coast Walkers" },
     ],
   });
   const client = new PageClient(e2e.url);
@@ -80,6 +93,7 @@ beforeAll(async () => {
   member = client;
   path = `/g/${g.guildId}`;
   onePlacePath = `/g/${lone.guildId}`;
+  noDataPath = `/g/${far.guildId}`;
   browser = await launchBrowser({ webgl: true });
 }, 120_000);
 
@@ -304,5 +318,19 @@ it("draws a vote's one place on the map as its numbered marker, not as a hike's 
     "Little Si",
     "Snow Lake",
   ]);
+  await page.close();
+}, 120_000);
+
+it("leaves out a vote's map, section and all, where the map data has none of its places", async () => {
+  const { page } = await open({ at: noDataPath });
+  await page.waitForFunction(
+    `document.querySelector("figure[data-map]").dataset.mapState === "none"`,
+  );
+  expect(
+    await page.evaluate(
+      `getComputedStyle(document.querySelector("[data-map-section]")).display`,
+    ),
+  ).toBe("none");
+  expect(await page.evaluate("window.__violations")).toEqual([]);
   await page.close();
 }, 120_000);

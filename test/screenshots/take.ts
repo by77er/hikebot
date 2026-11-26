@@ -387,10 +387,11 @@ const NO_SCRIPT = { status: 200, contentType: "text/javascript", body: "" };
 
 /**
  * True once every map view on the page has drawn (`data-map-state` set to
- * `idle` by `public/assets/maps/map-view.mjs`) or given up (`failed`).
+ * `idle` by `public/assets/maps/map-view.mjs`), found no map data
+ * (`none`) or given up (`failed`).
  */
 const MAPS_SETTLED = `[...document.querySelectorAll("figure[data-map]")].every((figure) =>
-  figure.dataset.mapState === "idle" || figure.dataset.mapState === "failed")`;
+  ["idle", "none", "failed"].includes(figure.dataset.mapState))`;
 
 const TWO_FRAMES = `new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`;
 

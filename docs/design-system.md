@@ -712,7 +712,9 @@ its styles in `public/assets/cairn/components/`, its unit test in
   `public/assets/maps/maplibre/` with its `LICENSE.txt`. Without JavaScript
   it shows the stored map picture in it, or, with none, the line "Turn on
   JavaScript to see the map."; the map replaces either once it has drawn,
-  so nothing moves. The **zoom buttons** (Zoom in, Zoom out, 44px, top
+  so nothing moves. Where the map data has none of its places it keeps
+  its picture, or without one is left out with its section
+  (`data-map-section`). The **zoom buttons** (Zoom in, Zoom out, 44px, top
   right) appear with the map; the **attribution** is always shown, bottom
   left. The map is focusable (its accessible name is the `title`, such as
   "Map of Mount Si"): the arrow keys pan it and `+` and `-` zoom it, with

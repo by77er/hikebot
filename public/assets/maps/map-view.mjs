@@ -5,15 +5,16 @@
  * (./maplibre/, which starts its worker from its own folder here) over the
  * stored picture (or the line saying the map needs JavaScript), which it
  * removes once the map has drawn. Markers, the zoom buttons and the
- * attribution are added. A map whose style cannot be loaded, or whose
- * places all lie outside the map data, keeps its picture, or is hidden
- * when it has none.
+ * attribution are added. Without map data (no style, or no place inside
+ * the data) a map keeps its picture; without a picture it is hidden, with
+ * the section round it when it has one (`data-map-section`).
  *
  * `data-map-state` on the figure says where it is: `loading` until it has
  * first drawn, `idle` once it has drawn everything it shows (screenshots
  * wait for it), `drawing` while it draws again after its frame was
- * resized, or `failed`; `data-map-zoom` is the zoom it shows. Loaded as a module, so a
- * page with two maps runs it once.
+ * resized, `none` without map data, or `failed` on any other error;
+ * `data-map-zoom` is the zoom it shows. Loaded as a module, so a page with
+ * two maps runs it once.
  */
 import {
   AttributionControl,
@@ -35,21 +36,28 @@ for (const figure of document.querySelectorAll("figure[data-map]")) {
   if (figure.dataset.mapState) continue;
   figure.dataset.mapState = "loading";
   start(figure).catch((error) => {
-    figure.dataset.mapState = "failed";
-    if (!figure.querySelector("img.map-view__picture")) figure.hidden = true;
-    console.warn(`The map could not be shown: ${String(error)}`);
+    const none = error instanceof NoMapData;
+    figure.dataset.mapState = none ? "none" : "failed";
+    if (!figure.querySelector("img.map-view__picture")) {
+      (figure.closest("[data-map-section]") ?? figure).hidden = true;
+    }
+    if (!none) console.warn(`The map could not be shown: ${String(error)}`);
   });
 }
+
+/** The map data does not cover the map's places, or there is none. */
+class NoMapData extends Error {}
 
 async function start(figure) {
   const config = JSON.parse(figure.dataset.map);
   const response = await fetch(config.style);
+  if (response.status === 404) throw new NoMapData();
   if (!response.ok) throw new Error(`style answered ${response.status}`);
   const style = await response.json();
   const markers = config.markers.filter((marker) =>
     inside(style.sources.hikebot.bounds, marker),
   );
-  if (markers.length === 0) throw new Error("no place inside the map data");
+  if (markers.length === 0) throw new NoMapData();
 
   const frame = figure.querySelector(".map-view__frame");
   const picture = frame.querySelector(".map-view__picture");

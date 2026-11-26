@@ -17,6 +17,8 @@ describe("VoteMap", () => {
     const html = render(<VoteMap view={view} />);
     const text = await spokenText(html);
     expect(text).toContain("Proposed locations on the map");
+    // The script hides it all when the map data has none of the places.
+    expect(html).toContain("data-map-section");
     expect(text).toContain(
       "Mount Si 47.5069° N, 121.7390° W Little Si 47.4987° N, 121.7560° W",
     );

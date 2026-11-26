@@ -7,7 +7,8 @@
  * markers, popups, buttons and the attribution use the map's tokens.
  */
 
-.map-view__figure[hidden] {
+.map-view__figure[hidden],
+[data-map-section][hidden] {
   display: none;
 }
 

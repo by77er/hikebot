@@ -4,7 +4,9 @@
  * them, numbered in the vote's order, with the numbered list of their
  * names and coordinates under it. Without JavaScript the map's frame says
  * "Turn on JavaScript to see the map.", with the list under it.
- * Nothing while no location vote is open or no option has a place.
+ * Nothing while no location vote is open or no option has a place, and,
+ * once the map's script finds no map data for the places, nothing at all
+ * (`data-map-section`).
  */
 import type { WebView } from "../../../guild/web-view";
 import { MapView, type MapMarker } from "../../components/map-view";
@@ -24,7 +26,7 @@ export function VoteMap({ view }: { view: WebView }) {
   }
   if (markers.length === 0) return null;
   return (
-    <section class="stack" aria-labelledby="vote-map">
+    <section class="stack" aria-labelledby="vote-map" data-map-section>
       <h2 id="vote-map">Proposed locations on the map</h2>
       <MapView title="Map of the proposed locations" markers={markers} />
     </section>

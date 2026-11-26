@@ -2561,7 +2561,9 @@ it starts from its own address as a module worker, so no `blob:` worker is
 needed). `public/assets/maps/map-view.mjs`, loaded as a module by every
 map on a page and so run once, starts each map view: it fetches the
 style, keeps the places inside the style's bounds (none inside: the map
-gives up, and keeps its picture or hides), and draws the map over the
+gives up, and keeps its picture or, with none, hides, together with the
+section round it that carries `data-map-section`, as the vote's map does),
+and draws the map over the
 stored picture, removing the picture when MapLibre is `idle`. One place
 opens centred on it at zoom 13, a zoom closer than its picture: the picture
 is zoom 12 drawn from zoom 13 tiles, which hold the trails, while the
