@@ -188,8 +188,8 @@ async function capture(
         answer && request.isNavigationRequest() && request.url() === url.href
           ? answer
           : entry.javascript === false && request.resourceType() === "script"
-          ? NO_SCRIPT
-          : cdnReply(request.url());
+            ? NO_SCRIPT
+            : cdnReply(request.url());
       void (reply ? request.respond(reply) : request.continue());
     });
     page.on("requestfailed", (request) => {
