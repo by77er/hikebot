@@ -3,7 +3,7 @@ import { TallyList } from "../../../../src/web/components/tally-list";
 import { TallyRow } from "../../../../src/web/components/tally-row";
 import { CurrentStep } from "../../../../src/web/pages/server/current-step";
 import { render, spokenText } from "../../components/render";
-import { baseView, mapPin, openVote, round } from "./view";
+import { baseView, FORMS, mapPin, openVote, round } from "./view";
 
 describe("an open location vote's located options", () => {
   it("show each located option's short place name and a map link, as the poll message does, with OpenStreetMap's credit once", async () => {
@@ -14,6 +14,7 @@ describe("an open location vote's located options", () => {
     ]);
     const html = render(
       <CurrentStep
+        forms={FORMS}
         view={baseView({ round: round("location_vote_open", vote) })}
       />,
     );

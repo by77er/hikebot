@@ -80,7 +80,8 @@ it("shows a member the location vote's tally as members voted in Discord", async
   expect(text.indexOf("Lake 3 votes")).toBeLessThan(
     text.indexOf("Ridge 1 vote"),
   );
-  expect(text).toContain("You have not voted yet.");
+  expect(text).toContain("Save votes");
+  expect(page.body).not.toMatch(/name="option" value="\d+" checked/);
   expect(page.body).toContain(
     `href="https://discord.com/channels/${g.guildId}/${g.channels.text}/${poll.id}"`,
   );

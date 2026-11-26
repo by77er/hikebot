@@ -31,8 +31,11 @@ export interface SignInOptions {
 export interface PageRequest {
   method?: string;
   headers?: Record<string, string>;
-  /** A form body, sent as `application/x-www-form-urlencoded`. */
-  form?: Record<string, string>;
+  /**
+   * A form body, sent as `application/x-www-form-urlencoded`; a list sends
+   * the field once per value, as checked boxes of one name do.
+   */
+  form?: Record<string, string | string[]>;
 }
 
 export class PageClient {
@@ -98,12 +101,13 @@ export class PageClient {
   /**
    * Submits the form of `page` whose `action` is `action`, with its fields
    * (hidden ones included) and `fields` over them, as a browser would: a
-   * POST from the page's own origin.
+   * POST from the page's own origin. Give a list for a field sent once per
+   * value, such as the ticked boxes of a vote.
    */
   submitForm(
     page: PageResponse,
     action: string,
-    fields: Record<string, string> = {},
+    fields: Record<string, string | string[]> = {},
   ): Promise<PageResponse> {
     const found = formFields(page.body, action);
     if (!found) {
@@ -123,7 +127,13 @@ export class PageClient {
     let body: string | undefined;
     if (init.form) {
       headers.set("Content-Type", "application/x-www-form-urlencoded");
-      body = new URLSearchParams(init.form).toString();
+      body = new URLSearchParams(
+        Object.entries(init.form).flatMap(([name, value]) =>
+          (Array.isArray(value) ? value : [value]).map(
+            (one): [string, string] => [name, one],
+          ),
+        ),
+      ).toString();
     }
     const response = await fetch(url, {
       method: init.method ?? (body === undefined ? "GET" : "POST"),
