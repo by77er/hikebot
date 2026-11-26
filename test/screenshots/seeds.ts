@@ -177,8 +177,8 @@ const dateVote: ServerSteps = (play, g) =>
  * round's days, fixed by the seeded vote, so the page's Propose a date does
  * not change with today's date.
  */
-const scheduledDateVote: ServerSteps = async (play, g) => {
-  await dateVote(play, g);
+const scheduledDateVote: ServerSteps = async (play, g, e2e) => {
+  await dateVote(play, g, e2e);
   await play.seedSchedule(g, STARTED - 86_400_000);
 };
 
@@ -188,7 +188,7 @@ const scheduledDateVote: ServerSteps = async (play, g) => {
  * Twin Falls can be suggested again; Wallace Falls rests two more hikes
  * and Mount Si one.
  */
-const suggestAgain: ServerSteps = async (play, g) => {
+const suggestAgain: ServerSteps = async (play, g, e2e) => {
   const past = [
     ["Mount Si", "Poo Poo Point", "Heather Lake"],
     ["Wallace Falls", "Twin Falls"],
@@ -204,7 +204,7 @@ const suggestAgain: ServerSteps = async (play, g) => {
       date: `2019-${month}-16 10:00`,
     });
   }
-  await locationVote()(play, g);
+  await locationVote()(play, g, e2e);
 };
 
 /** The round complete: Snow Lake on Sat, 15 Jun 2030 at 11:00 is planned. */
