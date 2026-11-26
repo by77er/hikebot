@@ -85,6 +85,27 @@
       "user": "400000000000000001"
     },
     {
+      "name": "server-hike-forecast",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-hike-forecast",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-hike-forecast-rain",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-hike-forecast-rain",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-hike-no-forecast",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-hike-no-forecast",
+      "user": "400000000000000001"
+    },
+    {
       "name": "server-hike-planned",
       "path": "/g/220000000000000101",
       "status": 200,
@@ -127,6 +148,13 @@
       "user": "400000000000000001"
     },
     {
+      "name": "server-location-vote-located",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-location-vote-located",
+      "user": "400000000000000001"
+    },
+    {
       "name": "server-location-vote-voted",
       "path": "/g/220000000000000101",
       "status": 200,
@@ -148,6 +176,13 @@
       "user": "400000000000000001"
     },
     {
+      "name": "server-map-pin",
+      "path": "/g/220000000000000101/admin/set-map-pin",
+      "status": 200,
+      "seed": "server-map-pin",
+      "user": "400000000000000001"
+    },
+    {
       "name": "server-not-member",
       "path": "/g/220000000000000101",
       "status": 403,
@@ -164,6 +199,13 @@
         "from": "/g/220000000000000101/admin/close-vote?target=2",
         "action": "/g/220000000000000101/admin/close-vote"
       }
+    },
+    {
+      "name": "server-schedule",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-schedule",
+      "user": "400000000000000001"
     },
     {
       "name": "server-with-log",
@@ -293,6 +335,13 @@
       "user": null
     },
     {
+      "name": "styleguide-forecast-table",
+      "path": "/styleguide/forecast-table",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
       "name": "styleguide-form-actions",
       "path": "/styleguide/form-actions",
       "status": 200,
@@ -316,6 +365,13 @@
     {
       "name": "styleguide-map",
       "path": "/styleguide/map",
+      "status": 200,
+      "seed": "empty",
+      "user": null
+    },
+    {
+      "name": "styleguide-map-links",
+      "path": "/styleguide/map-links",
       "status": 200,
       "seed": "empty",
       "user": null

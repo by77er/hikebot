@@ -12,8 +12,11 @@ import { AdminControls } from "./admin-controls";
 import { AdminNoticeBanner } from "./admin-notice";
 import { CalendarAddress } from "./calendar-address";
 import { CurrentStep } from "./current-step";
+import { HikeForecast } from "./hike-forecast";
+import { HikePlace } from "./hike-place";
 import { LogPreview } from "./log-preview";
 import { PlannedHike } from "./planned-hike";
+import { ScheduleLine } from "./schedule-line";
 import { ServerHeading } from "./server-heading";
 
 export function ServerPage({
@@ -34,6 +37,9 @@ export function ServerPage({
         <CurrentStep view={view} />
         <AdminControls view={view} notice={notice} csrf={user.csrf} />
         <PlannedHike view={view} />
+        <HikePlace view={view} csrf={user.csrf} />
+        <HikeForecast view={view} />
+        <ScheduleLine view={view} />
         <LogPreview view={view} />
         <CalendarAddress view={view} />
       </div>

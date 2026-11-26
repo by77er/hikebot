@@ -6,7 +6,8 @@
  * The view is made of sections, each built by its own function from a
  * `WebViewSource`: the guild-wide ones here (`serverSection`,
  * `viewerSection`, `settingsSection`), the others beside the feature that
- * owns their data (`roundSection`, `plannedHikeSection`, `hikeLogSection`,
+ * owns their data (`roundSection`, `plannedHikeSection`, `hikePlaceSection`,
+ * `hikeForecastSection`, `scheduleSection`, `hikeLogSection`,
  * `calendarSection`, `adminSection`).
  * Nothing here writes to storage except the owner cache in the guild's
  * settings.
@@ -22,15 +23,27 @@ import {
   type WebCalendarSection,
 } from "../features/calendar-feed";
 import {
+  hikeForecastSection,
+  type WebHikeForecast,
+} from "../features/hike-forecast-section";
+import {
   HIKES_PER_PAGE,
   hikeLogSection,
   type WebHikeLogSection,
 } from "../features/hike-log";
 import {
+  hikePlaceSection,
+  type WebHikePlace,
+} from "../features/hike-place-section";
+import {
   plannedHikeSection,
   type WebPlannedHike,
 } from "../features/planned-hike-section";
 import { roundSection, type WebRoundSection } from "../features/round-section";
+import {
+  scheduleSection,
+  type WebSchedule,
+} from "../features/schedule-section";
 import { adminSection, type WebAdminSection } from "../features/web-admin";
 import { PollStore } from "../polls/store";
 import { GuildConfig, type GuildSettings } from "./config";
@@ -69,6 +82,12 @@ export interface WebView {
   settings: WebSettingsSection;
   round: WebRoundSection | null;
   plannedHike: WebPlannedHike | null;
+  /** Where the planned hike is; null with no planned hike. */
+  hikePlace: WebHikePlace | null;
+  /** The planned hike's forecast or why it has none; null with no planned hike. */
+  hikeForecast: WebHikeForecast | null;
+  /** The weekly schedule; null while it is off. */
+  schedule: WebSchedule | null;
   log: WebHikeLogSection;
   calendar: WebCalendarSection;
   /** The round controls an admin may use now; null for everyone else. */
@@ -132,6 +151,9 @@ export async function buildWebView(source: WebViewSource): Promise<WebView> {
     settings: settingsSection(source),
     round: roundSection(source),
     plannedHike: plannedHikeSection(source),
+    hikePlace: hikePlaceSection(source),
+    hikeForecast: hikeForecastSection(source),
+    schedule: scheduleSection(source),
     log: hikeLogSection(source),
     calendar: await calendarSection(source),
     admin: adminSection(source),

@@ -169,6 +169,7 @@ describe("the web view's round", () => {
             details: null,
             dateValue: null,
             proposedBy: OWNER,
+            place: null,
             votes: 2,
             viewerVoted: true,
           },
@@ -178,6 +179,7 @@ describe("the web view's round", () => {
             details: null,
             dateValue: null,
             proposedBy: OWNER,
+            place: null,
             votes: 1,
             viewerVoted: true,
           },
@@ -187,6 +189,7 @@ describe("the web view's round", () => {
             details: null,
             dateValue: null,
             proposedBy: OWNER,
+            place: null,
             votes: 0,
             viewerVoted: false,
           },
@@ -206,6 +209,44 @@ describe("the web view's round", () => {
       ["Ridge", 0, false],
     ]);
     expect(ben.round?.vote?.voterCount).toBe(2);
+  });
+
+  it("gives a located option its short place name and map links, as the poll message does", async () => {
+    const g = await setUp();
+    await g.store((s) => {
+      const poll = startLocationVote(s, ["Ridge", "Lake", "Canyon"]);
+      const [ridge, lake] = poll.options;
+      s.setOptionPin(ridge?.id ?? 0, { lat: 47.4875, lon: -121.7234 });
+      s.recordPlaceLookup(lake?.id ?? 0, {
+        kind: "found",
+        point: { lat: 47.5, lon: -121.6 },
+        name: "Lake Serene, Snohomish County",
+      });
+    });
+    const places = (await g.view(ANA)).round?.vote?.options.map((o) => [
+      o.label,
+      o.place,
+    ]);
+    expect(places).toEqual([
+      [
+        "Ridge",
+        expect.objectContaining({ name: null, text: "47.4875, -121.7234" }),
+      ],
+      [
+        "Lake",
+        {
+          lat: 47.5,
+          lon: -121.6,
+          text: "47.5, -121.6",
+          name: "Lake Serene, Snohomish County",
+          osmUrl:
+            "https://www.openstreetmap.org/?mlat=47.5&mlon=-121.6#map=13/47.5/-121.6",
+          googleUrl:
+            "https://www.google.com/maps/search/?api=1&query=47.5,-121.6",
+        },
+      ],
+      ["Canyon", null],
+    ]);
   });
 
   it("has no message link before the poll's message is posted", async () => {

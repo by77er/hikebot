@@ -24,11 +24,13 @@ import { definitionListSection } from "./styleguide/definition-list";
 import { discordSignInSection } from "./styleguide/discord-sign-in";
 import { emptyStateSection } from "./styleguide/empty-state";
 import { errorSummarySection } from "./styleguide/error-summary";
+import { forecastTableSection } from "./styleguide/forecast-table";
 import { formActionsSection } from "./styleguide/form-actions";
 import { formRowSection } from "./styleguide/form-row";
 import { hikeCardSection } from "./styleguide/hike-card";
 import { iconsSection } from "./styleguide/icons";
 import { layoutMotionSection } from "./styleguide/layout-motion";
+import { mapLinksSection } from "./styleguide/map-links";
 import { mapSection } from "./styleguide/map";
 import { paginationSection } from "./styleguide/pagination";
 import { radioSection } from "./styleguide/radio";
@@ -72,10 +74,12 @@ const COMPONENTS: StyleguideSection[] = [
   discordSignInSection,
   emptyStateSection,
   errorSummarySection,
+  forecastTableSection,
   formActionsSection,
   formRowSection,
   hikeCardSection,
   iconsSection,
+  mapLinksSection,
   paginationSection,
   radioSection,
   roundStepperSection,

@@ -26,6 +26,7 @@
 @import url("components/discord-sign-in.css") layer(components);
 @import url("components/empty-state.css") layer(components);
 @import url("components/error-summary.css") layer(components);
+@import url("components/forecast-table.css") layer(components);
 @import url("components/form-actions.css") layer(components);
 @import url("components/form-row.css") layer(components);
 @import url("components/hike-card.css") layer(components);

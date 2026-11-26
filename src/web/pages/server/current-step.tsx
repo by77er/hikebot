@@ -107,6 +107,7 @@ function VoteTally({ vote, isDate }: { vote: WebOpenVote; isDate: boolean }) {
           id: String(option.optionId),
           label: option.label,
           details: option.details,
+          place: option.place,
           votes: option.votes,
           yourVote: option.viewerVoted,
         }))}
