@@ -373,8 +373,8 @@ in `docs/design-system.md` says what the component shows, and
 
 1. Get the places from the view: a point (`{ lat, lon }`) and a name for
    each. If the view lacks them, add them as "Add a field to the web view"
-   in `src/guild/AGENTS.md` says, as `plannedHike.point` and the location
-   options' `point` were added.
+   in `src/guild/AGENTS.md` says; the planned hike's pin is `hikePlace.pin`
+   and a location option's is its `place`.
 2. Render `MapView` from `src/web/components/map-view.tsx`, with no map
    when there is no place. One marker is a pin, centred at zoom 13; give
    several markers `number`s, which the map and its list under it show.
@@ -387,13 +387,17 @@ in `docs/design-system.md` says what the component shows, and
    import { coordinates, MapView } from "../../components/map-view";
 
    const hike = view.plannedHike;
-   if (hike?.point == null || hike.mapPictureKey === null) return null;
+   const pin = view.hikePlace?.pin ?? null;
+   if (hike === null || pin === null || hike.mapPictureKey === null) {
+     return null;
+   }
+   const point = { lat: pin.lat, lon: pin.lon };
    return (
      <MapView
        title={`Map of ${hike.location.label}`}
-       markers={[{ ...hike.point, label: hike.location.label }]}
+       markers={[{ ...point, label: hike.location.label }]}
        picture={`/g/${view.server.id}/map.png`}
-       caption={`${hike.location.label}: ${coordinates(hike.point)}`}
+       caption={`${hike.location.label}: ${coordinates(point)}`}
      />
    );
    ```

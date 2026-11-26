@@ -2,17 +2,15 @@ import { describe, expect, it } from "vitest";
 import { hikeMap } from "../../../../src/web/pages/server/hike-map";
 import { PlannedHike } from "../../../../src/web/pages/server/planned-hike";
 import { render, spokenText } from "../../components/render";
-import { baseView, GUILD, MARKUP, plannedHike } from "./view";
+import { baseView, GUILD, hikePlace, MARKUP, pinAt, plannedHike } from "./view";
 
-const POINT = { lat: 47.4881, lon: -121.7232 };
+const PLACE = hikePlace({ pin: pinAt(47.4881, -121.7232) });
 
 describe("hikeMap", () => {
   it("is the map of the hike's pin, over its picture, with its coordinates", async () => {
     const view = baseView({
-      plannedHike: plannedHike({
-        point: POINT,
-        mapPictureKey: "pictures/a.png",
-      }),
+      plannedHike: plannedHike({ mapPictureKey: "pictures/a.png" }),
+      hikePlace: PLACE,
     });
     const map = hikeMap(view);
     if (!map) throw new Error("no map");
@@ -26,10 +24,8 @@ describe("hikeMap", () => {
 
   it("sits in the planned hike's card, above its links", () => {
     const view = baseView({
-      plannedHike: plannedHike({
-        point: POINT,
-        mapPictureKey: "pictures/a.png",
-      }),
+      plannedHike: plannedHike({ mapPictureKey: "pictures/a.png" }),
+      hikePlace: PLACE,
     });
     const html = render(<PlannedHike view={view} />);
     const map = html.indexOf('class="hike-card__picture"');
@@ -39,12 +35,16 @@ describe("hikeMap", () => {
   });
 
   it("is nothing without a pin, without a picture, or without a planned hike", () => {
-    for (const hike of [
-      plannedHike({ point: null, mapPictureKey: "pictures/a.png" }),
-      plannedHike({ point: POINT, mapPictureKey: null }),
-      null,
-    ]) {
-      const view = baseView({ plannedHike: hike });
+    for (const [hike, place] of [
+      [
+        plannedHike({ mapPictureKey: "pictures/a.png" }),
+        hikePlace({ pin: null }),
+      ],
+      [plannedHike({ mapPictureKey: "pictures/a.png" }), null],
+      [plannedHike({ mapPictureKey: null }), PLACE],
+      [null, null],
+    ] as const) {
+      const view = baseView({ plannedHike: hike, hikePlace: place });
       expect(hikeMap(view)).toBeUndefined();
       if (hike) {
         expect(render(<PlannedHike view={view} />)).not.toContain(
@@ -58,9 +58,9 @@ describe("hikeMap", () => {
     const view = baseView({
       plannedHike: plannedHike({
         location: { label: MARKUP, details: null, proposedBy: "1" },
-        point: POINT,
         mapPictureKey: "pictures/a.png",
       }),
+      hikePlace: PLACE,
     });
     const map = hikeMap(view);
     if (!map) throw new Error("no map");

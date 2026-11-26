@@ -10,6 +10,7 @@ import {
   logSection,
   MARKUP,
   openVote,
+  pinAt,
   plannedHike,
   round,
 } from "./view";
@@ -94,7 +95,7 @@ describe("ServerPage", () => {
         round: round(
           "location_vote_open",
           openVote("location", [
-            { label: "Lake", votes: 1, point: { lat: 47.5, lon: -121.7 } },
+            { label: "Lake", votes: 1, place: pinAt(47.5, -121.7) },
           ]),
         ),
         plannedHike: plannedHike(),

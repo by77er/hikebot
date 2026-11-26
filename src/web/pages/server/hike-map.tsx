@@ -12,14 +12,18 @@ import { coordinates, MapView } from "../../components/map-view";
 /** The map for the planned hike's card, or undefined for none. */
 export function hikeMap(view: WebView): VNode | undefined {
   const hike = view.plannedHike;
-  if (hike?.point == null || hike.mapPictureKey === null) return undefined;
+  const pin = view.hikePlace?.pin ?? null;
+  if (hike === null || pin === null || hike.mapPictureKey === null) {
+    return undefined;
+  }
   const label = hike.location.label;
+  const point = { lat: pin.lat, lon: pin.lon };
   return (
     <MapView
       title={`Map of ${label}`}
-      markers={[{ ...hike.point, label }]}
+      markers={[{ ...point, label }]}
       picture={`/g/${view.server.id}/map.png`}
-      caption={`${label}: ${coordinates(hike.point)}`}
+      caption={`${label}: ${coordinates(point)}`}
       framed={false}
     />
   );

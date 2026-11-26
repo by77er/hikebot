@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { VoteMap } from "../../../../src/web/pages/server/vote-map";
 import { render, spokenText } from "../../components/render";
-import { baseView, MARKUP, openVote, round } from "./view";
+import { baseView, MARKUP, openVote, pinAt, round } from "./view";
 
 const LOCATED = [
-  { label: "Mount Si", votes: 4, point: { lat: 47.5069, lon: -121.739 } },
+  { label: "Mount Si", votes: 4, place: pinAt(47.5069, -121.739) },
   { label: "Lake Serene", votes: 2 },
-  { label: "Little Si", votes: 1, point: { lat: 47.4987, lon: -121.756 } },
+  { label: "Little Si", votes: 1, place: pinAt(47.4987, -121.756) },
 ];
 
 describe("VoteMap", () => {
@@ -60,7 +60,7 @@ describe("VoteMap", () => {
       round: round(
         "location_vote_open",
         openVote("location", [
-          { label: MARKUP, votes: 1, point: { lat: 47.5, lon: -121.7 } },
+          { label: MARKUP, votes: 1, place: pinAt(47.5, -121.7) },
         ]),
       ),
     });

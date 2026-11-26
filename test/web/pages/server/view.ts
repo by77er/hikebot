@@ -89,7 +89,6 @@ export function openVote(
     viewerVoted?: boolean;
     details?: string;
     place?: WebMapPin | null;
-    point?: { lat: number; lon: number };
   }[],
   messageUrl:
     | string
@@ -107,7 +106,6 @@ export function openVote(
       place: option.place ?? null,
       votes: option.votes,
       viewerVoted: option.viewerVoted ?? false,
-      point: option.point ?? null,
     })),
     voterCount: Math.max(0, ...options.map((option) => option.votes)),
     closesAt: null,
@@ -188,7 +186,6 @@ export function plannedHike(
     eventId: "300000000000007011",
     eventUrl: `https://discord.com/events/${GUILD}/300000000000007011`,
     mapPictureKey: null,
-    point: null,
     ...overrides,
   };
 }
@@ -318,6 +315,11 @@ export function mapPin(
     googleUrl:
       "https://www.google.com/maps/search/?api=1&query=47.4669,-121.6746",
   };
+}
+
+/** `mapPin()` moved to `lat`, `lon`, as for a place on the map. */
+export function pinAt(lat: number, lon: number): WebMapPin {
+  return { ...mapPin(), lat, lon, text: `${String(lat)}, ${String(lon)}` };
 }
 
 /** Where the planned hike of `plannedHike()` is: pinned, settable. */

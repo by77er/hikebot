@@ -40,7 +40,6 @@ function withPicture(key: string | null): WebViewResult {
     view: baseView({
       plannedHike: plannedHike({
         mapPictureKey: key,
-        point: { lat: 47.5, lon: -121.7 },
       }),
     }),
   };

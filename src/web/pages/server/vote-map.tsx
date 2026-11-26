@@ -14,9 +14,10 @@ export function VoteMap({ view }: { view: WebView }) {
   if (round?.step !== "location_vote_open" || round.vote === null) return null;
   const markers: MapMarker[] = [];
   for (const option of round.vote.options) {
-    if (option.point === null) continue;
+    if (option.place === null) continue;
     markers.push({
-      ...option.point,
+      lat: option.place.lat,
+      lon: option.place.lon,
       label: option.label,
       number: markers.length + 1,
     });
