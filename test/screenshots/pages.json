@@ -190,7 +190,8 @@
       "path": "/g/220000000000000101",
       "status": 200,
       "seed": "server-location-vote-located",
-      "user": "400000000000000001"
+      "user": "400000000000000001",
+      "map": true
     },
     {
       "name": "server-location-vote-refused",
