@@ -7,6 +7,8 @@ import { OWNER_CACHE_MS } from "../../src/guild/permissions";
 import {
   MEMBER_CACHE_MS,
   readWebView,
+  saveWebSettings,
+  SETTINGS_DIRECTORY_CACHE_MS,
   WebViewCache,
   type WebViewRequest,
   type WebViewResult,
@@ -366,6 +368,108 @@ describe("the read", () => {
       expect(
         viewOf(await read(MEMBER, T0, { pageSize: 50 })).log.pageSize,
       ).toBe(50);
+    });
+  });
+});
+
+describe("the settings page's read and save", () => {
+  it("gives the settings forms to an admin who asks for them, and to no one else", async () => {
+    const { guild, stub } = freshGuild({
+      roles: [{ id: ADMIN_ROLE, name: "Hike leads", position: 1 }],
+    });
+    await inObject(stub, guild, async ({ read, fetch }) => {
+      const roles = () =>
+        paths(fetch).filter((p) => p === `/guilds/${guild.id}/roles`).length;
+      expect(viewOf(await read(OWNER, T0)).settingsForm).toBeNull();
+      expect(roles()).toBe(0);
+      expect(
+        viewOf(await read(MEMBER, T0, { settingsForm: true })).settingsForm,
+      ).toBeNull();
+      expect(roles()).toBe(0);
+      const form = viewOf(
+        await read(OWNER, T0, { settingsForm: true }),
+      ).settingsForm;
+      expect(form?.roles).toEqual([{ id: ADMIN_ROLE, name: "Hike leads" }]);
+      expect(form?.channels.voteChannelId.map((c) => c.name)).toEqual([
+        "votes",
+        "news",
+        "hikes",
+      ]);
+    });
+  });
+
+  it("keeps the roles and channels it offers for 60 seconds, then asks Discord again", async () => {
+    const { guild, stub } = freshGuild({ roles: [] });
+    await inObject(stub, guild, async ({ read, fetch }) => {
+      const roles = () =>
+        paths(fetch).filter((p) => p === `/guilds/${guild.id}/roles`).length;
+      await read(OWNER, T0, { settingsForm: true });
+      guild.roles = [{ id: ADMIN_ROLE, name: "Hike leads", position: 1 }];
+      const cached = await read(OWNER, T0 + SETTINGS_DIRECTORY_CACHE_MS - 1, {
+        settingsForm: true,
+      });
+      expect(viewOf(cached).settingsForm?.roles).toEqual([]);
+      expect(roles()).toBe(1);
+      const fresh = await read(OWNER, T0 + SETTINGS_DIRECTORY_CACHE_MS, {
+        settingsForm: true,
+      });
+      expect(viewOf(fresh).settingsForm?.roles).toEqual([
+        { id: ADMIN_ROLE, name: "Hike leads" },
+      ]);
+      expect(roles()).toBe(2);
+    });
+  });
+
+  it("answers unavailable when Discord cannot list the roles", async () => {
+    const { guild, stub } = freshGuild();
+    await runInDurableObject(stub, async (_instance, state) => {
+      const { api, fetch } = discordFor(guild);
+      const plain = fetch.getMockImplementation();
+      fetch.mockImplementation((input: RequestInfo | URL) =>
+        String(input instanceof Request ? input.url : input).endsWith("/roles")
+          ? Promise.resolve(Response.json({ code: 0 }, { status: 500 }))
+          : (plain?.(input) ?? Promise.reject(new Error("no fetch"))),
+      );
+      const result = await readWebView(
+        { env, storage: state.storage },
+        new WebViewCache(),
+        { guildId: guild.id, userId: OWNER, settingsForm: true },
+        { api, now: T0 },
+      );
+      expect(result).toEqual({ kind: "unavailable" });
+    });
+  });
+
+  it("decides again, past the member cache, that the user is an admin when they save", async () => {
+    const { guild, stub } = freshGuild({ roles: [] });
+    await inObject(stub, guild, async ({ read, storage, cache, fetch }) => {
+      new GuildConfig(storage).set("adminRoleId", ADMIN_ROLE);
+      const api = discordFor(guild).api;
+      const saveAs = (userId: string, now: number) =>
+        saveWebSettings(
+          { env, storage },
+          cache,
+          {
+            guildId: guild.id,
+            userId,
+            group: "units",
+            fields: { units: "metric" },
+          },
+          { api, now },
+        );
+      // The page was read while ROLE_MEMBER held the admin role.
+      expect(viewOf(await read(ROLE_MEMBER, T0)).viewer.isAdmin).toBe(true);
+      guild.members[ROLE_MEMBER] = [];
+      expect(await saveAs(ROLE_MEMBER, T0 + 1)).toEqual({ kind: "forbidden" });
+      expect(new GuildConfig(storage).get().units).toBe("imperial");
+      expect(fetch).toHaveBeenCalled();
+
+      expect(await saveAs(STRANGER, T0 + 2)).toEqual({ kind: "not_member" });
+      expect(await saveAs(OWNER, T0 + 3)).toEqual({
+        kind: "saved",
+        notices: [["Units set to metric."]],
+      });
+      expect(new GuildConfig(storage).get().units).toBe("metric");
     });
   });
 });

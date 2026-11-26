@@ -873,6 +873,79 @@ describe("authorization, failures and rate limits", () => {
       await call("GET", "/guilds/229999999999999999/channels"),
     ).toMatchObject({ status: 404, body: { code: 10004 } });
   });
+
+  it("serves channels in a category with its id, and forgets a deleted one", async () => {
+    const guild = "220000000000000007";
+    discord.addGuild({ id: guild, ownerId: "420000000000000001" });
+    discord.addChannel({
+      id: "320000000000000701",
+      guildId: guild,
+      type: ChannelType.GuildCategory,
+      name: "Hiking",
+      position: 1,
+    });
+    discord.addChannel({
+      id: "320000000000000702",
+      guildId: guild,
+      name: "votes",
+      parentId: "320000000000000701",
+      position: 2,
+    });
+    discord.addChannel({ id: "320000000000000703", guildId: guild });
+    discord.removeChannel("320000000000000703");
+    const reply = await call("GET", `/guilds/${guild}/channels`);
+    expect(reply.body).toEqual([
+      {
+        id: "320000000000000701",
+        guild_id: guild,
+        type: ChannelType.GuildCategory,
+        name: "Hiking",
+        position: 1,
+      },
+      {
+        id: "320000000000000702",
+        guild_id: guild,
+        type: ChannelType.GuildText,
+        name: "votes",
+        parent_id: "320000000000000701",
+        position: 2,
+      },
+    ]);
+  });
+
+  it("serves a guild's roles, @everyone with the guild's id, until one is deleted", async () => {
+    const guild = "220000000000000008";
+    discord.addGuild({ id: guild, ownerId: "420000000000000001" });
+    discord.addRole(guild, {
+      id: "520000000000000801",
+      name: "Hike leads",
+      position: 2,
+    });
+    discord.addRole(guild, {
+      id: "520000000000000802",
+      name: "Members",
+      position: 1,
+    });
+    discord.removeRole(guild, "520000000000000802");
+    const reply = await call("GET", `/guilds/${guild}/roles`);
+    expect(reply.status).toBe(200);
+    expect(reply.body).toMatchObject([
+      { id: guild, name: "@everyone", position: 0, managed: false },
+      {
+        id: "520000000000000801",
+        name: "Hike leads",
+        position: 2,
+        permissions: "0",
+      },
+    ]);
+    expect(await call("GET", "/guilds/229999999999999999/roles")).toMatchObject(
+      { status: 404, body: { code: 10004 } },
+    );
+    expect(
+      await call("GET", `/guilds/${guild}/roles`, undefined, null),
+    ).toMatchObject({ status: 401 });
+    discord.takeRejections();
+  });
 });
 
 describe("scheduled events", () => {

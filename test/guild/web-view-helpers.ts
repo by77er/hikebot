@@ -11,6 +11,10 @@ export interface DiscordGuild {
   members: Record<string, string[]>;
   /** Channel names by id. */
   channels?: Record<string, string>;
+  /** Each channel's type and category by id; a text channel in none if left out. */
+  channelDetails?: Record<string, { type: number; parentId?: string }>;
+  /** The guild's roles besides @everyone. */
+  roles?: { id: string; name: string; position: number }[];
   /** Answer the member route with this status and nothing else. */
   memberStatus?: number;
   /** Answer the guild route with this status. */
@@ -24,9 +28,9 @@ export function urlOf(input: RequestInfo | URL): string {
 }
 
 /**
- * A fetch that answers Get Guild Member, Get Guild and Get Guild Channels
- * from `guild` (it may change between calls), and every other request with
- * `{ id: "1" }`. Builds a new `Response` per call, so it also works inside
+ * A fetch that answers Get Guild Member, Get Guild, Get Guild Channels and
+ * Get Guild Roles from `guild` (it may change between calls), and every
+ * other request with `{ id: "1" }`. Builds a new `Response` per call, so it also works inside
  * the guild object.
  */
 export function discordFetch(guild: DiscordGuild) {
@@ -55,12 +59,22 @@ export function discordFetch(guild: DiscordGuild) {
     if (/^\/guilds\/[^/]+\/channels$/.test(path)) {
       return Promise.resolve(
         Response.json(
-          Object.entries(guild.channels ?? {}).map(([id, name]) => ({
+          Object.entries(guild.channels ?? {}).map(([id, name], position) => ({
             id,
             name,
-            type: 0,
+            type: guild.channelDetails?.[id]?.type ?? 0,
+            parent_id: guild.channelDetails?.[id]?.parentId ?? null,
+            position,
           })),
         ),
+      );
+    }
+    if (/^\/guilds\/[^/]+\/roles$/.test(path)) {
+      return Promise.resolve(
+        Response.json([
+          { id: guild.id, name: "@everyone", position: 0 },
+          ...(guild.roles ?? []),
+        ]),
       );
     }
     if (/^\/guilds\/[^/]+$/.test(path)) {

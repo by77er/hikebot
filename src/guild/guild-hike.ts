@@ -20,7 +20,10 @@ import {
 } from "./web-action";
 import {
   readWebView,
+  saveWebSettings,
   WebViewCache,
+  type WebSettingsRequest,
+  type WebSettingsResult,
   type WebViewRequest,
   type WebViewResult,
 } from "./web-view";
@@ -137,6 +140,18 @@ export class GuildHike extends DurableObject<Env> {
    */
   webPropose(request: WebProposeRequest): Promise<WebMemberResult> {
     return webPropose(
+      { env: this.env, storage: this.ctx.storage },
+      this.webViewCache,
+      request,
+    );
+  }
+
+  /**
+   * The settings page's save of one group of settings, for one signed-in
+   * user, who must be an admin at this moment. See `saveWebSettings`.
+   */
+  saveSettings(request: WebSettingsRequest): Promise<WebSettingsResult> {
+    return saveWebSettings(
       { env: this.env, storage: this.ctx.storage },
       this.webViewCache,
       request,

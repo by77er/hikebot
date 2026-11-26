@@ -3,8 +3,9 @@
  * router matches the prefix `/g/*`; the rest of the path picks the page
  * from `SERVER_PAGES`, one entry per page, or from the admin controls'
  * `ADMIN_PAGES`; a POST picks the admin control from `ADMIN_ACTIONS`
- * (`src/web/admin/routes.tsx`) or a member's action from `SERVER_ACTIONS`,
- * one entry per form target. Each page starts with `requireServer`
+ * (`src/web/admin/routes.tsx`), a member's action from `SERVER_ACTIONS`,
+ * one entry per form target, or the settings page's save from
+ * `SETTINGS_ACTIONS` (`src/web/settings-routes.tsx`). Each page starts with `requireServer`
  * (`src/web/server-guard.tsx`), which signs the user in, checks the
  * session's list and reads the server as its member sees it; each
  * member's action starts with `requireServerAction`, which checks the
@@ -37,6 +38,7 @@ import {
   requireServerAction,
   type ServerAction,
 } from "./server-guard";
+import { saveSettings, settingsPage } from "./settings-routes";
 
 /** A page of the server `guildId`. */
 type ServerPageHandler = (
@@ -58,6 +60,12 @@ const SERVER_PAGES = new Map<string, ServerPageHandler>([
   ["", serverPage],
   ["/log", hikeLogPage],
   ["/map.png", mapPicture],
+  ["/settings", settingsPage],
+]);
+
+/** The settings page's save, by the path after `/g/<guild id>`. */
+const SETTINGS_ACTIONS = new Map<string, ServerPageHandler>([
+  ["/settings", saveSettings],
 ]);
 
 /** The actions by the path after `/g/<guild id>`, the poll id captured. */
@@ -285,6 +293,8 @@ export function addServerRoutes(router: WebRouter, notFound: WebHandler): void {
     const path = serverPath(new URL(request.url).pathname);
     const control = path && ADMIN_ACTIONS.get(path.rest);
     if (path && control) return control(request, env, path.guildId);
+    const settings = path && SETTINGS_ACTIONS.get(path.rest);
+    if (path && settings) return settings(request, env, path.guildId);
     if (path) {
       for (const [pattern, action] of SERVER_ACTIONS) {
         const pollId = pattern.exec(path.rest)?.[1];

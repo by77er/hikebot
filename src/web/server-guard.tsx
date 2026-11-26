@@ -47,8 +47,9 @@ export interface ServerRequest {
 
 /**
  * The server `guildId` as the signed-in member sees it, or the response
- * that answers the request instead. `log` picks the page of the hike log
- * the view carries, as `readGuild` takes it. A page or action starts with:
+ * that answers the request instead. `read` picks the page of the hike log
+ * the view carries and asks for the settings page's forms, as `readGuild`
+ * takes them. A page or action starts with:
  *
  * ```ts
  * const server = await requireServer(request, env, guildId);
@@ -59,7 +60,7 @@ export async function requireServer(
   request: Request,
   env: Env,
   guildId: string,
-  log: { page?: number; pageSize?: number } = {},
+  read: { page?: number; pageSize?: number; settingsForm?: boolean } = {},
 ): Promise<ServerRequest | Response> {
   const now = systemNow();
   const isPage = request.method === "GET" || request.method === "HEAD";
@@ -69,7 +70,7 @@ export async function requireServer(
   if (session instanceof Response) return session;
   const listed = requireGuild(session, guildId);
   if (listed instanceof Response) return listed;
-  const result = await readGuild(env, guildId, session.userId, log);
+  const result = await readGuild(env, guildId, session.userId, read);
   const user = await layoutUser(env, session, now);
   if (result.kind !== "view") {
     const url = new URL(request.url);
