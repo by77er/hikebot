@@ -326,6 +326,119 @@ must survive a restart of the object. It runs from the object's alarm.
    npm test
    ```
 
+## Add a setting
+
+A setting is changed from two places, the admin panel's Settings view in
+Discord and the settings page on the web, through one check and one change
+in `src/features/settings.ts`. The example adds a meeting point, free text
+(`meetingPoint`); use your setting's name, column and group.
+
+1. Add its column to `guild_settings` with a migration, as "Add a SQLite
+   migration" says (`ALTER TABLE guild_settings ADD COLUMN meeting_point
+TEXT`).
+2. In `src/guild/config.ts`, add the field to `GuildSettings` with a comment
+   saying what it is and what null means, the column to `Row` and to the
+   `SELECT` in `get()`, and a setter that returns the settings after the
+   change:
+
+   ```ts
+   setMeetingPoint(text: string | null): GuildSettings {
+     this.storage.sql.exec(
+       "UPDATE guild_settings SET meeting_point = ? WHERE id = 1",
+       text,
+     );
+     return this.get();
+   }
+   ```
+
+3. In `src/features/settings.ts`, add its check, which returns the refusal
+   in the bot's words or the value, and its change, which stores it,
+   does what follows from it (reschedule a job, refresh a message) and
+   says what it did; the panel and the page both call these two:
+
+   ```ts
+   export function checkMeetingPoint(typed: string): Checked<string | null> {
+     const text = typed.trim();
+     return text.length > 100
+       ? { ok: false, refusal: ["A meeting point is at most 100 characters."] }
+       : { ok: true, value: text === "" ? null : text };
+   }
+
+   export function setMeetingPoint(
+     storage: DurableObjectStorage,
+     text: string | null,
+   ): Notice {
+     new GuildConfig(storage).setMeetingPoint(text);
+     return text === null
+       ? ["Meeting point cleared."]
+       : ["Meeting point set to ", { strong: text }, "."];
+   }
+   ```
+
+4. In `src/features/settings-catalogue.ts`, add it to its group in
+   `SETTING_GROUPS`, with its key and one sentence saying what it does:
+
+   ```ts
+   {
+     key: "meetingPoint",
+     name: "Meeting point",
+     help: "Where the group meets before each hike, shown in the announcement.",
+   },
+   ```
+
+   A field the bot keeps for itself, which no admin sets, goes in
+   `INTERNAL_SETTINGS` with why instead.
+
+5. In the panel, `src/features/admin-panel.ts`: show it in
+   `renderAdminSettings` with its control, and register the control's
+   handler through `adminOnly`; the handler calls the check, answers a
+   refusal with `settingsUpdate(context, refusal)` (or
+   `ephemeralNotice(noticeMarkdown(refusal))` from a modal), and otherwise
+   `settingsUpdate(context, setMeetingPoint(context.storage, value))`. Follow
+   "Add a modal and its submit handler" for a text setting.
+6. On the web, `src/features/settings-form.ts`: add the value to
+   `WebSettingsForm.values` and fill it in `settingsFormSection`, then in
+   the group's save in `GROUP_SAVES` read `fields.meetingPoint`, skip it when
+   it equals the stored value, push the check's refusal to `errors`, and
+   otherwise call the change after every field of the group has passed.
+7. In the group's section, `src/web/pages/server/settings/<group>.tsx`, add
+   the field, named by the setting's key, with `fieldId`, `fieldError` and
+   `shownValue` from `settings-group.tsx`, and the help from `settingHelp`:
+
+   ```tsx
+   <TextField
+     id={fieldId("meetingPoint")}
+     name="meetingPoint"
+     label="Meeting point"
+     hint={settingHelp("meetingPoint")}
+     error={fieldError(outcome, "meetingPoint", form)}
+     value={shownValue(outcome, "meetingPoint", form.values.meetingPoint ?? "")}
+     maxLength={100}
+   />
+   ```
+
+8. Test it: the completeness test in
+   `test/web/pages/server/settings/page.test.tsx` fails until the page has
+   a field for every setting `GuildConfig.get()` returns. In
+   `test/features/settings-form.test.ts`, save it and check its effect, and
+   add its refusal to "the web save refuses in the panel's words", which
+   compares the web's refusal with the panel's answer to the same value;
+   add the value to `emptyForm` and `fullForm` in
+   `test/web/pages/server/settings/form.ts`; set it from the web in the
+   first scenario of `test/e2e/settings-page.test.ts` and check that
+   `/hike admin` shows it. Then run them:
+
+   ```sh
+   npx vitest run test/web/pages/server/settings test/features/settings-form.test.ts test/features/admin-panel.test.ts
+   npx vitest run --project e2e test/e2e/settings-page.test.ts
+   ```
+
+9. Add the column to the table in "Guild settings" of `docs/design.md`, set
+   it in the `server-settings` seed (`everySetting` in
+   `test/screenshots/seeds.ts`, through `seedSettings` in
+   `test/e2e/harness/rounds.ts`), and follow "Take the screenshots" and
+   "Review your own UI change as a designer" in `src/web/AGENTS.md`.
+
 ## Add a field to the web view
 
 The example adds the trail's distance to the planned hike; use your field,

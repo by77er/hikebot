@@ -325,6 +325,10 @@ permission", with the roles from their membership.
   `locationsField` and `datesField` are the start modals' fields (label,
   hint, placeholder, limit), the latter with the default dates the modal is
   filled with.
+- `settingsForm` (`settingsFormSection`, `src/features/settings-form.ts`):
+  the settings page's forms, only in an admin's view and only when the read
+  asks for them (`settingsForm: true`); null otherwise. See the settings
+  page below.
 
 **Caches.** The guild object keeps, in memory only (`WebViewCache`):
 
@@ -333,7 +337,10 @@ permission", with the roles from their membership.
 - the server's name, icon and channel names (`GET /guilds/{guild.id}` and
   `GET /guilds/{guild.id}/channels`) for an hour, as long as the owner.
   That fetch also refreshes the owner id cached in `guild_settings`, the one
-  write the read makes.
+  write the read makes;
+- for the settings page, the server's roles and channels with their types
+  and categories (`GET /guilds/{guild.id}/roles` and
+  `GET /guilds/{guild.id}/channels`) for 60 seconds.
 
 A restart of the object (a deploy, or eviction when idle) empties the
 in-memory caches, so the next read asks Discord again; the owner cache in
@@ -399,6 +406,46 @@ path under a server is the 404 page.
   none. `Cache-Control: private, no-cache` with the object's ETag, as a
   moved pin keeps the address. The server's page shows it where JavaScript
   does not draw the map.
+- `GET /g/<guild id>/settings`: the server's settings, for its admins
+  (`src/web/pages/server/settings/`, one file per group); anyone else who
+  is a member gets the 403 page "Only admins can do this",
+  with the way back to the server's page. The server's page offers
+  **Settings** under its heading to admins. The read asks `readGuild` for
+  `settingsForm`, which an admin's view carries (`settingsFormSection`,
+  `src/features/settings-form.ts`): every setting's value, the roles to pick
+  from (by name, highest first, without `@everyone`), for each channel
+  setting the channels of the types the panel's select takes (by name,
+  grouped by category, in Discord's order), every IANA time zone
+  (`Intl.supportedValuesOf("timeZone")`, in its current spelling), and the
+  time now in the server's zone. The roles and channels come from
+  `GET /guilds/{guild.id}/roles` and `GET /guilds/{guild.id}/channels`,
+  kept in the object's memory for 60 seconds
+  (`SETTINGS_DIRECTORY_CACHE_MS`); if Discord cannot be asked, the page is
+  "Discord could not be reached". Each group is a card with its own form
+  and its one action, Save <group>, which is the primary button only for
+  Channels while setup is not complete (a banner then names the missing
+  channels). A stored role or channel that Discord no longer lists is shown
+  as "deleted role" or "deleted channel", chosen, with a hint to pick
+  another; posted back unchanged, it is kept. The time zone select groups
+  the zones by region (the part before the first `/`) and keeps a stored
+  zone the list lacks; its hint says the time it is there now.
+- `POST /g/<guild id>/settings`: saves one group, named by the form's
+  `group` field. It needs the session, the CSRF token and the same origin
+  (`checkPost`); then `saveGuildSettings` calls the object's `saveSettings`
+  (`saveWebSettings`, `src/guild/web-view.ts`), which asks Discord for the
+  member's roles again, past the 60-second cache, and decides with
+  `decideAdmin` that they are an admin at this moment (else the 403 page).
+  `saveSettingsGroup` checks every field of the group with the panel's
+  checks against the roles and channels the page offered; if any is
+  refused, nothing changes and the page comes back as itself with status
+  400, what was posted, the error summary and each refusal at its field.
+  Otherwise each field that differs from the stored value is changed with
+  the panel's function, and the answer is a 303 back to
+  `/g/<guild id>/settings#<group>` with what the save did in the cookie
+  `__Host-hikebot_settings_saved`, sealed for that guild and user (purpose
+  `settings-saved`, a minute), as an admin action's notice is; the page
+  shows it once in the group's card as a success banner ("Channels saved."
+  and each notice), or "Nothing changed.", and clears it.
 - `GET /g/<guild id>/log?page=<n>`: the hike log, newest first, ten a page
   (`HIKES_PER_PAGE`), as compact hike cards with Newer and Older; a page
   that is not a number is the first, and the read clamps one past either
@@ -840,14 +887,15 @@ now)` returns the payload, or null when the token is malformed, changed,
 - `Purpose` is a closed union, and the purpose is part of what is signed, so
   a value signed for one use never verifies for another:
 
-  | Purpose       | What is signed                                               |
-  | ------------- | ------------------------------------------------------------ |
-  | `session`     | The sealed session cookie: the signed-in Discord user        |
-  | `oauth-state` | The sealed OAuth `state`, checked on the callback            |
-  | `csrf`        | A form's CSRF token, bound to the session                    |
-  | `calendar`    | A calendar feed address, so it can be shared without sign-in |
-  | `notice`      | The result of an admin's action, carried across its redirect |
-  | `flash`       | The one-time banner after a member's action on the web       |
+  | Purpose          | What is signed                                                    |
+  | ---------------- | ----------------------------------------------------------------- |
+  | `session`        | The sealed session cookie: the signed-in Discord user             |
+  | `oauth-state`    | The sealed OAuth `state`, checked on the callback                 |
+  | `csrf`           | A form's CSRF token, bound to the session                         |
+  | `calendar`       | A calendar feed address, so it can be shared without sign-in      |
+  | `notice`         | The result of an admin's action, carried across its redirect      |
+  | `flash`          | The one-time banner after a member's action on the web            |
+  | `settings-saved` | What a save on the settings page did, carried across its redirect |
 
 - A calendar feed address is `/calendar/<guild id>/<signature>.ics` with the
   signature `sign(SIGNING_SECRET, "calendar", <guild id>)`
@@ -1081,6 +1129,35 @@ panel's Settings view; it is not part of setup. Likewise a null `units` is
 `imperial` (°F, mph, inches; the default zone is Pacific), and an admin
 picks `metric` (°C, km/h, millimetres) from the Units select under
 Settings.
+
+**Two surfaces, one code path.** An admin changes the settings from the
+admin panel's Settings view in Discord (see "Admin panel") or from the
+settings page on the web (`/g/<guild id>/settings`, see "Web pages for a
+server"). Both go through `src/features/settings.ts`: for each setting a
+check that refuses a bad value (`checkAdminRole`, `checkChannel`,
+`checkTimeZone`, `checkUnits`, `checkTimeOfDay`, `checkWeekday`,
+`checkDateVoteDays`, `checkScheduleOn`) and a change that stores a good one
+and does what follows from it (`setAdminRole`, `setChannel`, `setTimeZone`
+reschedules the weekly schedule's job, `setUnits` runs the weather job at
+once, `changeSchedule` reschedules the job; the home area's lookup,
+`lookUpHomeArea`, is in `src/features/home-area.ts`). What a check or change
+says is a `Notice`, text with its roles, channels, bold and code marked: the
+panel writes it as Discord markdown (`noticeMarkdown`), the page with the
+names Discord gives (`@Hike leads`, `#hike-votes`). So the two refuse the
+same values in the same words, and a change has the same effects from
+either; neither writes `guild_settings` but through these functions.
+
+The list of settings an admin sets, their groups and the sentence that says
+what each does are in `src/features/settings-catalogue.ts`
+(`SETTING_GROUPS`, in the order of the panel's Settings view: Admin role;
+Channels, the voting, announcements and hike threads channels; Time zone;
+Home area; Units; Schedule, on or off, weekday, time of day and date vote
+length). `INTERNAL_SETTINGS` names the fields of `GuildSettings` the bot
+keeps itself (`ownerId`, `ownerFetchedAt`, `cadence.onSince`). A unit test
+fails if `GuildConfig.get()` returns a field that is in neither, or that
+has no field on the settings page. The time a date typed without a time
+starts at (11:00, `DEFAULT_HIKE_TIME`) is not a setting; both surfaces say
+it under the time zone.
 
 ## Admin panel
 

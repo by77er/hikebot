@@ -2,11 +2,14 @@
  * The server's page, first section: a quiet Switch server link back to the
  * list of servers, the server's icon and name as the page's heading, and
  * the round stepper at the step the round is at (the planned hike when no
- * round is open). With neither, there is no step to show.
+ * round is open). With neither, there is no step to show. An admin also
+ * gets Settings, the way to the server's settings page.
  */
 import type { WebView } from "../../../guild/web-view";
 import { Avatar } from "../../components/avatar";
 import { BackLink } from "../../components/back-link";
+import { Button } from "../../components/button";
+import { SettingsIcon } from "../../components/icons";
 import { RoundStepper, type RoundStep } from "../../components/round-stepper";
 
 const STEPS = {
@@ -35,6 +38,13 @@ export function ServerHeading({ view }: { view: WebView }) {
         />
         <h1 class="server-heading__name">{view.server.name}</h1>
       </div>
+      {view.viewer.isAdmin && (
+        <div class="cluster">
+          <Button href={`/g/${view.server.id}/settings`} icon={SettingsIcon}>
+            Settings
+          </Button>
+        </div>
+      )}
       {step !== null && <RoundStepper step={step} />}
     </div>
   );

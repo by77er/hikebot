@@ -67,9 +67,19 @@ export interface FakeChannel {
   guild_id: string;
   type: ChannelType;
   name: string;
+  /** A thread's parent channel, or the category a channel is in. */
   parent_id?: string;
+  /** "sorting position of the channel"; left out, the list's order. */
+  position?: number;
   /** A thread's state: archived threads take no message edits. */
   thread_metadata?: { archived: boolean; locked: boolean };
+}
+
+/** A role as the fake stores it; Get Guild Roles adds the other fields. */
+export interface FakeRole {
+  id: string;
+  name: string;
+  position: number;
 }
 
 /** A guild scheduled event as the fake stores and returns it. */
@@ -224,6 +234,8 @@ export class FakeDiscord {
   private readonly guilds = new Map<string, FakeGuild>();
   /** Each guild's members: role ids by user id. */
   private readonly members = new Map<string, Map<string, string[]>>();
+  /** Each guild's roles, @everyone (the guild's id) first. */
+  private readonly roles = new Map<string, FakeRole[]>();
   private readonly channels = new Map<string, FakeChannel>();
   private readonly messages = new Map<string, FakeMessage>();
   private readonly events = new Map<string, FakeScheduledEvent[]>();
@@ -306,6 +318,11 @@ export class FakeDiscord {
       owner_id: guild.ownerId,
     };
     this.guilds.set(guild.id, stored);
+    if (!this.roles.has(guild.id)) {
+      this.roles.set(guild.id, [
+        { id: guild.id, name: "@everyone", position: 0 },
+      ]);
+    }
     const members = this.members.get(guild.id) ?? new Map<string, string[]>();
     if (!members.has(guild.ownerId)) members.set(guild.ownerId, []);
     this.members.set(guild.id, members);
@@ -327,20 +344,54 @@ export class FakeDiscord {
     this.members.get(guildId)?.delete(userId);
   }
 
+  /**
+   * Adds a channel, or replaces the one with its id; `parentId` puts it in
+   * a category (a channel of type `GuildCategory`).
+   */
   addChannel(channel: {
     id: string;
     guildId: string;
     type?: ChannelType;
     name?: string;
+    parentId?: string;
+    position?: number;
   }): FakeChannel {
-    const stored = {
+    const stored: FakeChannel = {
       id: channel.id,
       guild_id: channel.guildId,
       type: channel.type ?? ChannelType.GuildText,
       name: channel.name ?? `channel-${channel.id}`,
+      ...(channel.parentId === undefined
+        ? {}
+        : { parent_id: channel.parentId }),
+      ...(channel.position === undefined ? {} : { position: channel.position }),
     };
     this.channels.set(channel.id, stored);
     return stored;
+  }
+
+  /** Deletes a channel, as an admin does in Discord. */
+  removeChannel(channelId: string): void {
+    this.channels.delete(channelId);
+  }
+
+  /**
+   * Adds a role to the guild, or renames the one with its id; a higher
+   * `position` is higher in the server's role list.
+   */
+  addRole(guildId: string, role: FakeRole): void {
+    const roles = (this.roles.get(guildId) ?? []).filter(
+      (r) => r.id !== role.id,
+    );
+    this.roles.set(guildId, [...roles, { ...role }]);
+  }
+
+  /** Deletes a role, as an admin does in Discord. */
+  removeRole(guildId: string, roleId: string): void {
+    this.roles.set(
+      guildId,
+      (this.roles.get(guildId) ?? []).filter((r) => r.id !== roleId),
+    );
   }
 
   /**
@@ -857,6 +908,10 @@ export class FakeDiscord {
     if (match && method === "GET") {
       return this.getGuildChannels(match[1] ?? "");
     }
+    match = /^\/guilds\/([^/]+)\/roles$/.exec(path);
+    if (match && method === "GET") {
+      return this.getGuildRoles(match[1] ?? "");
+    }
     match = /^\/guilds\/([^/]+)\/scheduled-events\/([^/]+)$/.exec(path);
     if (match && method === "PATCH") {
       return this.editScheduledEvent(match[1] ?? "", match[2] ?? "", body);
@@ -1118,7 +1173,9 @@ export class FakeDiscord {
   }
 
   /**
-   * Get Guild Channels: the guild's channels, without threads.
+   * Get Guild Channels: "Returns a list of guild channel objects. Does not
+   * include threads." A channel in a category has the category's id as its
+   * `parent_id`.
    * https://docs.discord.com/developers/resources/guild#get-guild-channels
    */
   private getGuildChannels(guildId: string): Reply {
@@ -1128,8 +1185,42 @@ export class FakeDiscord {
     return {
       status: 200,
       body: [...this.channels.values()].filter(
-        (c) => c.guild_id === guildId && c.parent_id === undefined,
+        (c) => c.guild_id === guildId && c.thread_metadata === undefined,
       ),
+    };
+  }
+
+  /**
+   * Get Guild Roles: "Returns a list of role objects for the guild", each
+   * with the fields of Discord's role object; @everyone's id is the
+   * guild's.
+   * https://docs.discord.com/developers/resources/guild#get-guild-roles
+   * https://docs.discord.com/developers/topics/permissions#role-object
+   */
+  private getGuildRoles(guildId: string): Reply {
+    if (!this.guilds.has(guildId)) {
+      return discordError(404, 10004, "Unknown Guild");
+    }
+    return {
+      status: 200,
+      body: (this.roles.get(guildId) ?? []).map((role) => ({
+        id: role.id,
+        name: role.name,
+        color: 0,
+        colors: {
+          primary_color: 0,
+          secondary_color: null,
+          tertiary_color: null,
+        },
+        hoist: false,
+        icon: null,
+        unicode_emoji: null,
+        position: role.position,
+        permissions: "0",
+        managed: false,
+        mentionable: false,
+        flags: 0,
+      })),
     };
   }
 
