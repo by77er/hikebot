@@ -1,0 +1,297 @@
+/*
+ * Map view: the interactive map in a 3:2 frame, over the stored picture
+ * until it has drawn, with its caption and its numbered list. The rules
+ * for `.maplibregl-*` are the layout MapLibre GL JS needs (its own
+ * stylesheet is not loaded) and its controls in Cairn's look. Inside the
+ * frame the map keeps one look in both schemes, as the picture does, so
+ * markers, popups, buttons and the attribution use the map's tokens.
+ */
+
+.map-view__figure[hidden],
+[data-map-section][hidden] {
+  display: none;
+}
+
+.map-view--framed .map-view__figure {
+  overflow: hidden;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.map-view__frame {
+  position: relative;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  background: var(--map-land);
+}
+
+.map-view__picture {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.map-view__fallback {
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--map-furniture);
+  text-align: center;
+}
+
+.map-view__caption {
+  padding: var(--space-2) var(--space-3);
+  border-top: var(--border-width) solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+  overflow-wrap: anywhere;
+}
+
+/* Until the map has drawn, the picture shows and the map stays out of sight. */
+.map-view__figure[data-map-state="loading"] .maplibregl-canvas-container,
+.map-view__figure[data-map-state="loading"] .maplibregl-control-container {
+  visibility: hidden;
+}
+
+/* MapLibre's layout. */
+.maplibregl-map {
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.maplibregl-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.maplibregl-canvas:focus-visible {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: calc(var(--focus-width) * -1);
+}
+
+.maplibregl-canvas-container.maplibregl-interactive {
+  cursor: grab;
+}
+
+.maplibregl-canvas-container.maplibregl-interactive:active {
+  cursor: grabbing;
+}
+
+.maplibregl-canvas-container.maplibregl-touch-drag-pan,
+.maplibregl-canvas-container.maplibregl-touch-drag-pan .maplibregl-canvas {
+  touch-action: pinch-zoom;
+}
+
+.maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan,
+.maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan
+  .maplibregl-canvas {
+  touch-action: none;
+}
+
+.maplibregl-ctrl-bottom-left,
+.maplibregl-ctrl-bottom-right,
+.maplibregl-ctrl-top-left,
+.maplibregl-ctrl-top-right {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.maplibregl-ctrl-bottom-left {
+  bottom: 0;
+  left: 0;
+}
+
+.maplibregl-ctrl {
+  pointer-events: auto;
+}
+
+.maplibregl-marker,
+.maplibregl-popup {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+
+.maplibregl-attrib-empty {
+  display: none;
+}
+
+/* The attribution: always shown, as on the picture, bottom left. */
+.maplibregl-ctrl-attrib {
+  margin: 0;
+  padding: 0 var(--space-1);
+  border-top-right-radius: var(--radius-blaze);
+  background: color-mix(
+    in srgb,
+    var(--map-furniture-background) 80%,
+    transparent
+  );
+  color: var(--map-furniture);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.maplibregl-ctrl-attrib a {
+  color: inherit;
+}
+
+.maplibregl-ctrl-attrib-button {
+  display: none;
+}
+
+/* The zoom buttons, top right, shown once the map has drawn. */
+.map-view__zoom {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  border: var(--border-width) solid var(--map-frame);
+  border-radius: var(--radius-control);
+  background: var(--map-furniture-background);
+}
+
+.map-view__zoom[hidden] {
+  display: none;
+}
+
+.map-view__button {
+  display: grid;
+  place-items: center;
+  width: var(--target-min);
+  height: var(--target-min);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--map-furniture);
+  cursor: pointer;
+}
+
+.map-view__button + .map-view__button {
+  border-top: var(--border-width) solid var(--map-frame);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.map-view__button:first-child {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.map-view__button:where(:hover, [data-preview="hover"]) {
+  background: var(--map-settled);
+}
+
+.map-view__button:where(:active, [data-preview="active"]) {
+  background: var(--map-bare-rock);
+}
+
+/* The hike's pin: the blaze on a short pointer, as on the picture. */
+.map-view__pin {
+  position: relative;
+  width: var(--space-3);
+  height: calc(var(--space-6) - var(--space-1));
+  margin-bottom: var(--space-2);
+  border: var(--border-width-strong) solid var(--map-pin-outline);
+  border-radius: var(--radius-blaze);
+  outline: var(--border-width) solid var(--map-pin-keyline);
+  background: var(--map-pin);
+}
+
+.map-view__pin::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  border-top: var(--space-2) solid var(--map-pin-keyline);
+  border-right: var(--space-1) solid transparent;
+  border-left: var(--space-1) solid transparent;
+  transform: translateX(-50%);
+}
+
+/* A numbered place, on the map and in its list. */
+.map-view__marker,
+.map-view__number {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--space-6);
+  height: var(--space-6);
+  border: var(--border-width-strong) solid var(--map-pin-outline);
+  border-radius: var(--radius-pill);
+  outline: var(--border-width) solid var(--map-pin-keyline);
+  background: var(--map-label);
+  color: var(--map-pin-outline);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.map-view__number {
+  grid-row: 1 / span 2;
+  cursor: auto;
+}
+
+/* The place's name over its marker. */
+.maplibregl-popup {
+  display: flex;
+  flex-direction: column-reverse;
+  pointer-events: none;
+}
+
+.maplibregl-popup-tip {
+  align-self: center;
+  border: var(--space-2) solid transparent;
+  border-bottom: none;
+  border-top-color: var(--map-furniture-background);
+}
+
+.maplibregl-popup-content {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
+  background: var(--map-furniture-background);
+  box-shadow: var(--elevation-overlay);
+  color: var(--map-furniture);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-small);
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+/* The numbered list under a map of several places. */
+.map-view__legend {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.map-view__place {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--space-3);
+  align-items: center;
+}
+
+.map-view__name {
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.map-view__coordinates {
+  grid-column: 2;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}

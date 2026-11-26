@@ -121,6 +121,29 @@
       "user": "400000000000000001"
     },
     {
+      "name": "server-hike-map",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-hike-map",
+      "user": "400000000000000001",
+      "map": true
+    },
+    {
+      "name": "server-hike-map-no-js",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-hike-map",
+      "user": "400000000000000001",
+      "javascript": false
+    },
+    {
+      "name": "server-hike-no-map",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-hike-no-map",
+      "user": "400000000000000001"
+    },
+    {
       "name": "server-hike-planned",
       "path": "/g/220000000000000101",
       "status": 200,
@@ -167,7 +190,8 @@
       "path": "/g/220000000000000101",
       "status": 200,
       "seed": "server-location-vote-located",
-      "user": "400000000000000001"
+      "user": "400000000000000001",
+      "map": true
     },
     {
       "name": "server-location-vote-refused",
@@ -198,6 +222,14 @@
           "option": ["1", "3"]
         }
       }
+    },
+    {
+      "name": "server-location-vote-map",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-location-vote-map",
+      "user": "400000000000000001",
+      "map": true
     },
     {
       "name": "server-location-vote-voted",
@@ -429,6 +461,14 @@
       "user": null
     },
     {
+      "name": "styleguide-map-view",
+      "path": "/styleguide/map-view",
+      "status": 200,
+      "seed": "empty",
+      "user": null,
+      "map": true
+    },
+    {
       "name": "styleguide-pagination",
       "path": "/styleguide/pagination",
       "status": 200,
@@ -530,6 +570,14 @@
     {
       "route": "/maps/sample.png",
       "reason": "The sample map picture (image/png) the deploy's smoke check fetches, not a page; its views are reviewed in public/assets/maps/samples/ (npm run maps:samples) and shown on /styleguide/map."
+    },
+    {
+      "route": "/tiles/*",
+      "reason": "The interactive map's vector tiles (application/vnd.mapbox-vector-tile), not a page; the map pages' screenshots show them drawn."
+    },
+    {
+      "route": "/maps/style.json",
+      "reason": "The interactive map's style (JSON), not a page; the map pages' screenshots show it drawn."
     }
   ]
 }

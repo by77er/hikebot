@@ -317,6 +317,11 @@ export function mapPin(
   };
 }
 
+/** `mapPin()` moved to `lat`, `lon`, as for a place on the map. */
+export function pinAt(lat: number, lon: number): WebMapPin {
+  return { ...mapPin(), lat, lon, text: `${String(lat)}, ${String(lon)}` };
+}
+
 /** Where the planned hike of `plannedHike()` is: pinned, settable. */
 export function hikePlace(overrides: Partial<WebHikePlace> = {}): WebHikePlace {
   return {

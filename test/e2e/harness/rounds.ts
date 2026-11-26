@@ -3,6 +3,9 @@
  * that play the location and date votes: a guild set up with its channels,
  * the panel, starting and closing each vote, and voting.
  */
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   ChannelType,
   ComponentType,
@@ -13,7 +16,10 @@ import { expect } from "vitest";
 import type { FakeMessage } from "./fake-discord";
 import { allComponents, eventually, Member, messageText } from "./helpers";
 import { subcommand, type Actor } from "./interactions";
+import type { MapsBucket } from "./maps";
 import type { E2E } from "./worker";
+
+const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
 export const ROUND_IDS = {
   settings: "hb:admin:settings",
@@ -41,6 +47,8 @@ export interface SeededOption {
   details?: string;
   /** The user ids of the members who voted for it. */
   voters?: string[];
+  /** For a location: where it is, as if the geocoder had found it there. */
+  point?: { lat: number; lon: number };
 }
 
 /** A round as `RoundPlayer.seedRound` stores it. */
@@ -56,6 +64,11 @@ export interface SeededRound {
   date?: string;
   threadId?: string;
   eventId?: string;
+  /**
+   * For a complete round: the PNG file, from the repository root, stored in
+   * the `MAPS` bucket as the map picture its thread and event show.
+   */
+  mapPicture?: string;
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -499,8 +512,9 @@ export class RoundPlayer {
           kind === "date" ? dateOptionLabel(option.label) : option.label;
         const [added] = await sql.exec<{ id: number }>(
           `INSERT INTO poll_options (poll_id, label, label_key, details,
-             date_value, proposed_by, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+             date_value, proposed_by, created_at, place_lat, place_lon,
+             place_name, place_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
           pollId,
           label,
           // The bot keys a date by its value, a location by its label.
@@ -509,6 +523,10 @@ export class RoundPlayer {
           kind === "date" ? option.label : null,
           owner,
           openedAt,
+          option.point?.lat ?? null,
+          option.point?.lon ?? null,
+          option.point ? label : null,
+          option.point ? "found" : null,
         );
         const optionId = added?.id ?? 0;
         if (option.label === winner) winnerId = optionId;
@@ -560,6 +578,20 @@ export class RoundPlayer {
       round.eventId ?? null,
       owner,
       at + 3 * 86_400_000,
+      roundId,
+    );
+    if (round.mapPicture === undefined) return;
+    const key = `pictures/seed/round-${String(roundId)}.png`;
+    const env = await this.e2e.harness
+      .getWorker<{ MAPS: MapsBucket }>()
+      .getEnv();
+    await env.MAPS.put(
+      key,
+      new Uint8Array(await readFile(join(ROOT, round.mapPicture))),
+    );
+    await sql.exec(
+      "UPDATE rounds SET map_picture_key = ? WHERE id = ?",
+      key,
       roundId,
     );
   }

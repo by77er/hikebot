@@ -71,7 +71,9 @@ describe("the style guide's component pages", () => {
       const page = await outline(text);
       expect(page).toMatchObject({
         title: `${title} · Style guide · hikebot`,
-        scripts: 0,
+        // The map view's two maps each name the map's script from this
+        // site; as a module, it runs once.
+        scripts: id === "map-view" ? 2 : 0,
         styleElements: 0,
         styleAttributes: 0,
         eventAttributes: 0,

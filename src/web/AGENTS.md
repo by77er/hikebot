@@ -365,6 +365,97 @@ server" in `docs/design.md` says what every admin action checks.
    after it with a `submit` entry, as "Add a page to the screenshots"
    says, then follow "Review your own UI change as a designer".
 
+## Put a map on a page
+
+The example puts the planned hike's map on a page of a server; "Map view"
+in `docs/design-system.md` says what the component shows, and
+"Interactive map" in `docs/design.md` how it is drawn.
+
+1. Get the places from the view: a point (`{ lat, lon }`) and a name for
+   each. If the view lacks them, add them as "Add a field to the web view"
+   in `src/guild/AGENTS.md` says; the planned hike's pin is `hikePlace.pin`
+   and a location option's is its `place`.
+2. Render `MapView` from `src/web/components/map-view.tsx`, with no map
+   when there is no place. One marker is a pin, centred at zoom 13; give
+   several markers `number`s, which the map and its list under it show.
+   Pass the stored picture's address as `picture` when there is one, so
+   the page shows it without JavaScript; a picture of a server's hike is
+   `/g/<guild id>/map.png`, served to members only. Give the place's name
+   and coordinates as `caption`:
+
+   ```tsx
+   import { coordinates, MapView } from "../../components/map-view";
+
+   const hike = view.plannedHike;
+   const pin = view.hikePlace?.pin ?? null;
+   if (hike === null || pin === null || hike.mapPictureKey === null) {
+     return null;
+   }
+   const point = { lat: pin.lat, lon: pin.lon };
+   return (
+     <MapView
+       title={`Map of ${hike.location.label}`}
+       markers={[{ ...point, label: hike.location.label }]}
+       picture={`/g/${view.server.id}/map.png`}
+       caption={`${hike.location.label}: ${coordinates(point)}`}
+     />
+   );
+   ```
+
+   The component loads the map's script itself; write no `<script>`, and
+   change nothing in the Content-Security-Policy.
+
+3. Test it as "Add a section to the server's page" says: the markers and
+   the caption in the markup, and nothing without a place:
+
+   ```sh
+   npx vitest run test/web/components/map-view.test.tsx test/web/pages/server
+   ```
+
+4. Add the page's screenshots as "Add a page to the screenshots" says,
+   with `"map": true` in its entry, so it is taken in the browser with
+   WebGL, and a second entry with `"javascript": false` where the page
+   shows a picture without JavaScript. Its seed puts the places inside the
+   sample map data (`maps/sample/sample.json`): give each location option
+   a `point`, and a complete round a `mapPicture`, a PNG such as
+   `public/assets/maps/samples/trailhead-z12.png` (drawn at the sample
+   point), in `play.seedRound`.
+5. Check it draws in a browser, from this site only and without moving
+   anything, as `test/e2e/map-browser.test.ts` does for the server's page,
+   and run that test:
+
+   ```sh
+   npx vitest run --project e2e test/e2e/map-browser.test.ts
+   ```
+
+## Update MapLibre GL JS
+
+1. Install the new version, pinned, as "Add a dependency" in the root
+   `AGENTS.md` says, then copy its modules and licence over the old ones:
+
+   ```sh
+   npx -y npm@12 install -D --save-exact maplibre-gl@<version>
+   cp node_modules/maplibre-gl/dist/maplibre-gl.mjs node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs node_modules/maplibre-gl/LICENSE.txt public/assets/maps/maplibre/
+   ```
+
+2. Install the matching `@maplibre/maplibre-gl-style-spec`, the version
+   `maplibre-gl` depends on, so the style is checked against it:
+
+   ```sh
+   npm view maplibre-gl@<version> dependencies --json | grep style-spec
+   npx -y npm@12 install -D --save-exact @maplibre/maplibre-gl-style-spec@<that version>
+   ```
+
+3. Change the version in "Map view" in `docs/design-system.md` and in
+   "Interactive map" in `docs/design.md`, then run the map's tests and take
+   the screenshots, as "Take the screenshots" says:
+
+   ```sh
+   npx vitest run test/maps test/web/maps.test.ts
+   npx vitest run --project e2e test/e2e/map-browser.test.ts
+   npm run screenshots
+   ```
+
 ## Add a form that changes something
 
 The example adds a trail from a form on `/trails`; "Sign-in and sessions"
@@ -1043,7 +1134,9 @@ Here the component is `pill`; use your component's name.
    `e2e.discord.addUser` (such as `MEMBER_ID` in
    `test/screenshots/seeds.ts`), whom the script signs in through the fake
    Discord API first. For the page a member sees after pressing Cancel at
-   Discord, give `"path": "/auth/callback"` and `"cancel": true`. Add one
+   Discord, give `"path": "/auth/callback"` and `"cancel": true`. For a
+   page with an interactive map, give `"map": true`; for the page as a
+   browser without JavaScript shows it, `"javascript": false`. Add one
    entry per state worth seeing, such as `servers`, `servers-many` and
    `servers-none`.
 
