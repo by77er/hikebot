@@ -272,7 +272,7 @@ type SeedHour = [number, number, number, number, number, number, number];
  * Stores, with the newest round, the forecast the weather job would have
  * fetched for Snow Lake on Sat, 15 Jun 2030 (11:00 in Los Angeles): `hours`
  * from 08:00, in `units`, fetched at `fetched` (by default 14 minutes
- * before the screenshots' frozen clock, so it reads "Updated 14 min ago"),
+ * before the screenshots' frozen clock, so it reads "Checked 14 min ago"),
  * the freezing level at `freezing` and the UV index at `uv`, and sets the
  * server's units.
  */

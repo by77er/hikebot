@@ -1,14 +1,16 @@
 /**
  * The planned hike's forecast in the web view (`src/guild/web-view.ts`):
  * the forecast the `weather:refresh` job stored with the round, as the hike
- * thread shows it (the same hours, sunrise and sunset, notes and updated
- * time, in the guild's units and time zone), or why there is none, in the
- * thread's words; with when it was last fetched, whether fetching it again
- * has been failing, and which of the hike's hours it does not reach yet.
+ * thread shows it (the same hours, sunrise and sunset and notes, in the
+ * guild's units and time zone), or why there is none, in the thread's
+ * words; with when it was last fetched (the page's "Checked", not the
+ * thread's "Updated", which is when it last changed), how often it is
+ * fetched, whether fetching it again has been failing, and which of the
+ * hike's hours it does not reach yet.
  * The read makes no weather request.
  */
 import type { WebViewSource } from "../guild/web-view";
-import { dateTimeIn, timeIn } from "../polls/dates";
+import { timeIn } from "../polls/dates";
 import type { StoredForecast, Units } from "../weather/forecast";
 import {
   forecastNotes,
@@ -69,12 +71,15 @@ export type WebHikeForecast =
       sunset: string | null;
       /** The thread's notes: freezing level, UV index, snowfall. */
       notes: string[];
-      /** When what the forecast shows last changed. */
-      updatedAt: number;
-      /** `updatedAt` in the guild's time zone: `Sat, 21 Nov 2026 · 14:05`. */
-      updatedLabel: string;
-      /** When it was last fetched: the age of what the page shows. */
+      /**
+       * When it was last fetched: the age of what the page shows, which
+       * it writes as "Checked 14 min ago". (The thread's "Updated" is when
+       * what it shows last changed, `StoredForecast.updatedAt`: another
+       * fact, so the page does not call this one "Updated".)
+       */
       fetchedAt: number;
+      /** How often the bot fetches it again, in words: `every hour`. */
+      refresh: string;
       /**
        * Whether fetching it again has failed for longer than
        * `STALE_AFTER_MS`, so it is older than it should be.
@@ -125,7 +130,7 @@ export function webForecast(
   timeZone: string,
   now: number,
 ): WebHikeForecast {
-  const { forecast, updatedAt, fetchedAt } = stored;
+  const { forecast, fetchedAt } = stored;
   const hours = hourlyHours(forecast, hike);
   const last = hours.at(-1);
   const first = hours[0];
@@ -151,9 +156,8 @@ export function webForecast(
     sunrise: sun?.sunrise ?? null,
     sunset: sun?.sunset ?? null,
     notes: forecastNotes(forecast, hours),
-    updatedAt,
-    updatedLabel: dateTimeIn(timeZone, updatedAt),
     fetchedAt,
+    refresh: refreshText(WEATHER_REFRESH_MS),
     stale: now - fetchedAt > STALE_AFTER_MS,
     partial:
       first !== undefined && last !== undefined && last.at + HOUR_MS <= to
@@ -163,3 +167,11 @@ export function webForecast(
 }
 
 const HOUR_MS = 3_600_000;
+
+/** `every hour`, `every 2 h`, `every 30 min`: how often `ms` comes round. */
+export function refreshText(ms: number): string {
+  if (ms === HOUR_MS) return "every hour";
+  return ms % HOUR_MS === 0
+    ? `every ${String(ms / HOUR_MS)} h`
+    : `every ${String(Math.round(ms / 60_000))} min`;
+}

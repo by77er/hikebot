@@ -3,7 +3,9 @@
  * hourly forecast the bot stored for the hike, as the hike thread shows
  * it, in the server's units and time zone: a row per hour, which hours it
  * does not reach yet (partial), then sunrise and sunset, the thread's notes
- * (freezing level, UV index, snowfall), how old it is and Open-Meteo's
+ * (freezing level, UV index, snowfall), when it was last fetched
+ * ("Checked 14 min ago"; the thread's "Updated" is when it last changed,
+ * another fact) and Open-Meteo's
  * credit. When fetching it again has been failing, a warning says so above
  * it (error). Without a forecast, why, in the thread's words. Nothing
  * while no hike is planned.
@@ -34,7 +36,7 @@ export function HikeForecast({ view }: { view: WebView }) {
               title="The bot could not fetch a newer forecast."
             >
               <p>
-                It tries again every hour; below is the last forecast it
+                It tries again {forecast.refresh}; below is the last forecast it
                 fetched.
               </p>
             </Banner>
@@ -72,7 +74,7 @@ export function HikeForecast({ view }: { view: WebView }) {
             </ul>
           )}
           <p class="u-small u-muted">
-            Updated{" "}
+            Checked{" "}
             <Age
               at={forecast.fetchedAt}
               now={view.now}

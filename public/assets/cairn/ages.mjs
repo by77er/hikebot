@@ -4,6 +4,7 @@
  * clock, in the words of src/web/age.ts ("just now", "12 s ago",
  * "14 min ago", "3 h ago", and from a day on "Thu, 3 Dec 2026 · 07:00" in
  * its `data-zone`), now and every 15 seconds. Only the words change.
+ * `test/e2e/press-browser.test.ts` checks it writes what `ageText` does.
  */
 
 const SECOND = 1000;
@@ -27,7 +28,8 @@ function dateTime(at, timeZone) {
   return `${part("weekday")}, ${part("day")} ${part("month")} ${part("year")} · ${part("hour")}:${part("minute")}`;
 }
 
-function ageText(at, now, timeZone) {
+/** The words of `ageText` in src/web/age.ts; exported for its parity test. */
+export function ageText(at, now, timeZone) {
   const age = Math.max(0, now - at);
   if (age < 5 * SECOND) return "just now";
   if (age < MINUTE) return `${String(Math.floor(age / SECOND))} s ago`;

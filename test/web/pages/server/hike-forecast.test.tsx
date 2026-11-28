@@ -52,10 +52,10 @@ describe("HikeForecast", () => {
     expect(text).toContain("Weather data by Open-Meteo.com");
     expect(text).toMatch(/Sunrise \d\d:\d\d Sunset \d\d:\d\d/);
     expect(text).toContain(
-      "Updated 14 min ago · Weather data by Open-Meteo.com",
+      "Checked 14 min ago · Weather data by Open-Meteo.com",
     );
     expect(html).toMatch(
-      /Updated <script type="module" src="[^"]+\/ages\.mjs"><\/script><time datetime="[^"]+Z" data-age data-zone="America\/Los_Angeles">14 min ago<\/time>/,
+      /Checked <script type="module" src="[^"]+\/ages\.mjs"><\/script><time datetime="[^"]+Z" data-age data-zone="America\/Los_Angeles">14 min ago<\/time>/,
     );
     expect(text).not.toContain("could not fetch");
     expect(text).not.toContain("only;");
@@ -72,7 +72,7 @@ describe("HikeForecast", () => {
       [2 * 86_400_000, "Sat, 21 Nov 2026 · 07:00"],
     ] as const) {
       expect(await spokenText(shown(forecast, at + after))).toContain(
-        `Updated ${words} ·`,
+        `Checked ${words} ·`,
       );
     }
   });

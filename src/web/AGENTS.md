@@ -1269,7 +1269,7 @@ any more`: delete it.
    one of the page's own clock reading (such as "Counted just now") the
    same way; for an age of stored data, give the seed an instant before the
    frozen clock (`FROZEN_TIME` in `test/screenshots/take.ts`), such as 14
-   minutes before it for "Updated 14 min ago".
+   minutes before it for "Checked 14 min ago".
 
    ```json
    {

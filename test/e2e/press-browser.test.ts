@@ -312,3 +312,33 @@ it("votes with JavaScript off: no press script runs, and the vote posts and the 
   expect(await ticked(page, "2")).toBe(true);
   await page.close();
 }, 60_000);
+
+it("writes ages in the browser exactly as the server does", async () => {
+  const { page } = await open();
+  // The same instants and words as test/web/age.test.ts gives ageText.
+  const at = Date.UTC(2026, 11, 3, 15, 0);
+  const cases: [number, string][] = [
+    [0, "just now"],
+    [4_999, "just now"],
+    [5_000, "5 s ago"],
+    [59_999, "59 s ago"],
+    [60_000, "1 min ago"],
+    [14 * 60_000 + 30_000, "14 min ago"],
+    [3 * 3_600_000 + 59 * 60_000, "3 h ago"],
+    [24 * 3_600_000 - 1, "23 h ago"],
+    [24 * 3_600_000, "Thu, 3 Dec 2026 · 07:00"],
+    [-60_000, "just now"],
+  ];
+  const written = await run<string[]>(
+    page,
+    `(async () => {
+      const src = [...document.scripts].find((s) => s.src.endsWith("/cairn/press.mjs")).src;
+      const { ageText } = await import(src.replace("/press.mjs", "/ages.mjs"));
+      return ${JSON.stringify(cases)}.map(([age]) =>
+        ageText(${String(at)}, ${String(at)} + age, "America/Los_Angeles"),
+      );
+    })()`,
+  );
+  expect(written).toEqual(cases.map(([, words]) => words));
+  await page.close();
+}, 60_000);

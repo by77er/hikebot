@@ -567,14 +567,14 @@ its styles in `public/assets/cairn/components/`, its unit test in
 
 - **Age** (`age.tsx`): how old a piece of data on the page is, in the
   words of "Content rules" ("just now", "14 min ago", "3 h ago", from a day
-  on "Thu, 3 Dec 2026 · 07:00"), after a verb the page writes ("Updated",
+  on "Thu, 3 Dec 2026 · 07:00"), after a verb the page writes ("Checked",
   "Counted"). A `<time datetime>` holding the instant, written by the
   server (`ageText` in `src/web/age.ts`) and rewritten every 15 seconds by
   `public/assets/cairn/ages.mjs`, which it loads, so the words stay true
   on a page left open; without JavaScript they stay as served. It has no
   style of its own and no style guide section: its words depend on the
   clock, so it is seen on the server page's screenshots (the forecast's
-  "Updated 14 min ago", the tally's "Counted just now"), where the clock
+  "Checked 14 min ago", the tally's "Counted just now"), where the clock
   is frozen.
 - **App header** (`app-header.tsx`, its own style guide page): the band at
   the top of every page, which `Layout` renders. The brand mark links home;
@@ -1196,9 +1196,12 @@ each define:
 
 Headings, counts, captions, ages and accessible names come from what is
 drawn, not from a request in flight. A forecast or a tally says how old it
-is ("Updated 14 min ago"), and that age is the age of what is shown: the
+is ("Checked 14 min ago"), and that age is the age of what is shown: the
 time the forecast was fetched, or the votes were counted, not the time the
-page was served. The exact time goes in a `<time datetime>` beside it.
+page was served. The verb says which fact it is: the hike thread's
+"Updated" is when what the forecast shows last changed, so the page, which
+gives the age of the fetch, says "Checked", and the two never claim the
+same fact with different times. The exact time goes in a `<time datetime>` beside it.
 
 ## Forms
 
@@ -1295,8 +1298,8 @@ Cairn meets WCAG 2.2 AA:
   rules"). Tallies and tables use tabular figures.
 - **Ages and durations in one format.** An age is "just now" under 5 s,
   then "12 s ago", "14 min ago", "3 h ago", and beyond a day the date and
-  time as the bot writes them: "Updated 14 min ago" under the forecast,
-  "Updated Thu, 3 Dec 2026 · 07:00" two days later. Never "0 s ago";
+  time as the bot writes them: "Checked 14 min ago" under the forecast,
+  "Checked Thu, 3 Dec 2026 · 07:00" two days later. Never "0 s ago";
   minutes are "min", never "m". A duration has at most two parts, largest
   first: a hike of "5 h 30 min", a vote that "closes in 2 h 9 min".
 - **One event has one time everywhere.** The hike's start, a vote's

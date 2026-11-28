@@ -241,6 +241,8 @@ permission", with the roles from their membership.
 "none"), in sections, each built by its own function from one
 `WebViewSource`:
 
+- `now`: the instant of the read, from the store's clock. The page's ages
+  are measured from it, and it is when the open vote's tally was counted.
 - `server` (`serverSection`, `src/guild/web-view.ts`): id, name, and the
   icon's URL on Discord's CDN (null without an icon).
 - `viewer` (`viewerSection`, same file): user id and `isAdmin`.
@@ -294,14 +296,22 @@ permission", with the roles from their membership.
   it, or the thread's hours (the time in the server's zone, the WMO code
   and the conditions in words, temperature and feels-like, chance and
   amount of precipitation, wind and gusts), the units and how they are
-  written, the hike day's sunrise and sunset, the thread's notes, and the
-  updated time as an instant and written in the server's zone.
+  written, the hike day's sunrise and sunset, the thread's notes;
+  `fetchedAt`, when the job last fetched it (the page's "Checked" age: the
+  thread's "Updated" is `StoredForecast.updatedAt`, when what it shows last
+  changed, a different fact, so the page does not show it under that
+  word); `refresh`, how often the job fetches it, in words ("every hour",
+  from `WEATHER_REFRESH_MS`); `stale`, true once it has not been fetched for
+  over `STALE_AFTER_MS` (three refreshes), meaning fetching it again has
+  been failing; and `partial`, the first and last hour shown when the
+  forecast does not reach the end of the thread's hours yet, else null.
 - `schedule` (`scheduleSection`, `src/features/schedule-section.ts`): the
   weekly schedule while it is on, else null. Its weekday, time, time zone
   and date vote length, and `next`, what it does next as the panel finds it
   (`nextCadenceAction`): the step's kind, its instant and `when`, written
-  in the server's zone (`Wednesday 09:00` within the coming week,
-  `Wednesday 2 Dec 09:00` further ahead); with nothing in the coming weeks,
+  in the server's zone as the bot writes every time (`dateTimeIn`:
+  `Wed, 2 Dec 2026 · 09:00`), so the page and Discord agree; with nothing in
+  the coming weeks,
   `waiting` says why (a date vote started before the schedule, or a planned
   hike further ahead than it looks).
 - `log` (`hikeLogSection`, `src/features/hike-log.ts`): one page of the
@@ -362,12 +372,20 @@ path under a server is the 404 page.
   location or an open date vote, Hike planned for a planned hike with no
   round open, none with neither); the notice of the member's last action
   (the one-time banner, or a refusal whose form is gone); the current step
-  (an open vote as a form to vote with: its instructions, one checkbox per
-  option with the counts, the viewer's votes ticked, **Save votes**, the
-  time zone named for dates, and See the vote in Discord linking to the
-  poll's message; a decided location waiting for its date vote; with no
-  round and no planned hike an empty state, telling an admin to start a
-  vote from `/hike admin` in Discord); while a location vote is open,
+  (an open vote as a form to vote with: when it closes, from the schedule
+  when its next step closes the vote ("The location vote closes Wed, 2 Dec
+  2026 · 09:00, and the date vote opens.") or "…closes when an admin
+  closes it."; its instructions; the voter line with when the votes were
+  counted ("6 members have voted. Counted just now.", an age that the
+  browser keeps true on a page left open); one checkbox per option with
+  the counts, the viewer's votes ticked, **Save votes**, the time zone
+  named for dates, and See the vote in Discord linking to the poll's
+  message; with no options, "Nobody has proposed a location for this vote
+  yet. Propose one below." and the propose button as the page's primary
+  action; a decided location waiting for its date vote; with no round and
+  no planned hike an empty state; an admin starts the next vote from the
+  Admin card under it, so neither says to go to `/hike admin` in
+  Discord); while a location vote is open,
   its options that have a place on one map (`vote-map.tsx`), numbered in
   the vote's order and fitted to them, with the numbered list of their
   names and coordinates under it; for an admin, the Admin card
@@ -391,12 +409,18 @@ path under a server is the 404 page.
   form while there is none and Change map pin when there is one); its
   weather (the hourly forecast as a table of the thread's rows in the
   server's units and time zone, each hour with the conditions in words and
-  a weather icon, then sunrise and sunset, the thread's notes, the updated
-  time and Open-Meteo's credit with its link; without a forecast, the
-  thread's words for why); the weekly schedule while it is on (what the bot
-  does next by itself and when, such as "The location vote closes
-  Wednesday 09:00, and the date vote opens.", then its weekday and time,
-  and for an admin where to change it); the hike log's five latest hikes,
+  a weather icon under it, and each number column's unit once in its head;
+  a warning above it when it is `stale` ("The bot could not fetch a newer
+  forecast. It tries again every hour; below is the last forecast it
+  fetched."); under it, when `partial`, "Forecast for 09:00 to 12:00 only;
+  later hours are not out yet."; then sunrise and sunset, the thread's
+  notes, "Checked 14 min ago" (the age of `fetchedAt`) and Open-Meteo's
+  credit with its link; without a forecast, the thread's words for why);
+  the weekly schedule while it is on (what the bot does next by itself and
+  when, such as "The next location vote opens Wed, 2 Dec 2026 · 09:00.",
+  unless that step closes the open vote, which the vote's card then says;
+  then its weekday and time; an admin changes it on the Settings page,
+  whose button heads the server's page); the hike log's five latest hikes,
   with a link to the whole log when it has more; and the calendar address
   in a read-only field, with the bot's sentence on it and Subscribe, the
   address as a `webcal:` link. The read asks for a log page of five. An

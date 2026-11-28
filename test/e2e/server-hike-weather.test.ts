@@ -223,7 +223,7 @@ describe("the server's page about a planned hike", () => {
       `Sunrise ${sun?.[1] ?? ""} Sunset ${sun?.[2] ?? ""}`,
     );
     expect(text).toMatch(
-      /Updated (just now|\d+ s ago|\d+ min ago) · Weather data by Open-Meteo\.com/,
+      /Checked (just now|\d+ s ago|\d+ min ago) · Weather data by Open-Meteo\.com/,
     );
     expect(page.body).toContain('href="https://open-meteo.com/"');
     // Every hour the thread shows is a row of the page's table.
