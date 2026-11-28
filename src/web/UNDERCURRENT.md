@@ -328,3 +328,49 @@ says, and use the icon component.
 case "$FILE" in ./components/icon.tsx) exit 0 ;; esac
 ! grep -Hn "<svg\b" "$FILE" | sed 's/$/: an <svg> outside Icon; add the shape to src\/web\/components\/icons.tsx ("Add an icon" in src\/web\/AGENTS.md)/' | grep .
 ```
+
+## The main path is a button or a standalone link
+only: pages/**
+
+The thing a page's question sentence is about (Vote, Open the hike thread,
+Start location vote) is the main path, and it is a `Button` or a link
+standing alone on its own line with a 44px target, never a link inside a
+sentence: a link in running text keeps the line's height, so it is a small
+target for a thumb on a trailhead, and it reads as an aside ("The main path
+is never a link inside a sentence" in `docs/design-system.md`). Keep the
+sentence as plain words and put the action after it as
+`<Button variant="primary">`, or as a link on its own with `u-target`. A
+link inside a sentence is only ever a way to something else, such as the
+project's source in the footer. `npm run screenshots:audit` backs this up
+with its `inline-main-path` check, which reports a `.button--primary` or
+`[data-main-path]` element that is a link inside a sentence ("Take the
+screenshots" in `src/web/AGENTS.md`).
+
+```tsx good
+<EmptyState title="No hike is being planned">
+  The next hike starts with a location vote.
+</EmptyState>
+<Button variant="primary" href={`/g/${server.id}/admin/start-location-vote`}>
+  Start location vote
+</Button>
+```
+
+```tsx good
+<p class="u-target">
+  <a href={round.threadUrl}>Open the hike thread</a>
+</p>
+```
+
+```tsx bad
+<EmptyState title="No hike is being planned">
+  The next hike starts with a location vote. You can{" "}
+  <a href={`/g/${server.id}/admin/start-location-vote`}>start one</a> now.
+</EmptyState>
+```
+
+```tsx bad
+<p>
+  Voting is open: <a href={voteUrl} data-main-path>cast your vote</a> before
+  Saturday.
+</p>
+```
