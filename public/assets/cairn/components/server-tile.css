@@ -1,7 +1,7 @@
 /*
  * Server tile: one server as one link, icon, name and a chevron in a row on
- * a card-like surface. The name wraps over two lines at most and then ends
- * with an ellipsis; a long word breaks rather than widening the tile. The
+ * a card-like surface. The name wraps onto as many lines as it needs, never
+ * cut short; a long word breaks rather than widening the tile. The
  * list is one column on a phone and a grid of tiles from the breakpoint.
  * States: :hover, :active, :focus-visible (from the base layer), and
  * data-preview for the style guide.
@@ -39,13 +39,8 @@
 }
 
 .server-tile__name {
-  display: -webkit-box;
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
   overflow-wrap: anywhere;
   font-weight: var(--font-weight-semibold);
 }

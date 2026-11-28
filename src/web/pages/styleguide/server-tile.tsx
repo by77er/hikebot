@@ -20,7 +20,7 @@ function ServerTileSection() {
     <Section
       id="server-tile"
       title="Server tile"
-      intro="One server to choose: its icon or initials and its name, the whole tile one link. A name wraps over two lines and then ends with an ellipsis."
+      intro="One server to choose: its icon or initials and its name, the whole tile one link. A long name wraps onto as many lines as it needs."
     >
       <ul class="server-tile-list list-reset">
         {STATES.map(({ state, preview }) => (

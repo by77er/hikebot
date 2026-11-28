@@ -526,7 +526,8 @@ Block, element, modifier, in lower case with hyphens:
   `.stack`, `.cluster`, `.grid`, `.page-heading`, `.list-reset`.
 - **Page** styles are blocks named after the page: `.styleguide-swatch`.
 - **Utilities** start with `u-`: `.u-visually-hidden`, `.u-muted`,
-  `.u-small`, `.u-lead`, `.u-numeric`.
+  `.u-small`, `.u-lead`, `.u-numeric`, `.u-target` (a link standing alone
+  on a small line, at least 44px high and wide).
 
 ## The page shell
 
@@ -837,8 +838,9 @@ its styles in `public/assets/cairn/components/`, its unit test in
     OpenStreetMap's credit, "© OpenStreetMap contributors", linking its
     copyright page. `compact`, in a vote's row, as the poll message does:
     one small muted line, a map pin, the place name and a **Map** link
-    named after the option ("Map of Lake Serene"); the tally list carries
-    the credit once, under its rows.
+    named after the option ("Map of Lake Serene"); without a place name the
+    Map link stands alone and is a whole 44px target; the tally list
+    carries the credit once, under its rows.
   - _Variants:_ `full`, `compact`; with or without a place name.
   - _States:_ the links' and buttons' own.
   - _Do:_ use plain links. _Don't:_ embed a map, a tile or a picture from
@@ -946,9 +948,8 @@ its styles in `public/assets/cairn/components/`, its unit test in
 - **Server tile** (`server-tile.tsx`, its own style guide page): one server
   to choose, as one link to `/g/<id>` with one focus ring: the server's
   icon or initials (Avatar, decorative), its name and a chevron, at least
-  44px high. The name wraps over two lines and then ends with "…" (the
-  whole name stays in the markup, and is the link's accessible name); a
-  long word breaks rather than widening the tile. States: default, hover
+  44px high. The name wraps onto as many lines as it needs and is never
+  cut short; a long word breaks rather than widening the tile. States: default, hover
   (stronger edge, underlined name), focus-visible, active.
   `ServerTileList` lays tiles out in one column below the breakpoint and
   in a grid of tiles at least `--width-tile-min` wide from it, each row as

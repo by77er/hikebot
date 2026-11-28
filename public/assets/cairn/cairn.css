@@ -233,7 +233,8 @@
   samp,
   pre {
     font-family: var(--font-mono);
-    font-size: 0.9375em;
+    /* A shade smaller than the words around it, never under the smallest size. */
+    font-size: max(0.9375em, var(--font-size-small));
   }
 
   code {
@@ -324,6 +325,14 @@
   .u-lead {
     font-size: var(--font-size-lead);
     line-height: var(--line-height-lead);
+  }
+
+  /* A link standing alone on a small line, given a whole touch target. */
+  .u-target {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target-min);
+    min-width: var(--target-min);
   }
 
   .u-numeric {

@@ -6,7 +6,8 @@
  * buttons, then OpenStreetMap's credit. `compact`, for an option of a
  * vote, as the poll message does: the place name and a Map link in one
  * small line, named after the option; the list it is in carries the credit
- * once (`OsmCredit`). Plain links: nothing is loaded from the map sites.
+ * once (`OsmCredit`). Without a place name the Map link stands alone, so
+ * it gets a whole touch target (`u-target`). Plain links: nothing is loaded from the map sites.
  * Built from the layout classes, the utilities and Button, so it has no
  * stylesheet of its own.
  */
@@ -52,7 +53,10 @@ export function MapLinks({
         <MapPinIcon size="small" />
         <span>
           {place.name !== null && <>{place.name} · </>}
-          <a href={place.osmUrl}>
+          <a
+            href={place.osmUrl}
+            class={place.name === null ? "u-target" : undefined}
+          >
             Map
             {label !== undefined && (
               <span class="u-visually-hidden"> of {label}</span>

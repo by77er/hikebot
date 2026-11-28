@@ -1,1 +1,16 @@
-{ "allow": [] }
+{
+  "allow": [
+    {
+      "page": "servers-one",
+      "check": "cut",
+      "selector": "span.app-header__name",
+      "reason": "Cairn's header shows at most --width-header-name (128px) of the member's name and ends it with an ellipsis, so the header keeps one line on a phone; the whole name is the summary's accessible name and is written out in the open menu (\"Signed in as …\"). To fix later: let the header show the whole name, wrapping it or moving it into the menu, and drop the token."
+    },
+    {
+      "page": "styleguide-app-header",
+      "check": "cut",
+      "selector": "div.styleguide-frame:nth-of-type(3) > header.shell__header > div.shell__inner.app-header__inner > details.app-header__menu > summary.app-header__summary > span.app-header__name",
+      "reason": "The style guide's long-name header, cut as on servers-one: see that entry."
+    }
+  ]
+}
