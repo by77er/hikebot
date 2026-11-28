@@ -49,7 +49,7 @@ const MAP_FONTS = fileURLToPath(
  * binary as ready as soon as its file exists, so two processes unpacking at
  * once can start it half-written (`spawn ETXTBSY`): a run that starts
  * browsers in several processes, such as the end-to-end suite's browser
- * tests, calls this once before them (`test/e2e/harness/chromium.ts`).
+ * tests, calls this once before them (`chromium-setup.ts`, the test run's global setup).
  */
 export async function unpackChromium(): Promise<string> {
   if (
