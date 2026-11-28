@@ -822,8 +822,9 @@ path, fields and feature file. "Web pages for a server" in
 
 5. Design every state "States" in `docs/design-system.md` lists, and add
    a screenshot entry with a seed for each data-view state that differs
-   ("Add a page to the screenshots"): loading, empty, error, partial and
-   first run; and for every control, small links included, rest, hover,
+   ("Add a page to the screenshots"): empty, error, partial and first
+   run, and loading for a part that loads after the page, such as the
+   map (its no-JavaScript entry shows what stands in for it); and for every control, small links included, rest, hover,
    focus-visible, pressed (with a finger too), disabled, and busy if it
    starts work.
 6. Register and test the page as "Add a page" says, then run the design
@@ -1433,8 +1434,11 @@ before marking the pull request ready.
      - **presence**: an element that answers no question for the person
        in the sentence, or one another element already answers.
    - **nit**: taste.
-9. Fix every blocker and major, take the screenshots again and repeat from
-   step 1. Fix or explain the rest.
+9. Fix every blocker and major in what your change adds or changes, take
+   the screenshots again and repeat from step 1. Fix or explain the rest.
+   A finding in a component or page your change does not touch, such as
+   a shared button that eases its colour, goes in the review marked
+   **existing**, with no fix asked of this pull request.
 10. Write the findings into the `## Design review` section of the pull
     request description, under the question sentence and the presence
     table, one line each: the severity, the kind where it has one, the
@@ -1528,8 +1532,10 @@ As the reviewer of a pull request that changes `src/web/`, `public/` or
    sentence). Be critical: judge the page as a member who has never seen
    it would, independently of the author's notes.
 5. Compare your findings and your presence table with the author's.
-   Request changes for every blocker or major the author missed, or
-   recorded without fixing:
+   Request changes for every blocker or major in what the pull request
+   adds or changes that the author missed, or recorded without fixing. A
+   finding in a part the pull request does not touch is recorded as
+   **existing** and is no reason to request changes:
 
    ```sh
    gh pr review <n> --request-changes --body-file <file>

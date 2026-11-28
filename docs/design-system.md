@@ -14,7 +14,8 @@ The map picture is part of it too: "Cairn map" below.
 
 Cairn's method (the question, the presence test, the build order, honest
 feedback and the review rubric) is adapted from the design system of viz,
-`by77er/viz`.
+in `design-system/` on the `claude/cloudflare-observability-platform-ibaqya`
+branch of `by77er/viz`.
 
 ## Who it is for, and where
 
@@ -411,15 +412,18 @@ step up; `.stack`, `.cluster` and `.grid` apply them.
 
 ### Motion
 
-| Token                 | Value                        | Use                                          |
-| --------------------- | ---------------------------- | -------------------------------------------- |
-| `--duration-quick`    | 120ms                        | A small movement, such as a chevron turning. |
-| `--duration-moderate` | 240ms                        | Something appearing or moving.               |
-| `--easing-standard`   | `cubic-bezier(0.2, 0, 0, 1)` | All motion.                                  |
+| Token                 | Value                        | Use                                                          |
+| --------------------- | ---------------------------- | ------------------------------------------------------------ |
+| `--duration-quick`    | 120ms                        | A short movement, such as a chevron turning; never a colour. |
+| `--duration-moderate` | 240ms                        | Something appearing or moving.                               |
+| `--easing-standard`   | `cubic-bezier(0.2, 0, 0, 1)` | All motion.                                                  |
+
+The rules for motion hold for every stylesheet; a stylesheet that breaks
+one is a finding in the review of a change to it.
 
 - **A press and a hover change in the next frame, with no transition.**
-  A member who taps "Save votes" on a trailhead sees it pressed at once,
-  not 120ms later.
+  A member who taps "Save votes" on a trailhead is to see it pressed at
+  once, not 120ms later.
 - **No colour is ever eased.** A transition names only `opacity` or
   `transform`: never a colour, a background, a border colour, a
   shorthand that holds one, or `all`, and never a duration without a
@@ -514,10 +518,9 @@ Block, element, modifier, in lower case with hyphens:
 - A **component** is a block named after it: `.button`, `.banner`,
   `.card`. Its parts are `__part` (`.card__title`), its variants
   `--variant` (`.button--primary`).
-- **States** come from the platform, not classes: `:hover`, `:active`
-  with the `[data-pressed]` twin "States" asks for, `:focus-visible`,
-  `:disabled`, `[aria-disabled="true"]`, `[aria-busy="true"]`,
-  `[aria-current="page"]`. `[data-preview="hover|active|focus"]` shows a
+- **States** come from the platform, not classes: `:hover`, `:active`,
+  `:focus-visible`, `:disabled`, `[aria-disabled="true"]`,
+  `[aria-current="page"]`; "States" adds the press on touch and busy. `[data-preview="hover|active|focus"]` shows a
   state on the style guide only.
 - **Layout** classes name the arrangement: `.shell` and its parts,
   `.stack`, `.cluster`, `.grid`, `.page-heading`, `.list-reset`.
@@ -1089,8 +1092,7 @@ its styles in `public/assets/cairn/components/`, its unit test in
   sentence is about ("Vote", "Open the hike thread", "Start location
   vote") is a button, or a standalone link whose whole row is its 44px
   target. A link inside a sentence is only ever a way to something else,
-  such as the project's source in the footer ("Measure what can be
-  measured").
+  such as the project's source in the footer.
 - **Numbers people compare line up.** Counts in a tally and the columns
   of a forecast use tabular figures (`font-variant-numeric:
 tabular-nums`), align right, and carry their unit once, in the column
@@ -1119,20 +1121,20 @@ disabled**, and **busy** if it starts work. That includes the small ones:
 a link in the footer, a tally row's "Show details", the user menu's rows,
 the switch-server link.
 
-- **Pressed** shows in the next frame, never eased, and outranks hover.
-  Browsers apply `:active` to a finger only when it lifts, so on a phone a
-  plain `:active` shows the press too late or not at all. A press on touch
-  is shown with `[data-pressed]`: a small shared script, loaded by every
-  page, sets it on the control under the finger from `pointerdown` and
-  clears it when the finger lifts, leaves, or the browser takes the
-  gesture as a scroll. Each `:active` rule needs its `[data-pressed]`
+- **Pressed** must show in the next frame, never eased, and outrank
+  hover. Browsers apply `:active` to a finger only when it lifts, so on a
+  phone a plain `:active` shows the press too late or not at all. Cairn's
+  answer is `[data-pressed]`: a small shared script, loaded by every page,
+  is to set it on the control under the finger from `pointerdown` and
+  clear it when the finger lifts, leaves, or the browser takes the
+  gesture as a scroll, and each `:active` rule needs a `[data-pressed]`
   twin. Without JavaScript, `:active` alone is the press.
-- **Busy** is the state of a control whose work takes time: "Save votes"
-  or "Propose location" posting over a trailhead's signal. From the
-  submit, the same script sets `aria-busy="true"` on the button that
-  submitted; `[aria-busy="true"]` holds the pressed fill, never eases, and
-  ignores a second press, so a vote is not sent twice. Without
-  JavaScript, the browser's own loading indicator is the busy state.
+- **Busy** is the state a control needs when its work takes time: "Save
+  votes" or "Propose location" posting over a trailhead's signal. From
+  the submit, the button that submitted is to carry `aria-busy="true"`
+  (set by the same script), hold its pressed fill without easing, and
+  ignore a second press, so a vote is not sent twice. Without JavaScript,
+  the browser's own loading indicator is the busy state.
 - **Disabled** says why near the control when the reason is not on the
   screen already ("Voting closed Sat, 5 Dec 2026 · 18:00").
 - **Chosen** (a ticked vote, the current page) is marked by a tick, a
@@ -1191,8 +1193,8 @@ form components, and works without JavaScript:
    result, so the page works without JavaScript and a reload does not post
    again. The change is its own confirmation where it can be: the page
    shows what is now true, and the banner says it in the bot's words
-   rather than only what happened ("You voted for Snow Lake and
-   Rattlesnake Ledge.", not "Your votes are saved.").
+   rather than only what happened ("The location vote is open until Wed,
+   2 Dec 2026 · 18:00.", not "Vote started.").
 5. **An action its opposite undoes says what is now true in place.** A
    vote can be changed until the vote closes, a proposal withdrawn, a
    setting set back: next to the thing, the page says what is now true and
