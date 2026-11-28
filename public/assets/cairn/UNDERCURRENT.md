@@ -95,7 +95,10 @@ perl -0777 -ne '
       next if $number =~ /^-?1$/ && $unit eq "px" && $property =~ /^(?:width|height|margin)$/;
       next if $unit eq "em" && $file =~ m{(?:^|/)cairn\.css$};
       my $kind = ($unit eq "ms" || $unit eq "s") ? "duration" : "length";
-      my $token = $kind eq "duration" ? "var(--duration-quick)" : "var(--space-3)";
+      my $token = $kind eq "duration" ? "var(--duration-quick)"
+        : $property =~ /^(?:border|outline)/ ? "var(--border-width)"
+        : $property =~ /^font/ ? "var(--font-size-body)"
+        : "var(--space-3)";
       $say->($at, "a literal $kind ($number$unit) in \"$property\"; use a token such as $token from public/assets/cairn/tokens.css (\"Add a token\" in src/web/AGENTS.md)");
     }
     my $weight = $property eq "font-weight" ? $value
