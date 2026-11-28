@@ -13,10 +13,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Undercurrent at 9b69f17: a model account out of credit leaves its semantic
-# rules unjudged with a warning instead of failing the check. No release has
-# it yet, so the action builds uc from source; go back to @v0 once a v0
-# release includes it.
 jobs:
   commands:
     name: ${{ github.event.pull_request.draft && 'commands (draft, not run)' || 'commands' }}
@@ -32,11 +28,11 @@ jobs:
           cache: npm
       - run: npm ci
       - if: github.event_name == 'pull_request'
-        uses: by77er/undercurrent@9b69f1767dd68f128dea4e9a62e2fc70189617b2
+        uses: by77er/undercurrent@v0
         with:
           mode: commands
       - if: github.event_name == 'push'
-        uses: by77er/undercurrent@9b69f1767dd68f128dea4e9a62e2fc70189617b2
+        uses: by77er/undercurrent@v0
         with:
           mode: commands
           all: "true"
@@ -62,7 +58,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: by77er/undercurrent@9b69f1767dd68f128dea4e9a62e2fc70189617b2
+      - uses: by77er/undercurrent@v0
         with:
           mode: semantic
           typesafe-api-key: ${{ secrets.TYPESAFE_API_KEY }}
@@ -77,6 +73,6 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v7
-      - uses: by77er/undercurrent@9b69f1767dd68f128dea4e9a62e2fc70189617b2
+      - uses: by77er/undercurrent@v0
         with:
           mode: review
