@@ -150,19 +150,19 @@ page at each size, scheme, pointer and zoom). A rule whose automated check
 is not in the repository is measured by hand in the review, as its middle
 column says, and the review says so.
 
-| Rule                                                       | Measured in a review by                                                                                                                                                                                                          | Automated check it belongs in                                        |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Text, controls and the focus ring meet the contrast floors | `test/web/contrast.test.ts`, in `npm test`, for every pairing in "Allowed pairings" in both schemes.                                                                                                                             | That test.                                                           |
-| Only tokens in component and page CSS                      | `test/web/token-use.test.ts`, in `npm test`.                                                                                                                                                                                     | That test.                                                           |
-| No colour is eased                                         | Reading every `transition` in the changed stylesheets: only `opacity` or `transform`, always with a property list.                                                                                                               | An Undercurrent rule on the stylesheets, and a page audit.           |
-| A press shows at once, with a finger as with a mouse       | Pressing each control with touch emulation at 390px: the pressed fill shows while the finger is down.                                                                                                                            | A page audit.                                                        |
-| A submit that takes time shows it is busy                  | Submitting each form on a throttled network: the button holds its pressed fill and `aria-busy` until the page answers.                                                                                                           | A page audit.                                                        |
-| The main path is not a link inside a sentence              | `npm run screenshots:audit`, check `inline-main-path`: the primary action (`.button--primary` or `[data-main-path]`) is not a link inside a sentence; and checking that the thing the question sentence is about is that action. | The page audit (`test/screenshots/audit.ts`).                        |
-| Numbers people compare are tabular and right-aligned       | Reading the component's CSS for `tabular-nums` and the screenshot for the alignment.                                                                                                                                             | An Undercurrent rule on the component stylesheets, and a page audit. |
-| Every target is at least 44 by 44px, with no overlap       | `npm run screenshots:audit`, checks `target` (at 390px, fine and coarse pointer) and `overlap`.                                                                                                                                  | The page audit.                                                      |
-| Nothing scrolls sideways and no word is cut                | `npm run screenshots:audit`, checks `overflow` and `cut`, at 320px, 390px (fine and coarse pointer), 1280px and at 200% zoom.                                                                                                    | The page audit.                                                      |
-| Layout shift stays under 0.05                              | `npm run screenshots:audit`, check `shift`, loading each page in every configuration.                                                                                                                                            | The page audit.                                                      |
-| Ages and durations are written one way                     | Reading the page's words against "Content rules".                                                                                                                                                                                | An Undercurrent rule on `src/web/` ("0 s ago", minutes as "m").      |
+| Rule                                                       | Measured in a review by                                                                                                                                                                                                                                                                              | Automated check it belongs in                                         |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Text, controls and the focus ring meet the contrast floors | `test/web/contrast.test.ts`, in `npm test`, for every pairing in "Allowed pairings" in both schemes.                                                                                                                                                                                                 | That test.                                                            |
+| Only tokens in component and page CSS                      | `test/web/token-use.test.ts`, in `npm test`.                                                                                                                                                                                                                                                         | That test.                                                            |
+| No colour is eased                                         | `test/web/press-states.test.ts`, in `npm test`: every `transition` in Cairn's stylesheets names only `opacity` or `transform`, with a property list; `test/e2e/press-browser.test.ts` reads every element's computed transition on the server's page and the style guide, with a mouse and a finger. | That test, an Undercurrent rule on the stylesheets, and a page audit. |
+| A press shows at once, with a finger as with a mouse       | `test/web/press-states.test.ts`: every `:active` has its `[data-pressed]` twin; `test/e2e/press-browser.test.ts`: a finger on "Save votes" shows the pressed fill before it lifts. Other controls by hand, with touch emulation at 390px.                                                            | Those tests, and a page audit.                                        |
+| A submit that takes time shows it is busy                  | `test/e2e/press-browser.test.ts`: after the tap, "Save votes" has `aria-busy` and the pressed fill, and a second press sends nothing. Other forms by hand, on a throttled network.                                                                                                                   | That test, and a page audit.                                          |
+| The main path is not a link inside a sentence              | `npm run screenshots:audit`, check `inline-main-path`: the primary action (`.button--primary` or `[data-main-path]`) is not a link inside a sentence; and checking that the thing the question sentence is about is that action.                                                                     | The page audit (`test/screenshots/audit.ts`).                         |
+| Numbers people compare are tabular and right-aligned       | Reading the component's CSS for `tabular-nums` and the screenshot for the alignment.                                                                                                                                                                                                                 | An Undercurrent rule on the component stylesheets, and a page audit.  |
+| Every target is at least 44 by 44px, with no overlap       | `npm run screenshots:audit`, checks `target` (at 390px, fine and coarse pointer) and `overlap`.                                                                                                                                                                                                      | The page audit.                                                       |
+| Nothing scrolls sideways and no word is cut                | `npm run screenshots:audit`, checks `overflow` and `cut`, at 320px, 390px (fine and coarse pointer), 1280px and at 200% zoom.                                                                                                                                                                        | The page audit.                                                       |
+| Layout shift stays under 0.05                              | `npm run screenshots:audit`, check `shift`, loading each page in every configuration.                                                                                                                                                                                                                | The page audit.                                                       |
+| Ages and durations are written one way                     | Reading the page's words against "Content rules".                                                                                                                                                                                                                                                    | An Undercurrent rule on `src/web/` ("0 s ago", minutes as "m").       |
 
 ### What Cairn did not take from viz
 
@@ -520,7 +520,9 @@ Block, element, modifier, in lower case with hyphens:
   `--variant` (`.button--primary`).
 - **States** come from the platform, not classes: `:hover`, `:active`,
   `:focus-visible`, `:disabled`, `[aria-disabled="true"]`,
-  `[aria-current="page"]`; "States" adds the press on touch and busy. `[data-preview="hover|active|focus"]` shows a
+  `[aria-current="page"]`, and the two the press script sets ("States"):
+  `[data-pressed]` (the press, from the touch on) and `[aria-busy="true"]`
+  (a submit on its way). `[data-preview="hover|active|focus"]` shows a
   state on the style guide only.
 - **Layout** classes name the arrangement: `.shell` and its parts,
   `.stack`, `.cluster`, `.grid`, `.page-heading`, `.list-reset`.
@@ -533,8 +535,9 @@ Block, element, modifier, in lower case with hyphens:
 
 `Layout` in `src/web/layout.tsx` is the document every page renders into:
 
-- the `<head>`: language, viewport, title, the preloaded font and the
-  stylesheet;
+- the `<head>`: language, viewport, title, the preloaded font, the
+  stylesheet and the press script (`press.mjs`, a module, so it runs after
+  the page is parsed; pages work without it, "States");
 - a **skip link**, the first focusable element, hidden until focused, to
   `<main id="main" tabindex="-1">`;
 - the **header**, the App header component: the brand mark (blaze and
@@ -614,8 +617,9 @@ its styles in `public/assets/cairn/components/`, its unit test in
   (other actions), `quiet` (minor ones in a row), `danger` (destroys or
   cancels). A `<button>` (submitting its form by default, since pages work
   without JavaScript) or, with `href`, an `<a>` that looks the same. States:
-  default, hover, focus-visible, active and disabled (a disabled link drops
-  its `href`). An optional icon before or after the label; `block` fills
+  default, hover, focus-visible, pressed (`:active` or `[data-pressed]`),
+  busy (`aria-busy="true"`, the pressed fill, from a form's submit until the
+  next page) and disabled (a disabled link drops its `href`). An optional icon before or after the label; `block` fills
   the width.
 - **Card** (`card.tsx`): one thing on a surface of its own, named by its
   heading (level 2 to 4). With `href` the heading's link covers the card,
@@ -1125,16 +1129,20 @@ the switch-server link.
 - **Pressed** must show in the next frame, never eased, and outrank
   hover. Browsers apply `:active` to a finger only when it lifts, so on a
   phone a plain `:active` shows the press too late or not at all. Cairn's
-  answer is `[data-pressed]`: a small shared script, loaded by every page,
-  is to set it on the control under the finger from `pointerdown` and
-  clear it when the finger lifts, leaves, or the browser takes the
-  gesture as a scroll, and each `:active` rule needs a `[data-pressed]`
-  twin. Without JavaScript, `:active` alone is the press.
+  answer is `[data-pressed]`: a small shared script,
+  `public/assets/cairn/press.mjs`, loaded by every page as a module from
+  the Worker's own origin, sets it on the control under the finger or the
+  mouse from `pointerdown` and clears it when the pointer lifts
+  (`pointerup`), leaves the control (`pointerleave`, or a move off it), or
+  the browser takes the gesture as a scroll (`pointercancel`), and each
+  `:active` rule has a `[data-pressed]` twin in the same selector
+  (`:where(:active, [data-pressed], [data-preview="active"])`). Without
+  JavaScript, `:active` alone is the press.
 - **Busy** is the state a control needs when its work takes time: "Save
   votes" or "Propose location" posting over a trailhead's signal. From
-  the submit, the button that submitted is to carry `aria-busy="true"`
-  (set by the same script), hold its pressed fill without easing, and
-  ignore a second press, so a vote is not sent twice. Without JavaScript,
+  the submit, the button that submitted carries `aria-busy="true"`
+  (set by the same script), holds its pressed fill without easing, and
+  a second press of the form is ignored, so a vote is not sent twice. Without JavaScript,
   the browser's own loading indicator is the busy state.
 - **Disabled** says why near the control when the reason is not on the
   screen already ("Voting closed Sat, 5 Dec 2026 · 18:00").

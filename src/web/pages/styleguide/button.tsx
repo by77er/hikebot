@@ -45,11 +45,17 @@ const VARIANTS: {
   },
 ];
 
-const STATES: { state: string; preview?: Preview; disabled?: boolean }[] = [
+const STATES: {
+  state: string;
+  preview?: Preview;
+  disabled?: boolean;
+  busy?: boolean;
+}[] = [
   { state: "Default" },
   { state: "Hover", preview: "hover" },
   { state: "Focus visible", preview: "focus" },
-  { state: "Active", preview: "active" },
+  { state: "Pressed", preview: "active" },
+  { state: "Busy", busy: true },
   { state: "Disabled", disabled: true },
 ];
 
@@ -58,7 +64,7 @@ function ButtonSection() {
     <Section
       id="button"
       title="Button"
-      intro="A verb in the bot's words. One primary button per view; it may fill the width at the foot of a phone screen."
+      intro="A verb in the bot's words. One primary button per view; it may fill the width at the foot of a phone screen. Pressed and busy draw the same fill, at once, with no easing."
     >
       {VARIANTS.map(({ variant, label, icon, use }) => (
         <div class="stack stack--tight" key={variant}>
@@ -68,7 +74,7 @@ function ButtonSection() {
           </h3>
           <p>{use}</p>
           <StateList
-            examples={STATES.map(({ state, preview, disabled }) => ({
+            examples={STATES.map(({ state, preview, disabled, busy }) => ({
               state: `${state}, button`,
               example: (
                 <Button
@@ -77,6 +83,7 @@ function ButtonSection() {
                   type="button"
                   preview={preview}
                   disabled={disabled}
+                  busy={busy}
                 >
                   {label}
                 </Button>
@@ -84,22 +91,35 @@ function ButtonSection() {
             }))}
           />
           <StateList
-            examples={STATES.map(({ state, preview, disabled }) => ({
-              state: `${state}, link`,
-              example: (
-                <Button
-                  variant={variant}
-                  href="/styleguide#button"
-                  preview={preview}
-                  disabled={disabled}
-                >
-                  {label}
-                </Button>
-              ),
-            }))}
+            examples={STATES.filter(({ busy }) => !busy).map(
+              ({ state, preview, disabled }) => ({
+                state: `${state}, link`,
+                example: (
+                  <Button
+                    variant={variant}
+                    href="/styleguide#button"
+                    preview={preview}
+                    disabled={disabled}
+                  >
+                    {label}
+                  </Button>
+                ),
+              }),
+            )}
           />
         </div>
       ))}
+      <h3>Pressed and busy, live</h3>
+      <p>
+        A press shows from the touch, with a finger as with a mouse. A button
+        that sends a form stays pressed and busy until the next page loads, and
+        a second press sends nothing.
+      </p>
+      <form method="get" action="/styleguide#button" class="cluster">
+        <Button variant="primary" icon={VoteIcon}>
+          Save votes
+        </Button>
+      </form>
       <h3>Full width</h3>
       <Button variant="primary" icon={VoteIcon} type="button" block>
         Vote

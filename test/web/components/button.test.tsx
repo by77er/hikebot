@@ -40,6 +40,19 @@ describe("Button", () => {
     expect(await spokenText(html)).toBe("Vote");
   });
 
+  it("draws busy for the style guide with aria-busy, as the press script sets it", () => {
+    expect(
+      render(
+        <Button variant="primary" type="button" busy>
+          Save votes
+        </Button>,
+      ),
+    ).toBe(
+      '<button class="button button--primary" type="button" aria-busy="true"><span>Save votes</span></button>',
+    );
+    expect(render(<Button>Vote</Button>)).not.toContain("aria-busy");
+  });
+
   it("is disabled as a button with the disabled attribute", () => {
     const html = render(
       <Button type="button" disabled>
