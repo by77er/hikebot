@@ -1,7 +1,12 @@
 import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { assetPath, FONT, STYLESHEET } from "../../src/web/assets";
+import {
+  assetPath,
+  FONT,
+  PRESS_SCRIPT,
+  STYLESHEET,
+} from "../../src/web/assets";
 import { sessionCookie } from "../../src/web/auth/session";
 import { PIN_FILLS, SAMPLE_VIEWS } from "../../scripts/map-samples";
 import { COLOURS } from "../../src/maps/style";
@@ -50,6 +55,7 @@ describe("GET /", () => {
       firstLink: "#main",
       mainId: "main",
       scripts: 0,
+      pressScript: true,
       styleElements: 0,
       styleAttributes: 0,
       eventAttributes: 0,
@@ -209,6 +215,17 @@ describe("static assets", () => {
       "text/css; charset=utf-8",
     );
     await response.arrayBuffer();
+  });
+
+  it("serves the press script as JavaScript, under the versioned path too", async () => {
+    for (const path of [`/assets/${PRESS_SCRIPT}`, assetPath(PRESS_SCRIPT)]) {
+      const response = await get(path);
+      expect(response.status, path).toBe(200);
+      expect(response.headers.get("Content-Type"), path).toMatch(
+        /^(text|application)\/javascript/,
+      );
+      expect(await response.text()).toContain("data-pressed");
+    }
   });
 
   it("serves the map's scripts as JavaScript, under the versioned path too", async () => {

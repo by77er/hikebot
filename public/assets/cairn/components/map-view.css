@@ -79,7 +79,10 @@
   cursor: grab;
 }
 
-.maplibregl-canvas-container.maplibregl-interactive:active {
+.maplibregl-canvas-container.maplibregl-interactive:where(
+    :active,
+    [data-pressed]
+  ) {
   cursor: grabbing;
 }
 
@@ -192,7 +195,7 @@
   background: var(--map-settled);
 }
 
-.map-view__button:where(:active, [data-preview="active"]) {
+.map-view__button:where(:active, [data-pressed], [data-preview="active"]) {
   background: var(--map-bare-rock);
 }
 

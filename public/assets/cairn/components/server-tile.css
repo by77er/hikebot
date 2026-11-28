@@ -3,7 +3,7 @@
  * a card-like surface. The name wraps onto as many lines as it needs, never
  * cut short; a long word breaks rather than widening the tile. The
  * list is one column on a phone and a grid of tiles from the breakpoint.
- * States: :hover, :active, :focus-visible (from the base layer), and
+ * States: :hover, pressed (:active or data-pressed), :focus-visible (from the base layer), and
  * data-preview for the style guide.
  */
 
@@ -19,9 +19,6 @@
   border-radius: var(--radius-card);
   color: var(--color-text);
   text-decoration: none;
-  transition-property: border-color, background-color;
-  transition-duration: var(--duration-quick);
-  transition-timing-function: var(--easing-standard);
 }
 
 .server-tile:where(:hover, [data-preview="hover"]) {
@@ -34,7 +31,7 @@
   text-underline-offset: var(--underline-offset);
 }
 
-.server-tile:where(:active, [data-preview="active"]) {
+.server-tile:where(:active, [data-pressed], [data-preview="active"]) {
   background: var(--color-surface-subtle);
 }
 

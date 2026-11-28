@@ -1,8 +1,11 @@
 /*
  * Button: the one way to trigger an action or a main navigation step.
  * Variants primary, secondary, quiet and danger; the same look on <button>
- * and <a>. States: :hover, :active, :focus-visible (from the base layer),
- * :disabled or aria-disabled; data-preview shows a state on the style guide.
+ * and <a>. States: :hover; pressed (:active, or data-pressed from
+ * press.mjs, so a finger shows it at once); busy (aria-busy, from a form's
+ * submit until the next page loads, with the pressed fill); :focus-visible
+ * (from the base layer); :disabled or aria-disabled; data-preview shows a
+ * state on the style guide. No state change is eased.
  */
 
 .button {
@@ -23,9 +26,6 @@
   text-decoration: none;
   cursor: pointer;
   touch-action: manipulation;
-  transition-property: background-color, border-color, color;
-  transition-duration: var(--duration-quick);
-  transition-timing-function: var(--easing-standard);
 }
 
 .button--primary {
@@ -37,7 +37,12 @@
   background: var(--color-primary-hover);
 }
 
-.button--primary:where(:active, [data-preview="active"]) {
+.button--primary:where(
+  :active,
+  [data-pressed],
+  [aria-busy="true"],
+  [data-preview="active"]
+) {
   background: var(--color-primary-active);
 }
 
@@ -52,7 +57,12 @@
   border-color: var(--color-primary);
 }
 
-.button--secondary:where(:active, [data-preview="active"]) {
+.button--secondary:where(
+  :active,
+  [data-pressed],
+  [aria-busy="true"],
+  [data-preview="active"]
+) {
   background: var(--color-surface-subtle);
   border-color: var(--color-primary-active);
   color: var(--color-text);
@@ -68,7 +78,12 @@
   background: var(--color-surface-subtle);
 }
 
-.button--quiet:where(:active, [data-preview="active"]) {
+.button--quiet:where(
+  :active,
+  [data-pressed],
+  [aria-busy="true"],
+  [data-preview="active"]
+) {
   background: var(--color-surface-subtle);
   border-color: var(--color-border-strong);
   color: var(--color-text);
@@ -83,8 +98,17 @@
   background: var(--color-danger-hover);
 }
 
-.button--danger:where(:active, [data-preview="active"]) {
+.button--danger:where(
+  :active,
+  [data-pressed],
+  [aria-busy="true"],
+  [data-preview="active"]
+) {
   background: var(--color-danger-active);
+}
+
+.button[aria-busy="true"] {
+  cursor: progress;
 }
 
 .button:disabled,

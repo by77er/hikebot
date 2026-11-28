@@ -10,7 +10,10 @@ export interface PageOutline {
   mainId: string | null;
   /** Element names in document order, such as `header`, `main`. */
   elements: string[];
+  /** Scripts other than the shell's press script, which `pressScript` notes. */
   scripts: number;
+  /** Whether the page loads the shell's press script (`PRESS_SCRIPT`). */
+  pressScript: boolean;
   styleElements: number;
   styleAttributes: number;
   eventAttributes: number;
@@ -28,6 +31,7 @@ export async function outline(html: string): Promise<PageOutline> {
     mainId: null,
     elements: [],
     scripts: 0,
+    pressScript: false,
     styleElements: 0,
     styleAttributes: 0,
     eventAttributes: 0,
@@ -47,7 +51,18 @@ export async function outline(html: string): Promise<PageOutline> {
       element(element) {
         page.elements.push(element.tagName);
         if (element.tagName === "body") inBody = true;
-        if (element.tagName === "script") page.scripts += 1;
+        if (element.tagName === "script") {
+          const src = element.getAttribute("src") ?? "";
+          if (
+            /^\/assets\/v\/[A-Za-z0-9-]+\/cairn\/press\.mjs$/.test(src) &&
+            element.getAttribute("type") === "module" &&
+            !page.pressScript
+          ) {
+            page.pressScript = true;
+          } else {
+            page.scripts += 1;
+          }
+        }
         if (element.tagName === "style") page.styleElements += 1;
         for (const [name = ""] of element.attributes) {
           if (name === "style") page.styleAttributes += 1;

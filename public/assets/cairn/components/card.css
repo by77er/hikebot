@@ -50,9 +50,6 @@
 }
 
 .card--link {
-  transition-property: border-color, background-color;
-  transition-duration: var(--duration-quick);
-  transition-timing-function: var(--easing-standard);
 }
 
 .card--link:where(:hover, [data-preview="hover"]) {
@@ -65,7 +62,7 @@
   text-underline-offset: var(--underline-offset);
 }
 
-.card--link:where(:active, [data-preview="active"]) {
+.card--link:where(:active, [data-pressed], [data-preview="active"]) {
   background: var(--color-surface-subtle);
 }
 
