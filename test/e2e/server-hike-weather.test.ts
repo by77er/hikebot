@@ -207,9 +207,14 @@ describe("the server's page about a planned hike", () => {
 
     // The forecast: the thread's 13:00 row, its sun times and its credit.
     // The units are in the column heads; the cells are bare figures.
-    expect(text).toContain(
-      "Temperature, °F Chance of rain or snow, % Rain or snow, in Wind, mph",
-    );
+    for (const head of [
+      "Temperature, °F",
+      "Chance of rain or snow, %",
+      "Rain or snow, in",
+      "Wind, mph",
+    ]) {
+      expect(text).toContain(head);
+    }
     expect(text).toContain("13:00 Overcast 50 feels 46 20 0.01 6 gusts 12");
     expect(text).toContain("times in America/Los_Angeles");
     const sun = /Sunrise (\d\d:\d\d) · Sunset (\d\d:\d\d)/.exec(thread);
@@ -321,7 +326,7 @@ describe("the server's page about a planned hike", () => {
       "The map pin of Somewhere Nice is set to 46.78591, -121.73532.",
     );
     expect(after).toContain("46.78591, -121.73532");
-    expect(after).toContain("13:00 Overcast 50°F");
+    expect(after).toContain("13:00 Overcast 50 feels 46");
   });
 
   it("loads nothing from another site, with the content security policy unchanged", async () => {
@@ -393,6 +398,9 @@ describe("the server's page", () => {
     expect(vote.body).toContain(
       'href="https://www.openstreetmap.org/?mlat=46.78591&amp;mlon=-121.73532#map=13/46.78591/-121.73532"',
     );
-    expect(textOf(vote.body)).toContain("The location vote closes Wednesday");
+    // In the vote's own card, as the bot writes times.
+    expect(textOf(vote.body)).toMatch(
+      /Open The location vote closes Wed, \d{1,2} [A-Z][a-z]{2} \d{4} · 09:00/,
+    );
   });
 });

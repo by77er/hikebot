@@ -215,6 +215,13 @@
       "user": "400000000000000001"
     },
     {
+      "name": "server-location-vote-empty",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-location-vote-empty",
+      "user": "400000000000000001"
+    },
+    {
       "name": "server-location-vote-located",
       "path": "/g/220000000000000101",
       "status": 200,

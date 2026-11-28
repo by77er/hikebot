@@ -4,7 +4,7 @@
       "page": "servers-one",
       "check": "cut",
       "selector": "span.app-header__name",
-      "reason": "Cairn's header shows at most --width-header-name (128px) of the member's name and ends it with an ellipsis, so the header keeps one line on a phone; the whole name is the summary's accessible name and is written out in the open menu (\"Signed in as …\"). To fix later: let the header show the whole name, wrapping it or moving it into the menu, and drop the token."
+      "reason": "Cairn's header shows at most --width-header-name (128px) of the member's name, ending it with an ellipsis, so the header keeps one line on a phone; the whole name is the menu button's accessible name and is written out in the open menu (\"Signed in as …\"). Kept by the design-method pass: showing the whole name means wrapping the header onto more lines or moving the name into the menu, which changes the App header's look and removes a token, and that pass keeps Cairn's look and tokens as they are. To fix: a header change of its own that moves the name into the menu and drops the token."
     },
     {
       "page": "styleguide-app-header",

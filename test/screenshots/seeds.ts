@@ -716,6 +716,13 @@ export const SEEDS: Record<string, Seed> = {
   "server-location-decided": server(locationDecided),
   "server-location-decided-admin": server(locationDecided, "admin"),
   "server-location-vote-admin": server(locationVote(), "admin"),
+  "server-location-vote-empty": server((play, g) =>
+    play.seedRound(g, {
+      status: "location_voting",
+      startedAt: STARTED,
+      locations: [],
+    }),
+  ),
   "server-date-vote": server(scheduledDateVote),
   "server-date-vote-admin": server(scheduledDateVote, "admin"),
   /** The date vote open for its owner, and Discord refusing the forum. */
