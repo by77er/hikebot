@@ -348,7 +348,7 @@ describe("the location vote", () => {
 
   it("holds 25 locations at full length within Discord's limits and refuses a 26th", async () => {
     const g = guild(4);
-    const [ana, ben] = g.members as [Member, Member];
+    const [ana, ben, cy] = g.members as [Member, Member, Member];
     const panel = await setUpPanel(g);
     const label = (i: number) =>
       `${String(i).padStart(2, "0")} ${"x".repeat(77)}`;
@@ -367,8 +367,11 @@ describe("the location vote", () => {
     );
     await ben.submitModal(late, { [ID.name]: "One more" });
     expectEphemeral(ben, "This vote already has 25 locations");
+    await cy.click(poll, idStarting(shown(poll), "hb:location:propose:"));
+    expectEphemeral(cy, "This vote already has 25 locations");
+    // Ana, who proposed the 25th, is told she has had her proposal.
     await ana.click(poll, idStarting(shown(poll), "hb:location:propose:"));
-    expectEphemeral(ana, "This vote already has 25 locations");
+    expectEphemeral(ana, "You've already proposed **24 ");
 
     await vote(ana, poll, [label(24)]);
     await eventually(() => {
@@ -703,7 +706,8 @@ describe("suggesting a past location again", () => {
     expect(messageText(shown(offer))).toContain(
       "Added **Cedar Falls** to the location vote.",
     );
-    expect(Object.keys(optionValues(shown(offer)))).toEqual(["Bear Creek"]);
+    // That was Ben's one proposal: the select is gone.
+    expect(Object.keys(optionValues(shown(offer)))).toEqual([]);
     await eventually(() => {
       expect(messageText(shown(second))).toContain("**Cedar Falls** · 0 votes");
     });
