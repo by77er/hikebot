@@ -1,7 +1,12 @@
 import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { assetPath, FONT, STYLESHEET } from "../../src/web/assets";
+import {
+  assetPath,
+  FONT,
+  PRESS_SCRIPT,
+  STYLESHEET,
+} from "../../src/web/assets";
 import { sessionCookie } from "../../src/web/auth/session";
 import { PIN_FILLS, SAMPLE_VIEWS } from "../../scripts/map-samples";
 import { COLOURS } from "../../src/maps/style";
@@ -50,6 +55,7 @@ describe("GET /", () => {
       firstLink: "#main",
       mainId: "main",
       scripts: 0,
+      pressScript: true,
       styleElements: 0,
       styleAttributes: 0,
       eventAttributes: 0,
@@ -129,7 +135,7 @@ describe("GET /", () => {
     const html = await response.text();
     const page = await outline(html);
     expect(page.title).toBe("Method not allowed · hikebot");
-    expect(page.text).toContain("Error 405");
+    expect(page.text).toContain("Method not allowed");
     expect(page.text).toContain(
       "This page does not accept that kind of request.",
     );
@@ -174,7 +180,7 @@ describe("unknown paths", () => {
   it("says the error in words and offers one way back home", async () => {
     const html = await (await get("/nope")).text();
     const page = await outline(html);
-    expect(page.text).toContain("Error 404");
+    expect(page.text).toContain("Page not found");
     expect(page.text).toContain("Page not found");
     expect(page.text).toContain(
       "There is no page at this address. The link may be wrong, or the page may have moved.",
@@ -209,6 +215,21 @@ describe("static assets", () => {
       "text/css; charset=utf-8",
     );
     await response.arrayBuffer();
+  });
+
+  it("serves the press and ages scripts as JavaScript, under the versioned path too", async () => {
+    for (const path of [
+      `/assets/${PRESS_SCRIPT}`,
+      assetPath(PRESS_SCRIPT),
+      assetPath("cairn/ages.mjs"),
+    ]) {
+      const response = await get(path);
+      expect(response.status, path).toBe(200);
+      expect(response.headers.get("Content-Type"), path).toMatch(
+        /^(text|application)\/javascript/,
+      );
+      expect(await response.text()).toMatch(/data-pressed|data-age/);
+    }
   });
 
   it("serves the map's scripts as JavaScript, under the versioned path too", async () => {

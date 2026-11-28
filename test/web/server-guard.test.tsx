@@ -177,14 +177,16 @@ describe("the guard of a server's pages", () => {
     expect(page.text).toContain("Signed in as Ana.");
   });
 
-  it("tells an admin where to start a vote", async () => {
+  it("gives an admin the Admin card to start a vote, not a sentence pointing at Discord", async () => {
     const guild = freshGuild();
     discordWith(guild);
     const response = await get(`/g/${guild}`, await signedIn(OWNER, [guild]));
     expect(response.status).toBe(200);
-    expect((await outline(await response.text())).text).toContain(
-      "start one in Discord with /hike admin, then Start location vote.",
+    const text = (await outline(await response.text())).text;
+    expect(text).toContain(
+      "No hike is being plannedThe next hike starts with a location vote.Admin",
     );
+    expect(text).not.toContain("start one in Discord");
   });
 
   it("reads five hikes for the server's page and ten for each page of the log", async () => {

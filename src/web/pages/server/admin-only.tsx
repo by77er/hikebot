@@ -17,7 +17,6 @@ export function AdminOnlyPage({
 }) {
   return (
     <MessagePage
-      eyebrow="Error 403"
       title="Only admins can do this"
       lead={`${ADMIN_ONLY_MESSAGE} Nothing was changed.`}
       action={{

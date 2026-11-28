@@ -99,7 +99,8 @@ export function TallyRow({
           <p class="tally-row__label">{label}</p>
         )}
         <p class="tally-row__count" id={countId}>
-          <span class="tally-row__number">{votes}</span> {voteWord(votes)}
+          <span class="tally-row__number">{votes}</span>{" "}
+          <span class="tally-row__unit">{voteWord(votes)}</span>
         </p>
       </div>
       <meter

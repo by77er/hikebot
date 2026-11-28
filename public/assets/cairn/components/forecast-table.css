@@ -1,6 +1,8 @@
 /*
  * Forecast table: tight cells, and each cell's second figure under the
- * first on a phone, so five columns fit 390px; beside it from 48rem.
+ * first on a phone, so five columns fit 390px; beside it from 48rem. Number
+ * columns align right in tabular digits (from the base table), their unit
+ * under the name in the head.
  */
 
 .forecast-table :is(th, td) {
@@ -11,10 +13,36 @@
   padding-inline-start: 0;
 }
 
+.forecast-table thead th {
+  vertical-align: bottom;
+}
+
+/* Relative, so the head's hidden name stays inside the scrolling table. */
+.forecast-table__number {
+  position: relative;
+  text-align: end;
+}
+
+.forecast-table__conditions {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.forecast-table__conditions > .icon {
+  flex: none;
+  align-self: center;
+}
+
+.forecast-table__unit,
 .forecast-table__second {
   display: block;
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
+}
+
+:is(.forecast-table__unit, .forecast-table__conditions) {
+  font-weight: var(--font-weight-regular);
 }
 
 @media (min-width: 48rem) {

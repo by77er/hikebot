@@ -1,13 +1,14 @@
 /**
  * The shell of every page: the document, its head with the Cairn
- * stylesheet and the preloaded typeface, a skip link to the main content,
+ * stylesheet, the preloaded typeface and the press script (pressed and busy
+ * states, "States" in docs/design-system.md; pages work without it), a skip link to the main content,
  * the app header (brand mark, then room for the server and navigation, and
  * the signed-in user's menu with Sign out), main and footer landmarks.
  * Pages render their content as its children. "Page shell" in
  * docs/design-system.md describes it.
  */
 import type { ComponentChildren } from "preact";
-import { assetPath, FONT, STYLESHEET } from "./assets";
+import { assetPath, FONT, PRESS_SCRIPT, STYLESHEET } from "./assets";
 import { AppHeader, type HeaderUser } from "./components/app-header";
 
 export const PROJECT_URL = "https://github.com/by77er/hikebot";
@@ -54,6 +55,7 @@ export function Layout({
           crossorigin="anonymous"
         />
         <link rel="stylesheet" href={assetPath(STYLESHEET)} />
+        <script type="module" src={assetPath(PRESS_SCRIPT)} />
       </head>
       <body class={width === "overview" ? "shell shell--overview" : "shell"}>
         <a class="skip-link" href="#main">

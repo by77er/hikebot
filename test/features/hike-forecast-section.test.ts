@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { WebForecastHour } from "../../src/features/hike-forecast-section";
+import {
+  refreshText,
+  type WebForecastHour,
+} from "../../src/features/hike-forecast-section";
 import { hikeStart } from "../../src/polls/dates";
 import type { StoredForecast, Units } from "../../src/weather/forecast";
 import {
@@ -63,8 +66,16 @@ function row(hour: WebForecastHour): string {
   ].join(" ");
 }
 
+describe("refreshText", () => {
+  it("says how often the forecast is fetched again, in the content rules' words", () => {
+    expect(refreshText(HOUR)).toBe("every hour");
+    expect(refreshText(2 * HOUR)).toBe("every 2 h");
+    expect(refreshText(30 * 60_000)).toBe("every 30 min");
+  });
+});
+
 describe("the web view's forecast of the planned hike", () => {
-  it("has the thread's hours of a dry day in °F, inches and mph, with the sun's times and the updated time", async () => {
+  it("has the thread's hours of a dry day in °F, inches and mph, with the sun's times and when it was fetched", async () => {
     const forecast = stored(joshuaTree, "imperial", "2026-11-22 09:00");
     const view = await forecastView("2026-11-22 09:00", forecast);
     if (view?.kind !== "forecast") throw new Error("no forecast");
@@ -86,12 +97,44 @@ describe("the web view's forecast of the planned hike", () => {
       sunrise: "06:22",
       sunset: "16:36",
       notes: [],
-      updatedAt: forecast.updatedAt,
-      // 26 hours before 09:00 on the 22nd.
-      updatedLabel: "Sat, 21 Nov 2026 · 07:00",
+      fetchedAt: forecast.fetchedAt,
+      refresh: "every hour",
+      stale: false,
+      partial: null,
     });
     expect(view.hours[0]?.code).toBe(0);
     expect(structuredClone(view)).toEqual(view);
+  });
+
+  it("is stale once it has not been fetched for over three hours, the job trying every hour", async () => {
+    const now = Date.UTC(2026, 10, 20, 12);
+    const forecast = stored(joshuaTree, "imperial", "2026-11-22 09:00");
+    const fresh = await forecastView("2026-11-22 09:00", {
+      ...forecast,
+      fetchedAt: now - 3 * HOUR,
+    });
+    expect(fresh).toMatchObject({ kind: "forecast", stale: false });
+    const stale = await forecastView("2026-11-22 09:00", {
+      ...forecast,
+      fetchedAt: now - 3 * HOUR - 60_000,
+    });
+    expect(stale).toMatchObject({ kind: "forecast", stale: true });
+  });
+
+  it("names the hours of a forecast that does not reach the end of the thread's hours yet", async () => {
+    const forecast = stored(joshuaTree, "imperial", "2026-11-22 09:00");
+    const start = hikeStart("2026-11-22 09:00", LA);
+    const view = await forecastView("2026-11-22 09:00", {
+      ...forecast,
+      forecast: {
+        ...forecast.forecast,
+        // Nothing after 11:00, as when the hike is 16 days ahead.
+        hours: forecast.forecast.hours.filter((h) => h.at <= start + 2 * HOUR),
+      },
+    });
+    if (view?.kind !== "forecast") throw new Error("no forecast");
+    expect(view.hours.at(-1)?.time).toBe("11:00");
+    expect(view.partial).toEqual({ from: "07:00", to: "11:00" });
   });
 
   it("has a wet and windy day in °C, mm and km/h, with the freezing level the thread notes", async () => {

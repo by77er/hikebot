@@ -271,8 +271,10 @@ type SeedHour = [number, number, number, number, number, number, number];
 /**
  * Stores, with the newest round, the forecast the weather job would have
  * fetched for Snow Lake on Sat, 15 Jun 2030 (11:00 in Los Angeles): `hours`
- * from 08:00, in `units`, updated on 14 June at 09:00, the freezing level
- * at `freezing` and the UV index at `uv`, and sets the server's units.
+ * from 08:00, in `units`, fetched at `fetched` (by default 14 minutes
+ * before the screenshots' frozen clock, so it reads "Checked 14 min ago"),
+ * the freezing level at `freezing` and the UV index at `uv`, and sets the
+ * server's units.
  */
 async function storeForecast(
   e2e: E2E,
@@ -280,6 +282,7 @@ async function storeForecast(
   units: "imperial" | "metric",
   hours: SeedHour[],
   levels: { elevation: number; freezing: number; uv: (i: number) => number },
+  fetched = Date.UTC(2030, 5, 1, 8, 46),
 ): Promise<void> {
   // 08:00 PDT is 15:00 UTC.
   const first = Date.UTC(2030, 5, 15, 15);
@@ -310,7 +313,7 @@ async function storeForecast(
       },
     ],
   };
-  const updated = Date.UTC(2030, 5, 14, 16);
+  const updated = fetched;
   const sql = await storage(e2e, g);
   await sql.exec(
     `UPDATE rounds SET forecast = ?, forecast_fetched_at = ?,
@@ -375,6 +378,36 @@ const hikeStorm: ServerSteps = async (play, g, e2e) => {
     elevation: 1223,
     freezing: 1450,
     uv: () => 1,
+  });
+};
+
+/**
+ * The fair forecast, last fetched on 1 Jan 2026: before the Worker's own
+ * clock by more than the three hours after which fetching it again counts
+ * as failing, so the page warns that it could not fetch a newer one.
+ */
+const hikeForecastStale: ServerSteps = async (play, g, e2e) => {
+  await hikePinned(play, g, e2e);
+  await storeForecast(
+    e2e,
+    g,
+    "imperial",
+    FAIR,
+    { elevation: 4012, freezing: 12_500, uv: () => 4 },
+    Date.UTC(2026, 0, 1, 12),
+  );
+};
+
+/**
+ * The fair forecast as it is 16 days ahead: Open-Meteo's hours end at
+ * 12:00, before the hike's hours do.
+ */
+const hikeForecastPartial: ServerSteps = async (play, g, e2e) => {
+  await hikePinned(play, g, e2e);
+  await storeForecast(e2e, g, "imperial", FAIR.slice(0, 5), {
+    elevation: 4012,
+    freezing: 12_500,
+    uv: () => 4,
   });
 };
 
@@ -683,6 +716,13 @@ export const SEEDS: Record<string, Seed> = {
   "server-location-decided": server(locationDecided),
   "server-location-decided-admin": server(locationDecided, "admin"),
   "server-location-vote-admin": server(locationVote(), "admin"),
+  "server-location-vote-empty": server((play, g) =>
+    play.seedRound(g, {
+      status: "location_voting",
+      startedAt: STARTED,
+      locations: [],
+    }),
+  ),
   "server-date-vote": server(scheduledDateVote),
   "server-date-vote-admin": server(scheduledDateVote, "admin"),
   /** The date vote open for its owner, and Discord refusing the forum. */
@@ -697,6 +737,8 @@ export const SEEDS: Record<string, Seed> = {
   "server-hike-no-forecast": server(hikePinned),
   "server-hike-forecast": server(hikeForecast),
   "server-hike-forecast-rain": server(hikeStorm),
+  "server-hike-forecast-stale": server(hikeForecastStale),
+  "server-hike-forecast-partial": server(hikeForecastPartial),
   "server-map-pin": server(hikeForecast, "admin"),
   "server-location-vote-located": server(locationVoteLocated),
   "server-schedule": server(scheduleOn),

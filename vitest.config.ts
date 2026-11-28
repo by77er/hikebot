@@ -17,6 +17,10 @@ const mapSample = readFileSync(
 
 export default defineConfig({
   test: {
+    // Unpacks the screenshots' Chromium once, before any project starts:
+    // the browser tests of the e2e and node projects run in parallel
+    // processes and would otherwise race to unpack it (spawn ETXTBSY).
+    globalSetup: ["./test/screenshots/chromium-setup.ts"],
     projects: [
       {
         plugins: [

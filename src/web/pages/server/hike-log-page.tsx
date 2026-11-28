@@ -26,7 +26,6 @@ export function HikeLogPage({
         <div class="stack">
           <BackLink href={`/g/${server.id}`}>Back to {server.name}</BackLink>
           <div class="page-heading">
-            <p class="page-heading__eyebrow">{server.name}</p>
             <h1>Hike log</h1>
             <p class="page-heading__lead">
               {log.pages > 1

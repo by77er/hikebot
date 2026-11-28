@@ -5,7 +5,7 @@
  * shortened with an ellipsis; its panel opens below the header as an
  * overlay, at the end of the content column. On a phone the server's name
  * takes a row of its own under the brand. States of the menu's button:
- * :hover, :active, :focus-visible (from the base layer), open, and
+ * :hover, :active or data-pressed, :focus-visible (from the base layer), open, and
  * data-preview for the style guide.
  */
 
@@ -36,9 +36,6 @@
   font-weight: var(--font-weight-semibold);
   list-style: none;
   cursor: pointer;
-  transition-property: background-color, border-color;
-  transition-duration: var(--duration-quick);
-  transition-timing-function: var(--easing-standard);
 }
 
 .app-header__summary::-webkit-details-marker {
@@ -50,7 +47,7 @@
   background: var(--color-surface-subtle);
 }
 
-.app-header__summary:where(:active, [data-preview="active"]) {
+.app-header__summary:where(:active, [data-pressed], [data-preview="active"]) {
   border-color: var(--color-border-strong);
 }
 

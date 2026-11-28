@@ -16,6 +16,8 @@ export const VERSIONED_PREFIX = "/assets/v/";
 
 export const STYLESHEET = "cairn/cairn.css";
 export const FONT = "fonts/public-sans-5.3.0-latin-wght-normal.woff2";
+/** The press and busy states' script, loaded by every page as a module. */
+export const PRESS_SCRIPT = "cairn/press.mjs";
 
 export const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 

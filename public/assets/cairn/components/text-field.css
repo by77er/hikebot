@@ -12,9 +12,6 @@
   border-radius: var(--radius-control);
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
-  transition-property: border-color, background-color;
-  transition-duration: var(--duration-quick);
-  transition-timing-function: var(--easing-standard);
 }
 
 .input:where(:hover, [data-preview="hover"]) {

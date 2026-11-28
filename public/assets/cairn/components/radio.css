@@ -10,9 +10,6 @@
   border: var(--border-width-strong) solid var(--color-border-strong);
   border-radius: 50%;
   cursor: pointer;
-  transition-property: border-color;
-  transition-duration: var(--duration-quick);
-  transition-timing-function: var(--easing-standard);
 }
 
 .radio::before {
@@ -29,6 +26,16 @@
   ),
 .choice__item:hover .radio:not(:checked, :disabled, [aria-invalid="true"]) {
   border-color: var(--color-text);
+}
+
+.radio:not(:checked, :disabled):where(
+    :active,
+    [data-pressed],
+    [data-preview="active"]
+  ),
+.choice__item:has(> .choice__label:where(:active, [data-pressed]))
+  .radio:not(:checked, :disabled) {
+  border-color: var(--color-primary);
 }
 
 .radio:checked {

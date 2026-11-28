@@ -1,7 +1,7 @@
 /*
  * Tally row: one option of a vote. The label and the count share the
- * first line (the count in tabular figures, so a column of counts lines
- * up); the bar of votes runs the full width under them; the marks, the
+ * first line (the count in tabular figures, its word as wide as "votes",
+ * so the counts line up); the bar runs the full width under them; the marks, the
  * tie-break note, the details and the proposer follow in small text. In a
  * votable row the label is a checkbox's label as tall as a tap target.
  */
@@ -33,6 +33,11 @@
   font-size: var(--font-size-small);
   line-height: var(--line-height-body);
   white-space: nowrap;
+}
+
+.tally-row__unit {
+  display: inline-block;
+  min-width: var(--width-vote-word);
 }
 
 .tally-row__number {

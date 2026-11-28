@@ -92,6 +92,11 @@ export type WebViewResult =
   | { kind: "view"; view: WebView };
 
 export interface WebView {
+  /**
+   * When the read was made, in milliseconds since the epoch: the instant
+   * the tally was counted, and what the page's ages are measured from.
+   */
+  now: number;
   server: WebServerSection;
   viewer: WebViewerSection;
   settings: WebSettingsSection;
@@ -171,6 +176,7 @@ export interface WebViewSource {
 /** Builds the view, one section per function. */
 export async function buildWebView(source: WebViewSource): Promise<WebView> {
   return {
+    now: source.now,
     server: serverSection(source),
     viewer: viewerSection(source),
     settings: settingsSection(source),

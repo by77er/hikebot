@@ -221,3 +221,15 @@ export function stylesheetLinks(html: string): string[] {
     .filter((tag) => /\brel="stylesheet"/.test(tag))
     .map((tag) => /\bhref="([^"]*)"/.exec(tag)?.[1] ?? "");
 }
+
+/**
+ * `html` without Cairn's own modules (the press script every page loads,
+ * and the ages script of a page with an age), so a check for any other
+ * script, such as one injected through a member's text, finds only that.
+ */
+export function withoutCairnScripts(html: string): string {
+  return html.replace(
+    /<script type="module" src="\/assets\/v\/[\w-]+\/cairn\/(press|ages)\.mjs"><\/script>/g,
+    "",
+  );
+}

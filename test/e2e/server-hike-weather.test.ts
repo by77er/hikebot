@@ -14,7 +14,7 @@ import {
   idStarting,
   type TestGuild,
 } from "./harness/rounds";
-import { formFields, PageClient } from "./harness/web";
+import { formFields, PageClient, withoutCairnScripts } from "./harness/web";
 import { useE2E } from "./harness/worker";
 
 const e2e = useE2E();
@@ -206,17 +206,24 @@ describe("the server's page about a planned hike", () => {
     expect(text).toContain("© OpenStreetMap contributors");
 
     // The forecast: the thread's 13:00 row, its sun times and its credit.
-    expect(text).toContain(
-      "13:00 Overcast 50°F feels 46° 20% 0.01 in 6 mph gusts 12",
-    );
+    // The units are in the column heads; the cells are bare figures.
+    for (const head of [
+      "Temperature, °F",
+      "Chance of rain or snow, %",
+      "Rain or snow, in",
+      "Wind, mph",
+    ]) {
+      expect(text).toContain(head);
+    }
+    expect(text).toContain("13:00 Overcast 50 feels 46 20 0.01 6 gusts 12");
     expect(text).toContain("times in America/Los_Angeles");
     const sun = /Sunrise (\d\d:\d\d) · Sunset (\d\d:\d\d)/.exec(thread);
     expect(sun).not.toBeNull();
     expect(text).toContain(
       `Sunrise ${sun?.[1] ?? ""} Sunset ${sun?.[2] ?? ""}`,
     );
-    expect(text).toContain(
-      "checked every hour · Weather data by Open-Meteo.com",
+    expect(text).toMatch(
+      /Checked (just now|\d+ s ago|\d+ min ago) · Weather data by Open-Meteo\.com/,
     );
     expect(page.body).toContain('href="https://open-meteo.com/"');
     // Every hour the thread shows is a row of the page's table.
@@ -319,7 +326,7 @@ describe("the server's page about a planned hike", () => {
       "The map pin of Somewhere Nice is set to 46.78591, -121.73532.",
     );
     expect(after).toContain("46.78591, -121.73532");
-    expect(after).toContain("13:00 Overcast 50°F");
+    expect(after).toContain("13:00 Overcast 50 feels 46");
   });
 
   it("loads nothing from another site, with the content security policy unchanged", async () => {
@@ -350,7 +357,8 @@ describe("the server's page about a planned hike", () => {
           `${path} loads ${url.href}`,
         ).toBe(true);
       }
-      expect(page.body).not.toMatch(/<(script|iframe)\b/);
+      // Only Cairn's own modules: the press and age scripts.
+      expect(withoutCairnScripts(page.body)).not.toMatch(/<(script|iframe)\b/);
       expect(page.body).toContain("openstreetmap.org");
     }
   });
@@ -365,8 +373,8 @@ describe("the server's page", () => {
     e2e.discord.addMember(g.guildId, member);
     const client = await signIn(member, g);
     const text = textOf((await client.get(`/g/${g.guildId}`)).body);
-    expect(text).toContain(
-      "Schedule The next location vote opens Wednesday 09:00.",
+    expect(text).toMatch(
+      /Schedule The next location vote opens Wed, \d{1,2} [A-Z][a-z]{2} \d{4} · 09:00\./,
     );
     expect(text).toContain(
       "The bot opens and closes the votes on Wednesdays at 09:00 (America/Los_Angeles)",
@@ -390,6 +398,9 @@ describe("the server's page", () => {
     expect(vote.body).toContain(
       'href="https://www.openstreetmap.org/?mlat=46.78591&amp;mlon=-121.73532#map=13/46.78591/-121.73532"',
     );
-    expect(textOf(vote.body)).toContain("The location vote closes Wednesday");
+    // In the vote's own card, as the bot writes times.
+    expect(textOf(vote.body)).toMatch(
+      /Open The location vote closes Wed, \d{1,2} [A-Z][a-z]{2} \d{4} · 09:00/,
+    );
   });
 });

@@ -10,9 +10,6 @@
   border: var(--border-width-strong) solid var(--color-border-strong);
   border-radius: var(--radius-blaze);
   cursor: pointer;
-  transition-property: background-color, border-color;
-  transition-duration: var(--duration-quick);
-  transition-timing-function: var(--easing-standard);
 }
 
 .checkbox::before {
@@ -31,6 +28,16 @@
   ),
 .choice__item:hover .checkbox:not(:checked, :disabled, [aria-invalid="true"]) {
   border-color: var(--color-text);
+}
+
+.checkbox:not(:checked, :disabled):where(
+    :active,
+    [data-pressed],
+    [data-preview="active"]
+  ),
+.choice__item:has(> .choice__label:where(:active, [data-pressed]))
+  .checkbox:not(:checked, :disabled) {
+  border-color: var(--color-primary);
 }
 
 .checkbox:checked {

@@ -43,7 +43,6 @@ export function MapPinPage({
         )}
         <BackLink href={server}>Back to {view.server.name}</BackLink>
         <div class="page-heading">
-          <p class="page-heading__eyebrow">Planned hike</p>
           <h1>Set map pin</h1>
           <p class="page-heading__lead">
             Where {hike?.location.label ?? "the hike"} is: its map links, map

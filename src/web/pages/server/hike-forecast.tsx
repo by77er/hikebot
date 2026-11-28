@@ -1,12 +1,18 @@
 /**
  * The server's page, after where the planned hike is: its weather. The
  * hourly forecast the bot stored for the hike, as the hike thread shows
- * it, in the server's units and time zone: a row per hour, then sunrise and
- * sunset, the thread's notes (freezing level, UV index, snowfall), when it
- * was updated and Open-Meteo's credit. Without a forecast, why, in the
- * thread's words. Nothing while no hike is planned.
+ * it, in the server's units and time zone: a row per hour, which hours it
+ * does not reach yet (partial), then sunrise and sunset, the thread's notes
+ * (freezing level, UV index, snowfall), when it was last fetched
+ * ("Checked 14 min ago"; the thread's "Updated" is when it last changed,
+ * another fact) and Open-Meteo's
+ * credit. When fetching it again has been failing, a warning says so above
+ * it (error). Without a forecast, why, in the thread's words. Nothing
+ * while no hike is planned.
  */
 import type { WebView } from "../../../guild/web-view";
+import { Age } from "../../components/age";
+import { Banner } from "../../components/banner";
 import { ForecastTable } from "../../components/forecast-table";
 import { SunriseIcon, SunsetIcon } from "../../components/weather-icons";
 
@@ -24,11 +30,28 @@ export function HikeForecast({ view }: { view: WebView }) {
         <p>{forecast.text}</p>
       ) : (
         <>
+          {forecast.stale && (
+            <Banner
+              tone="warning"
+              title="The bot could not fetch a newer forecast."
+            >
+              <p>
+                It tries again {forecast.refresh}; below is the last forecast it
+                fetched.
+              </p>
+            </Banner>
+          )}
           <ForecastTable
             caption={`Hourly forecast${day ? ` for ${day}` : ""}, times in ${forecast.timeZone}`}
             hours={forecast.hours}
             units={forecast.labels}
           />
+          {forecast.partial && (
+            <p>
+              Forecast for {forecast.partial.from} to {forecast.partial.to}{" "}
+              only; later hours are not out yet.
+            </p>
+          )}
           {(forecast.sunrise !== null || forecast.sunset !== null) && (
             <p class="cluster">
               {forecast.sunrise !== null && (
@@ -51,9 +74,13 @@ export function HikeForecast({ view }: { view: WebView }) {
             </ul>
           )}
           <p class="u-small u-muted">
-            Updated {forecast.updatedLabel} ({forecast.timeZone}) · checked
-            every hour ·{" "}
-            <a href={OPEN_METEO_URL}>Weather data by Open-Meteo.com</a>
+            Checked{" "}
+            <Age
+              at={forecast.fetchedAt}
+              now={view.now}
+              timeZone={forecast.timeZone}
+            />{" "}
+            · <a href={OPEN_METEO_URL}>Weather data by Open-Meteo.com</a>
           </p>
         </>
       )}

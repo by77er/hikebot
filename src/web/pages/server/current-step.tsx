@@ -2,9 +2,9 @@
  * The server's page, second section: the card of the step the round is at.
  * An open vote shows its options as a form to vote with (`VoteForm`), the
  * viewer's own votes ticked, and a link to the poll's message in Discord;
- * a decided location waiting for its date vote says so. With no round and no planned hike, an
- * empty state says what happens next, and tells an admin where to start a
- * vote. With no round and a planned hike, the planned hike's section is the
+ * a decided location waiting for its date vote says so, and when the open
+ * vote closes. With no round and no planned hike, an empty state says what
+ * happens next; an admin starts the vote from the Admin card below it. With no round and a planned hike, the planned hike's section is the
  * page's news and this one shows nothing.
  */
 import type { WebRoundSection } from "../../../features/round-section";
@@ -15,6 +15,7 @@ import { EmptyState } from "../../components/empty-state";
 import { DiscordIcon } from "../../components/icons";
 import { StatusPill } from "../../components/status-pill";
 import type { PageForms } from "./forms";
+import { closingNext, nextSentence } from "./schedule-line";
 import { VoteForm } from "./vote-form";
 
 export function CurrentStep({
@@ -38,7 +39,7 @@ function NoRound({ view }: { view: WebView }) {
   return (
     <EmptyState title="No hike is being planned">
       {view.viewer.isAdmin
-        ? "The next hike starts with a location vote. You are an admin: start one in Discord with /hike admin, then Start location vote."
+        ? "The next hike starts with a location vote."
         : "The next hike starts with a location vote. When an admin starts one, it shows here and in Discord."}
     </EmptyState>
   );
@@ -63,12 +64,25 @@ function LocationDecided({
         {round.location?.details && <p>{round.location.details}</p>}
         <p class="u-muted">
           {isAdmin
-            ? "The date vote is next. You are an admin: start it in Discord with /hike admin, then Start date vote."
+            ? "The date vote is next."
             : "The date vote is next. When an admin starts it, it shows here and in Discord."}
         </p>
       </div>
     </Card>
   );
+}
+
+/**
+ * When the open vote closes, as the schedule says it ("The location vote
+ * closes Wed, 5 Jun 2030 · 09:00, and the date vote opens."), or that an
+ * admin closes it.
+ */
+function closingText(view: WebView, round: WebRoundSection): string {
+  const next = closingNext(view);
+  if (next !== null) return nextSentence(next);
+  return round.step === "date_vote_open"
+    ? "The date vote closes when an admin closes it."
+    : "The location vote closes when an admin closes it.";
 }
 
 function OpenVote({
@@ -95,6 +109,7 @@ function OpenVote({
               Where: <strong>{round.location.label}</strong>
             </p>
           )}
+          <p>{closingText(view, round)}</p>
           {isDate && (
             <p class="u-muted">Times are in {view.settings.timeZone}.</p>
           )}

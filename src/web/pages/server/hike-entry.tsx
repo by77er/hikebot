@@ -24,7 +24,12 @@ export function HikeEntry({
     <HikeCard
       size="compact"
       location={entry.location.label}
-      start={{ date, time, timeZone: view.settings.timeZone }}
+      start={{
+        date,
+        time,
+        timeZone: view.settings.timeZone,
+        label: entry.date.label,
+      }}
       when={entry.roundId === view.plannedHike?.roundId ? "upcoming" : "past"}
       links={{ thread: entry.threadUrl, event: entry.eventUrl }}
       headingLevel={headingLevel}

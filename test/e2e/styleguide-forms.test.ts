@@ -5,7 +5,7 @@
  * and a confirmation page's form posts and is answered with a redirect.
  */
 import { describe, expect, it } from "vitest";
-import { formFields, PageClient } from "./harness/web";
+import { formFields, PageClient, withoutCairnScripts } from "./harness/web";
 import { useE2E } from "./harness/worker";
 
 const e2e = useE2E();
@@ -42,7 +42,7 @@ describe("the style guide's forms without JavaScript", () => {
     expect(back.body).toContain('value="Lake Serene"');
     expect(back.body).toContain(">Bring a &lt;b>headlamp&lt;/b></textarea>");
     expect(back.body).toContain('value="https://maps.app.goo.gl/abc"');
-    expect(back.body).not.toMatch(/<script/i);
+    expect(withoutCairnScripts(back.body)).not.toMatch(/<script/i);
   });
 
   it("add a good proposal and say so", async () => {

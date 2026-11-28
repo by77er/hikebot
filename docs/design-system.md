@@ -150,19 +150,19 @@ page at each size, scheme, pointer and zoom). A rule whose automated check
 is not in the repository is measured by hand in the review, as its middle
 column says, and the review says so.
 
-| Rule                                                       | Measured in a review by                                                                                                                                                                                                          | Automated check it belongs in                                        |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Text, controls and the focus ring meet the contrast floors | `test/web/contrast.test.ts`, in `npm test`, for every pairing in "Allowed pairings" in both schemes.                                                                                                                             | That test.                                                           |
-| Only tokens in component and page CSS                      | `test/web/token-use.test.ts`, in `npm test`.                                                                                                                                                                                     | That test.                                                           |
-| No colour is eased                                         | Reading every `transition` in the changed stylesheets: only `opacity` or `transform`, always with a property list.                                                                                                               | An Undercurrent rule on the stylesheets, and a page audit.           |
-| A press shows at once, with a finger as with a mouse       | Pressing each control with touch emulation at 390px: the pressed fill shows while the finger is down.                                                                                                                            | A page audit.                                                        |
-| A submit that takes time shows it is busy                  | Submitting each form on a throttled network: the button holds its pressed fill and `aria-busy` until the page answers.                                                                                                           | A page audit.                                                        |
-| The main path is not a link inside a sentence              | `npm run screenshots:audit`, check `inline-main-path`: the primary action (`.button--primary` or `[data-main-path]`) is not a link inside a sentence; and checking that the thing the question sentence is about is that action. | The page audit (`test/screenshots/audit.ts`).                        |
-| Numbers people compare are tabular and right-aligned       | Reading the component's CSS for `tabular-nums` and the screenshot for the alignment.                                                                                                                                             | An Undercurrent rule on the component stylesheets, and a page audit. |
-| Every target is at least 44 by 44px, with no overlap       | `npm run screenshots:audit`, checks `target` (at 390px, fine and coarse pointer) and `overlap`.                                                                                                                                  | The page audit.                                                      |
-| Nothing scrolls sideways and no word is cut                | `npm run screenshots:audit`, checks `overflow` and `cut`, at 320px, 390px (fine and coarse pointer), 1280px and at 200% zoom.                                                                                                    | The page audit.                                                      |
-| Layout shift stays under 0.05                              | `npm run screenshots:audit`, check `shift`, loading each page in every configuration.                                                                                                                                            | The page audit.                                                      |
-| Ages and durations are written one way                     | Reading the page's words against "Content rules".                                                                                                                                                                                | An Undercurrent rule on `src/web/` ("0 s ago", minutes as "m").      |
+| Rule                                                       | Measured in a review by                                                                                                                                                                                                                                                                              | Automated check it belongs in                                         |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Text, controls and the focus ring meet the contrast floors | `test/web/contrast.test.ts`, in `npm test`, for every pairing in "Allowed pairings" in both schemes.                                                                                                                                                                                                 | That test.                                                            |
+| Only tokens in component and page CSS                      | `test/web/token-use.test.ts`, in `npm test`.                                                                                                                                                                                                                                                         | That test.                                                            |
+| No colour is eased                                         | `test/web/press-states.test.ts`, in `npm test`: every `transition` in Cairn's stylesheets names only `opacity` or `transform`, with a property list; `test/e2e/press-browser.test.ts` reads every element's computed transition on the server's page and the style guide, with a mouse and a finger. | That test, an Undercurrent rule on the stylesheets, and a page audit. |
+| A press shows at once, with a finger as with a mouse       | `test/web/press-states.test.ts`: every `:active` has its `[data-pressed]` twin; `test/e2e/press-browser.test.ts`: a finger on "Save votes" shows the pressed fill before it lifts. Other controls by hand, with touch emulation at 390px.                                                            | Those tests, and a page audit.                                        |
+| A submit that takes time shows it is busy                  | `test/e2e/press-browser.test.ts`: after the tap, "Save votes" has `aria-busy` and the pressed fill, and a second press sends nothing. Other forms by hand, on a throttled network.                                                                                                                   | That test, and a page audit.                                          |
+| The main path is not a link inside a sentence              | `npm run screenshots:audit`, check `inline-main-path`: the primary action (`.button--primary` or `[data-main-path]`) is not a link inside a sentence; and checking that the thing the question sentence is about is that action.                                                                     | The page audit (`test/screenshots/audit.ts`).                         |
+| Numbers people compare are tabular and right-aligned       | Reading the component's CSS for `tabular-nums` and the screenshot for the alignment.                                                                                                                                                                                                                 | An Undercurrent rule on the component stylesheets, and a page audit.  |
+| Every target is at least 44 by 44px, with no overlap       | `npm run screenshots:audit`, checks `target` (at 390px, fine and coarse pointer) and `overlap`.                                                                                                                                                                                                      | The page audit.                                                       |
+| Nothing scrolls sideways and no word is cut                | `npm run screenshots:audit`, checks `overflow` and `cut`, at 320px, 390px (fine and coarse pointer), 1280px and at 200% zoom.                                                                                                                                                                        | The page audit.                                                       |
+| Layout shift stays under 0.05                              | `npm run screenshots:audit`, check `shift`, loading each page in every configuration.                                                                                                                                                                                                                | The page audit.                                                       |
+| Ages and durations are written one way                     | Reading the page's words against "Content rules".                                                                                                                                                                                                                                                    | An Undercurrent rule on `src/web/` ("0 s ago", minutes as "m").       |
 
 ### What Cairn did not take from viz
 
@@ -452,6 +452,7 @@ one is a finding in the review of a change to it.
 | `--icon-size-small`               | 16px                           | Icons next to small text.                                                                                                        |
 | `--blaze-width`, `--blaze-height` | 8px by 18px                    | The blaze.                                                                                                                       |
 | `--width-date-leaf`               | 64px                           | The hike card's calendar leaf: room for a two-digit day at h2 size and "Wed" or "Sep" in small semibold, with space either side. |
+| `--width-vote-word`               | 40px                           | The word after a tally's count ("votes" in small text), so the counts of "1 vote" and "4 votes" line up on the right.            |
 | `--avatar-size`                   | 48px                           | An avatar or server icon in a list, such as a server tile.                                                                       |
 | `--avatar-size-small`             | 32px                           | The user's avatar in the header.                                                                                                 |
 | `--width-tile-min`                | 288px                          | The narrowest a server tile gets in its grid before it wraps.                                                                    |
@@ -520,7 +521,9 @@ Block, element, modifier, in lower case with hyphens:
   `--variant` (`.button--primary`).
 - **States** come from the platform, not classes: `:hover`, `:active`,
   `:focus-visible`, `:disabled`, `[aria-disabled="true"]`,
-  `[aria-current="page"]`; "States" adds the press on touch and busy. `[data-preview="hover|active|focus"]` shows a
+  `[aria-current="page"]`, and the two the press script sets ("States"):
+  `[data-pressed]` (the press, from the touch on) and `[aria-busy="true"]`
+  (a submit on its way). `[data-preview="hover|active|focus"]` shows a
   state on the style guide only.
 - **Layout** classes name the arrangement: `.shell` and its parts,
   `.stack`, `.cluster`, `.grid`, `.page-heading`, `.list-reset`.
@@ -533,8 +536,9 @@ Block, element, modifier, in lower case with hyphens:
 
 `Layout` in `src/web/layout.tsx` is the document every page renders into:
 
-- the `<head>`: language, viewport, title, the preloaded font and the
-  stylesheet;
+- the `<head>`: language, viewport, title, the preloaded font, the
+  stylesheet and the press script (`press.mjs`, a module, so it runs after
+  the page is parsed; pages work without it, "States");
 - a **skip link**, the first focusable element, hidden until focused, to
   `<main id="main" tabindex="-1">`;
 - the **header**, the App header component: the brand mark (blaze and
@@ -550,8 +554,9 @@ Content placed straight into `main` gets `--space-4` between blocks; pages
 normally lay themselves out with `.stack`. A page that only says what
 happened and offers one way on (the 404 and 405 pages, the sign-in
 outcomes, a refused form) is a `MessagePage` (`src/web/pages/message.tsx`):
-an optional eyebrow such as "Error 404", the title, a lead sentence and one
-primary button.
+the title, a lead sentence and one primary button (an optional eyebrow
+only where the presence test keeps one; the error pages have none, as
+"Page not found" says what "Error 404" would).
 
 ## Components
 
@@ -560,6 +565,17 @@ its styles in `public/assets/cairn/components/`, its unit test in
 `test/web/components/` and its style guide section in
 `src/web/pages/styleguide/`, one file each. In alphabetical order:
 
+- **Age** (`age.tsx`): how old a piece of data on the page is, in the
+  words of "Content rules" ("just now", "14 min ago", "3 h ago", from a day
+  on "Thu, 3 Dec 2026 · 07:00"), after a verb the page writes ("Checked",
+  "Counted"). A `<time datetime>` holding the instant, written by the
+  server (`ageText` in `src/web/age.ts`) and rewritten every 15 seconds by
+  `public/assets/cairn/ages.mjs`, which it loads, so the words stay true
+  on a page left open; without JavaScript they stay as served. It has no
+  style of its own and no style guide section: its words depend on the
+  clock, so it is seen on the server page's screenshots (the forecast's
+  "Checked 14 min ago", the tally's "Counted just now"), where the clock
+  is frozen.
 - **App header** (`app-header.tsx`, its own style guide page): the band at
   the top of every page, which `Layout` renders. The brand mark links home;
   then the server a page is about (`context`; on a phone a row of its own
@@ -614,8 +630,9 @@ its styles in `public/assets/cairn/components/`, its unit test in
   (other actions), `quiet` (minor ones in a row), `danger` (destroys or
   cancels). A `<button>` (submitting its form by default, since pages work
   without JavaScript) or, with `href`, an `<a>` that looks the same. States:
-  default, hover, focus-visible, active and disabled (a disabled link drops
-  its `href`). An optional icon before or after the label; `block` fills
+  default, hover, focus-visible, pressed (`:active` or `[data-pressed]`),
+  busy (`aria-busy="true"`, the pressed fill, from a form's submit until the
+  next page) and disabled (a disabled link drops its `href`). An optional icon before or after the label; `block` fills
   the width.
 - **Card** (`card.tsx`): one thing on a surface of its own, named by its
   heading (level 2 to 4). With `href` the heading's link covers the card,
@@ -659,8 +676,9 @@ its styles in `public/assets/cairn/components/`, its unit test in
 - **Confirmation** (`confirmation.tsx`, `/styleguide/confirmation`): the
   page between a click and an action that cannot be undone, such as
   closing a vote or cancelling a round.
-  - _Anatomy:_ an optional eyebrow (what it is about: "Location vote ·
-    open"), the bot's question as the page's h1 ("Cancel this round?"),
+  - _Anatomy:_ an optional eyebrow (the server's name on the admin
+    controls' pages, as nothing else there names the server the action is
+    taken on), the bot's question as the page's h1 ("Cancel this round?"),
     what will happen in the bot's words with what it applies to (a
     definition list), "This cannot be undone." with a warning icon, then a
     form that posts (with the CSRF field and what identifies the thing) and
@@ -744,14 +762,17 @@ its styles in `public/assets/cairn/components/`, its unit test in
 - **Forecast table** (`forecast-table.tsx`, `/styleguide/forecast-table`):
   a hike's hourly forecast, as the hike thread gives it.
   - _Anatomy:_ a `table` named by its caption (the day and the time zone,
-    small and muted); columns Time, Conditions, Temp, Rain and Wind (read
-    out as Temperature and Rain or snow); one row per hour headed by its
-    time (a `<time>`). Each cell has a first figure with its unit and a
-    second that says what it is ("50°F" and "feels 46°", "20%" and
-    "0.01 in", "6 mph" and "gusts 12"), so a cell reads on its own; the
-    conditions are words with a weather icon beside them (decorative: the
-    words carry them). A value the forecast lacks is a dash, as in the
-    thread.
+    small and muted); columns Time (each hour, with its conditions in
+    words and a weather icon under it), then the numbers a member compares
+    down the column: Temp, Chance, Rain and Wind (read out as
+    "Temperature, °F", "Chance of rain or snow, %", "Rain or snow, in",
+    "Wind, mph"). Each number column says its unit once, in its head under
+    its name, and its cells are bare figures in tabular digits, aligned
+    right, head included ("Layout rules"); the temperature and wind cells
+    have a second figure that says what it is ("feels 46", "gusts 12").
+    One row per hour headed by its time (a `<time>`) and its conditions,
+    words with a weather icon beside them (decorative: the words carry
+    them). A value the forecast lacks is a dash, as in the thread.
   - _Variants:_ the server's units: °F, inches and mph, or °C, mm and
     km/h.
   - _States:_ none; it is not interactive.
@@ -814,7 +835,10 @@ its styles in `public/assets/cairn/components/`, its unit test in
     `past` a sandstone one with muted figures.
   - _States_: the links' own (hover, focus, active).
   - _Do_: pass the date and time as the server's wall clock with its time
-    zone, as the bot shows them. _Don't_: reformat the bot's date label,
+    zone, as the bot shows them, and the bot's label itself as
+    `start.label`, so the card says exactly what the hike's thread and
+    event say (a test compares the page with the thread's message from one
+    round). _Don't_: reformat the bot's date label,
     or leave a link in that has nowhere to go (leave it out).
 - **Icons** (`icon.tsx`, `icons.tsx`): stroke icons on a 24-unit grid with
   a 2-unit round stroke in the current text colour, at 20px or 16px. They
@@ -971,7 +995,9 @@ its styles in `public/assets/cairn/components/`, its unit test in
   - _Purpose_: the whole vote at a glance, up to 25 options, readable on a
     phone.
   - _Anatomy_: the bot's voter line ("No one has voted yet.", "1 member
-    has voted.", "14 members have voted."), then an `<ol>` named by `label`
+    has voted.", "14 members have voted."), with, given `counted`, when the
+    votes were counted ("Counted just now.", an Age, so a page left open
+    on a phone says how old its tally is), then an `<ol>` named by `label`
     ("Locations", "Dates") of tally rows divided by hairlines, not boxed,
     so the labels and counts form two columns the eye runs down.
   - _Variants_: open and closed (with the winner and the tie note on the
@@ -1125,16 +1151,20 @@ the switch-server link.
 - **Pressed** must show in the next frame, never eased, and outrank
   hover. Browsers apply `:active` to a finger only when it lifts, so on a
   phone a plain `:active` shows the press too late or not at all. Cairn's
-  answer is `[data-pressed]`: a small shared script, loaded by every page,
-  is to set it on the control under the finger from `pointerdown` and
-  clear it when the finger lifts, leaves, or the browser takes the
-  gesture as a scroll, and each `:active` rule needs a `[data-pressed]`
-  twin. Without JavaScript, `:active` alone is the press.
+  answer is `[data-pressed]`: a small shared script,
+  `public/assets/cairn/press.mjs`, loaded by every page as a module from
+  the Worker's own origin, sets it on the control under the finger or the
+  mouse from `pointerdown` and clears it when the pointer lifts
+  (`pointerup`), leaves the control (`pointerleave`, or a move off it), or
+  the browser takes the gesture as a scroll (`pointercancel`), and each
+  `:active` rule has a `[data-pressed]` twin in the same selector
+  (`:where(:active, [data-pressed], [data-preview="active"])`). Without
+  JavaScript, `:active` alone is the press.
 - **Busy** is the state a control needs when its work takes time: "Save
   votes" or "Propose location" posting over a trailhead's signal. From
-  the submit, the button that submitted is to carry `aria-busy="true"`
-  (set by the same script), hold its pressed fill without easing, and
-  ignore a second press, so a vote is not sent twice. Without JavaScript,
+  the submit, the button that submitted carries `aria-busy="true"`
+  (set by the same script), holds its pressed fill without easing, and
+  a second press of the form is ignored, so a vote is not sent twice. Without JavaScript,
   the browser's own loading indicator is the busy state.
 - **Disabled** says why near the control when the reason is not on the
   screen already ("Voting closed Sat, 5 Dec 2026 · 18:00").
@@ -1166,9 +1196,12 @@ each define:
 
 Headings, counts, captions, ages and accessible names come from what is
 drawn, not from a request in flight. A forecast or a tally says how old it
-is ("Updated 14 min ago"), and that age is the age of what is shown: the
+is ("Checked 14 min ago"), and that age is the age of what is shown: the
 time the forecast was fetched, or the votes were counted, not the time the
-page was served. The exact time goes in a `<time datetime>` beside it.
+page was served. The verb says which fact it is: the hike thread's
+"Updated" is when what the forecast shows last changed, so the page, which
+gives the age of the fetch, says "Checked", and the two never claim the
+same fact with different times. The exact time goes in a `<time datetime>` beside it.
 
 ## Forms
 
@@ -1265,8 +1298,8 @@ Cairn meets WCAG 2.2 AA:
   rules"). Tallies and tables use tabular figures.
 - **Ages and durations in one format.** An age is "just now" under 5 s,
   then "12 s ago", "14 min ago", "3 h ago", and beyond a day the date and
-  time as the bot writes them: "Updated 14 min ago" under the forecast,
-  "Updated Thu, 3 Dec 2026 · 07:00" two days later. Never "0 s ago";
+  time as the bot writes them: "Checked 14 min ago" under the forecast,
+  "Checked Thu, 3 Dec 2026 · 07:00" two days later. Never "0 s ago";
   minutes are "min", never "m". A duration has at most two parts, largest
   first: a hike of "5 h 30 min", a vote that "closes in 2 h 9 min".
 - **One event has one time everywhere.** The hike's start, a vote's
@@ -1473,7 +1506,7 @@ dark page, and members compare the web map with the picture in Discord.
 | What                                            | Budget | Now         |
 | ----------------------------------------------- | ------ | ----------- |
 | The font file                                   | 32 KB  | 27 KB       |
-| All stylesheets, each gzipped, together         | 26 KB  | about 25 KB |
+| All stylesheets, each gzipped, together         | 26 KB  | about 26 KB |
 | The contour pattern                             | 12 KB  | 9 KB        |
 | Everything a page loads from Cairn, transferred | 64 KB  | about 56 KB |
 

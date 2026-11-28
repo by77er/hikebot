@@ -191,7 +191,14 @@ function NewLocation({
           value={refusal?.map}
         />
         <FormActions>
-          <Button icon={MapPinIcon}>Propose location</Button>
+          <Button
+            icon={MapPinIcon}
+            variant={
+              view.round?.vote?.options.length === 0 ? "primary" : "secondary"
+            }
+          >
+            Propose location
+          </Button>
         </FormActions>
       </form>
     </section>

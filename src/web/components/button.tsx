@@ -5,6 +5,11 @@
  * the others, `quiet` for minor ones in a row of controls, `danger` for an
  * action that destroys or cancels something. The label is a verb, in the
  * bot's words ("Vote", "Propose a location", "Cancel round").
+ *
+ * Pressed comes from `:active`, and from `data-pressed`, which the page's
+ * press script sets from the touch on; busy is `aria-busy`, which the same
+ * script sets on the button that submitted a form until the next page
+ * loads. Both draw the pressed fill ("States" in docs/design-system.md).
  */
 import type { ComponentChildren } from "preact";
 import type { IconComponent } from "./icon";
@@ -34,6 +39,8 @@ export interface ButtonAsButtonProps extends CommonProps {
   type?: "submit" | "button" | "reset";
   name?: string;
   value?: string;
+  /** Style guide only: draws the busy state the press script sets. */
+  busy?: boolean;
 }
 
 export interface ButtonAsLinkProps extends CommonProps {
@@ -86,6 +93,7 @@ export function Button(props: ButtonProps) {
       name={props.name}
       value={props.value}
       disabled={disabled}
+      aria-busy={props.busy ? "true" : undefined}
       data-preview={preview}
     >
       {content}

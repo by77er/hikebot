@@ -218,7 +218,7 @@
     text-decoration-thickness: var(--border-width-strong);
   }
 
-  a:active {
+  a:where(:active, [data-pressed]) {
     color: var(--color-text);
   }
 
