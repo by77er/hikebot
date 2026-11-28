@@ -238,9 +238,11 @@ function hikebotAudit(options) {
   }
 
   // cut: text clipped by a box, cut with an ellipsis, or past the window.
+  // Each text keeps the part of the window its boxes let it show, `clip`.
   {
     const ellipsed = new Set();
-    for (const { text, element } of texts) {
+    for (const entry of texts) {
+      const { text, element } = entry;
       let left = 0;
       let right = viewportWidth;
       let top = -Infinity;
@@ -267,10 +269,8 @@ function hikebotAudit(options) {
             `cut with an ellipsis: ${px(box.scrollWidth)} of text in ${px(box.clientWidth)}`,
           );
         }
-        if (/auto|scroll/.test(boxStyle.overflowX)) {
-          scrolled = true; // reached by scrolling the box
-          break;
-        }
+        // Text a box scrolls to is not cut, but the box still clips it.
+        if (/auto|scroll/.test(boxStyle.overflowX)) scrolled = true;
         if (!clipsX && !clipsY) continue;
         const outer = box.getBoundingClientRect();
         const innerLeft =
@@ -285,6 +285,7 @@ function hikebotAudit(options) {
           bottom = Math.min(bottom, innerTop + box.clientHeight);
         }
       }
+      entry.clip = { left, right, top, bottom };
       if (scrolled) continue;
       for (const { word, boxes } of wordsOf(text)) {
         const cut = boxes.find(
@@ -349,15 +350,22 @@ function hikebotAudit(options) {
       element.closest(
         'a[href], button, input, select, textarea, summary, [role="button"], label',
       );
+    // Each word is hit-tested at the centre of the part of it its boxes
+    // let show; a word clipped away entirely is cut, not overlapping.
     const words = [];
-    for (const { text, element } of texts) {
+    for (const { text, element, clip } of texts) {
       for (const { word, boxes } of wordsOf(text)) {
         const box = boxes[0];
+        const left = Math.max(box.left, clip.left);
+        const right = Math.min(box.right, clip.right);
+        const top = Math.max(box.top, clip.top);
+        const bottom = Math.min(box.bottom, clip.bottom);
+        if (right - left < 2 || bottom - top < 2) continue;
         words.push({
           element,
           word,
-          x: box.left + box.width / 2 + scrollX,
-          y: box.top + box.height / 2 + scrollY,
+          x: (left + right) / 2 + scrollX,
+          y: (top + bottom) / 2 + scrollY,
         });
       }
     }
