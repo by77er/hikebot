@@ -23,10 +23,10 @@
  * code runs (turning JavaScript off in the browser would also stop the
  * script's own waits).
  *
- * Each page is also audited (`audit.ts`), in the same browser and on the
- * same frozen clock and seed data as its shots: in each shot's
- * configuration right after the shot, and in three configurations it only
- * measures and writes no PNG for. When any finding is not allowed in
+ * Each page is also audited (`audit.ts`) on the same Worker, frozen clock
+ * and seed data as its shots: in each shot's page right after the shot,
+ * and in three configurations it only measures and writes no PNG for,
+ * opened in browsers of their own. When any finding is not allowed in
  * `audit-allow.json`, or an allowance there matches no finding, the run
  * exits non-zero with the findings, page by page. With `--audit` it only
  * audits: it writes, and deletes, no PNG.
@@ -138,8 +138,21 @@ async function main(): Promise<void> {
   }
 
   const { E2ERun } = await import("../e2e/harness/start");
-  const browser = await launchBrowser();
-  let mapBrowser: Browser | undefined;
+  // Pages with a map are opened in a browser with WebGL, and the
+  // configurations that are only measured in browsers of their own, so the
+  // shots' browsers do exactly what they would without the audit: a page
+  // drawn at twice the scale in the shots' WebGL browser changed, by one
+  // level, how the next page's map was drawn.
+  const browsers = new Map<string, Browser>();
+  const browserFor = async (map: boolean, shot: boolean): Promise<Browser> => {
+    const key = `${map ? "map" : "page"} ${shot ? "shots" : "measures"}`;
+    let found = browsers.get(key);
+    if (!found) {
+      found = await launchBrowser({ webgl: map });
+      browsers.set(key, found);
+    }
+    return found;
+  };
   try {
     for (const page of list.pages) {
       // A fresh Worker per page, so one page's seed cannot show on another.
@@ -151,9 +164,8 @@ async function main(): Promise<void> {
         const submitted = page.submit ? await submit(e2e.url, page) : null;
         for (const config of AUDIT_CONFIGS) {
           const shoot = config.shot !== null && !auditOnly;
-          if (page.map) mapBrowser ??= await launchBrowser({ webgl: true });
           const { png, found } = await capture(
-            page.map && mapBrowser ? mapBrowser : browser,
+            await browserFor(page.map === true, config.shot !== null),
             e2e.url,
             page,
             config,
@@ -177,8 +189,7 @@ async function main(): Promise<void> {
       }
     }
   } finally {
-    await browser.close();
-    await mapBrowser?.close();
+    for (const open of browsers.values()) await open.close();
   }
 
   const { failing, stale } = applyAllowances(findings, allowances);
