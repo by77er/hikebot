@@ -76,7 +76,12 @@ export function ProposeDate({
               value={refusal?.time}
             />
             <FormActions>
-              <Button icon={CalendarPlusIcon}>Propose date</Button>
+              <Button
+                icon={CalendarPlusIcon}
+                variant={vote.options.length === 0 ? "primary" : "secondary"}
+              >
+                Propose date
+              </Button>
             </FormActions>
           </form>
         </div>

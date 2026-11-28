@@ -1503,7 +1503,7 @@ dark page, and members compare the web map with the picture in Discord.
 | What                                            | Budget | Now         |
 | ----------------------------------------------- | ------ | ----------- |
 | The font file                                   | 32 KB  | 27 KB       |
-| All stylesheets, each gzipped, together         | 26 KB  | about 25 KB |
+| All stylesheets, each gzipped, together         | 26 KB  | about 26 KB |
 | The contour pattern                             | 12 KB  | 9 KB        |
 | Everything a page loads from Cairn, transferred | 64 KB  | about 56 KB |
 

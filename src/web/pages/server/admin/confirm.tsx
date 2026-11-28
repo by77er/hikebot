@@ -43,8 +43,8 @@ function AppliesTo({ view }: { view: WebView }) {
           counted={{ at: view.now, timeZone: view.settings.timeZone }}
           empty={
             isDate
-              ? "No date has been proposed yet."
-              : "No location has been proposed yet."
+              ? "Nobody has proposed a date for this vote."
+              : "Nobody has proposed a location for this vote."
           }
         />
       )}

@@ -1,11 +1,9 @@
 /*
  * Button: the one way to trigger an action or a main navigation step.
  * Variants primary, secondary, quiet and danger; the same look on <button>
- * and <a>. States: :hover; pressed (:active, or data-pressed from
- * press.mjs, so a finger shows it at once); busy (aria-busy, from a form's
- * submit until the next page loads, with the pressed fill); :focus-visible
- * (from the base layer); :disabled or aria-disabled; data-preview shows a
- * state on the style guide. No state change is eased.
+ * and <a>. States: :hover; pressed (:active or data-pressed) and busy
+ * (aria-busy) with one fill, never eased; :focus-visible (base layer);
+ * :disabled or aria-disabled; data-preview for the style guide.
  */
 
 .button {

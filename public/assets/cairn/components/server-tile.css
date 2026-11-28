@@ -3,7 +3,7 @@
  * a card-like surface. The name wraps onto as many lines as it needs, never
  * cut short; a long word breaks rather than widening the tile. The
  * list is one column on a phone and a grid of tiles from the breakpoint.
- * States: :hover, pressed (:active or data-pressed), :focus-visible (from the base layer), and
+ * States: :hover, :active or data-pressed, :focus-visible (from the base layer), and
  * data-preview for the style guide.
  */
 

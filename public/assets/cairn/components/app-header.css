@@ -5,7 +5,7 @@
  * shortened with an ellipsis; its panel opens below the header as an
  * overlay, at the end of the content column. On a phone the server's name
  * takes a row of its own under the brand. States of the menu's button:
- * :hover, pressed (:active or data-pressed), :focus-visible (from the base layer), open, and
+ * :hover, :active or data-pressed, :focus-visible (from the base layer), open, and
  * data-preview for the style guide.
  */
 

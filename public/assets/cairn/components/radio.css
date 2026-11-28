@@ -28,7 +28,6 @@
   border-color: var(--color-text);
 }
 
-/* Pressed, from the touch on (press.mjs): the box takes the pine edge it will have once chosen. */
 .radio:not(:checked, :disabled):where(
     :active,
     [data-pressed],

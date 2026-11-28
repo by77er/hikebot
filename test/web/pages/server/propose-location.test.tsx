@@ -61,6 +61,19 @@ describe("ProposeLocation", () => {
     expect(html).not.toContain("button--primary");
   });
 
+  it("makes Propose location the page's primary action while the vote has no locations", () => {
+    const vote = { ...openVote("location", []), propose: locationProposal() };
+    const html = render(
+      <ProposeLocation
+        view={baseView({ round: round("location_vote_open", vote) })}
+        forms={FORMS}
+      />,
+    );
+    expect(html).toMatch(
+      /<button class="button button--primary"[^>]*>.*Propose location/s,
+    );
+  });
+
   it("offers past locations to suggest again, and names the resting ones in the bot's words", async () => {
     const html = render(
       <ProposeLocation
