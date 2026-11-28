@@ -48,6 +48,9 @@ checked contrast; a colour written anywhere else skips the dark scheme and
 the contrast test. Use the role's custom property (`var(--color-text-muted)`)
 instead, or add a role as "Add a token" in `src/web/AGENTS.md` says.
 `transparent` and `currentColor` are keywords, not colours, and are fine.
+Cairn's own files are checked by "Component and page CSS uses tokens only"
+in `public/assets/cairn/UNDERCURRENT.md`, which also covers sizes,
+durations and weights; this rule covers the rest of `public/`.
 
 ```css good
 .pill--decided {
@@ -64,7 +67,7 @@ instead, or add a role as "Add a token" in `src/web/AGENTS.md` says.
 ```
 
 ```sh
-case "$FILE" in ./assets/cairn/tokens.css) exit 0 ;; esac
+case "$FILE" in ./assets/cairn/*) exit 0 ;; esac
 perl -0777 -ne '
   my $text = $_;
   my $blank = sub { my $c = shift; $c =~ s/[^\n]/ /g; $c };
@@ -78,67 +81,6 @@ perl -0777 -ne '
     my $line = 1 + (substr($text, 0, $at) =~ tr/\n//);
     print "$ARGV:$line: a raw colour; use a colour token such as var(--color-text) from public/assets/cairn/tokens.css (\"Add a token\" in src/web/AGENTS.md)\n";
     $bad = 1;
-  }
-  exit $bad;
-' "$FILE"
-```
-
-## Layout and component CSS use tokens for sizes, durations and fonts
-only: *.css
-
-Space, sizes, radii, durations and the font come from the token scale in
-`public/assets/cairn/tokens.css`, so spacing stays on the 4px grid, type
-stays on its six steps and motion stops under reduced motion. In
-`public/assets/cairn/layout.css` and the files under
-`public/assets/cairn/components/` and `public/assets/cairn/pages/`, write
-`var(--space-3)`, `var(--radius-control)`, `var(--duration-quick)` and
-`var(--font-sans)` instead of a number with a unit or a font name; `0`,
-unitless numbers and percentages are fine, and so is the breakpoint in a
-`@media` condition. If no token fits, add one as "Add a token" in
-`src/web/AGENTS.md` says.
-
-```css good
-.pill {
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-pill);
-  font-size: var(--font-size-small);
-  transition-duration: var(--duration-quick);
-}
-```
-
-```css bad
-.pill {
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 13px;
-  transition-duration: 150ms;
-}
-```
-
-```sh
-case "$FILE" in
-  ./assets/cairn/layout.css|./assets/cairn/components/*|./assets/cairn/pages/*) ;;
-  *) exit 0 ;;
-esac
-perl -0777 -ne '
-  my $text = $_;
-  my $blank = sub { my $c = shift; $c =~ s/[^\n]/ /g; $c };
-  $text =~ s!/\*.*?\*/!$blank->($&)!gse;
-  $text =~ s!url\([^)]*\)!$blank->($&)!ge;
-  $text =~ s!\@media[^\x7b]*!$blank->($&)!ge;
-  $text =~ s!var\(\s*--[\w-]+!var(!g;
-  my $bad = 0;
-  while ($text =~ /([\w-]+)\s*:\s*([^;\x7b\x7d]*)(?=[;\x7d])/g) {
-    my ($property, $value, $at) = ($1, $2, $-[0]);
-    my $line = 1 + (substr($text, 0, $at) =~ tr/\n//);
-    if ($value =~ /(?<![\w-])-?\d*\.?\d+(?:px|rem|em|ch|ex|vw|vh|vmin|vmax|dvh|svh|lvh|pt|ms|s)\b/) {
-      print "$ARGV:$line: a raw size or duration; use a token such as var(--space-3) or var(--duration-quick) (\"Add a token\" in src/web/AGENTS.md)\n";
-      $bad = 1;
-    }
-    if ($property eq "font-family" && $value !~ /^\s*var\(/) {
-      print "$ARGV:$line: a font family by name; use var(--font-sans), Cairn has one typeface\n";
-      $bad = 1;
-    }
   }
   exit $bad;
 ' "$FILE"
