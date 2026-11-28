@@ -737,12 +737,38 @@ path, fields and feature file. "Web pages for a server" in
 
 ## Build a page from the design system
 
-1. Read "Designing a new page" in `docs/design-system.md` and decide what
-   the page answers: where am I, what state is the hike in, what can I do
-   next. Decide its one primary action.
-2. Write the page from the shell, the layout classes and the components,
-   with no styles of its own. `width="overview"` is for lists and
-   dashboards; a page that does one job keeps the default task width:
+1. Read "Method" and "Designing a new page" in `docs/design-system.md`.
+   Write the page's question sentence (who is looking, where, and what
+   they are trying to find out or do) at the top of the pull request
+   description's `## Design review`:
+
+   ```text
+   Question: a member who tapped a link to the trails in Discord, on their phone, wants to see every place proposed so far and propose another.
+   ```
+
+2. Under it, write the presence table: each element the page needs,
+   largest first, and the question it answers that nothing else on the
+   page does. Leave out anything without an answer, eyebrows, leads,
+   icons and helper text included. The three questions come first (where
+   am I, what state is the hike in, what can I do next), and the one
+   primary action is a button:
+
+   ```text
+   | Element                     | Question it answers                 |
+   | --------------------------- | ----------------------------------- |
+   | h1 "Trails"                 | Where am I?                         |
+   | The list of places          | What has been proposed?             |
+   | The banner when it is empty | Has anything been proposed?         |
+   | "Propose a location"        | How do I add mine? (primary action) |
+   ```
+
+3. Write the page in the order of "Build order" in
+   `docs/design-system.md`: the real words and numbers first, then the
+   hierarchy with headings and `.stack` spacing only, then the
+   components, then colour. Build it from the shell, the layout classes
+   and the components, with no styles of its own. `width="overview"` is
+   for lists and dashboards; a page that does one job keeps the default
+   task width:
 
    ```tsx
    /** The list of trails at `/trails`. */
@@ -757,12 +783,13 @@ path, fields and feature file. "Web pages for a server" in
        <Layout title="Trails · hikebot" width="overview">
          <div class="stack stack--section">
            <div class="page-heading">
-             <p class="page-heading__eyebrow">Location vote</p>
              <h1>Trails</h1>
-             <p class="page-heading__lead">Every place proposed so far.</p>
            </div>
            {names.length === 0 && (
-             <Banner tone="info" title="No location has been proposed yet." />
+             <Banner
+               tone="info"
+               title="Nobody has proposed a location in this server."
+             />
            )}
            <ul class="grid list-reset">
              {names.map((name) => (
@@ -782,7 +809,7 @@ path, fields and feature file. "Web pages for a server" in
    }
    ```
 
-3. If the page needs something no component offers, add a component
+4. If the page needs something no component offers, add a component
    ("Add a component to the design system") rather than page CSS. Only a
    layout used by this page alone goes in `public/assets/cairn/pages/<page>.css`,
    with classes named `.<page>-<thing>`, imported by a line in
@@ -793,12 +820,22 @@ path, fields and feature file. "Web pages for a server" in
    @import url("pages/trails.css") layer(components);
    ```
 
-4. Register and test the page as "Add a page" says, then run the design
+5. Design every state "States" in `docs/design-system.md` lists, and add
+   a screenshot entry with a seed for each data-view state that differs
+   ("Add a page to the screenshots"): empty, error, partial and first
+   run, and loading for a part that loads after the page, such as the
+   map (its no-JavaScript entry shows what stands in for it); and for every control, small links included, rest, hover,
+   focus-visible, pressed (with a finger too), disabled, and busy if it
+   starts work.
+6. Register and test the page as "Add a page" says, then run the design
    system's checks:
 
    ```sh
-   npx vitest run test/web/token-use.test.ts test/web/size-budget.test.ts test/web/routes.test.ts
+   npx vitest run test/web/token-use.test.ts test/web/size-budget.test.ts test/web/routes.test.ts test/web/contrast.test.ts
    ```
+
+7. Follow "Take the screenshots" and "Review your own UI change as a
+   designer".
 
 ## Add a token
 
@@ -873,9 +910,14 @@ Here the component is `pill`; use your component's name.
 
 2. Style it in `public/assets/cairn/components/pill.css`, with a comment at
    the top, using tokens only (`var(--space-2)`, `var(--color-success)`),
-   and every state it has: `:hover` and `[data-preview="hover"]`,
-   `:active` and `[data-preview="active"]`, `:disabled` or
-   `[aria-disabled="true"]`. The focus ring comes from the base layer. Use
+   and every state "States" in `docs/design-system.md` lists that it has:
+   `:hover` and `[data-preview="hover"]`; `:active`, `[data-pressed]` and
+   `[data-preview="active"]` in one rule, so a press shows with a finger
+   too; `:disabled` or `[aria-disabled="true"]`; and, if it starts work,
+   `[aria-busy="true"]` with the pressed fill. Change state with no
+   transition on any colour: a `transition` names only `opacity` or
+   `transform`, with a property list. The focus ring comes from the base
+   layer. Use
    only pairings listed in "Allowed pairings" of `docs/design-system.md`,
    or add the pairing as "Add a token" says. Then add its import to
    `public/assets/cairn/cairn.css`, in alphabetical order among the
@@ -1267,19 +1309,56 @@ before marking the pull request ready.
    For a page that is new, `git show` answers that the path is not in
    `origin/main`: there is no before image.
 
-3. Go through this checklist for each page, as a critical designer who has
+3. Write the question sentence of each page you changed, as "Start from
+   the question" in `docs/design-system.md` says, at the top of
+   `## Design review`. Judge the page by it: within a few seconds, the
+   person in the sentence finds out what they came for, or sees how to do
+   it.
+4. Apply the presence test to each page on its phone image in the light
+   scheme, element by element, from largest to smallest (sections, cards,
+   headings, lines of text, icons, rules, gaps): what question does it
+   answer for the person in the sentence, is that already answered
+   elsewhere on the screen, and what would they lose if it went? Write a
+   row of the presence table for each element. An element that answers
+   nothing, or answers what another already does, is a **presence**
+   finding: remove it. Eyebrows, leads, icons, helper text, rules and
+   empty space are elements too.
+5. Check the hierarchy in greyscale. Make a greyscale copy of each phone
+   image, open it, and write down the first three things the eye reaches,
+   in order; they are the page's answers to its question, most important
+   first:
+
+   ```sh
+   mkdir -p /tmp/grey
+   node -e 'require("sharp")(process.argv[1]).greyscale().toFile(process.argv[2]).then(() => console.log("wrote", process.argv[2]))' docs/screenshots/<file> /tmp/grey/<file>
+   ```
+
+6. Go through this checklist for each page, as a critical designer who has
    never seen it:
    - **Purpose and hierarchy.** Within a few seconds it is clear what the
      page is, what state the hike is in, and what the visitor can do next.
      There is one primary action, and it looks like one. ("Principles" and
      "Designing a new page" in `docs/design-system.md`.)
+   - **Main path.** The thing the question sentence is about is a button
+     or a standalone link with a 44px target, not a link inside a
+     sentence. ("Layout rules" in `docs/design-system.md`.)
+   - **Honest feedback.** A press shows at once with a finger as with a
+     mouse, and with no eased colour; a form that posts shows its button
+     busy; a forecast or a tally says how old it is, and every heading,
+     count, caption and age describes the data on the screen. After an
+     action, the page shows what is now true, in place or in a banner
+     that says it. ("States", "Motion" and "Forms" in
+     `docs/design-system.md`.)
    - **Consistency.** Headings, buttons, forms, spacing, colours and wording
      look and behave like the existing pages and components, built from
      Cairn's tokens and components. ("Tokens", "Components" and "Layout
      rules" in `docs/design-system.md`; compare with `/styleguide`.)
-   - **Every state.** Empty, error, success and disabled states, very long
-     text (a 100-character location name) and many items (25 options) each
-     look right. Add a page entry with a seed for each state that differs.
+   - **Every state.** Each data view's loading, empty, error, partial and
+     first run; each control's rest, hover, focus-visible, pressed,
+     disabled and busy, small links included; the page after each action;
+     very long text (a 100-character location name) and many items (25
+     options) each look right. Add a page entry with a seed for each state
+     that differs. ("States" in `docs/design-system.md`.)
    - **Phone layout.** Nothing scrolls sideways at 390px, and every tap
      target is at least 44px high and wide. ("Layout rules" in
      `docs/design-system.md`.)
@@ -1289,46 +1368,93 @@ before marking the pull request ready.
      works from the keyboard alone; nothing is conveyed by colour alone;
      motion stops under `prefers-reduced-motion`. ("Accessibility rules" and
      "Allowed pairings" in `docs/design-system.md`.)
-   - **Wording.** Plain words, and the same words the bot uses in Discord
-     for the same things. ("Content rules" in `docs/design-system.md`.)
+   - **Wording.** Plain words from the reader's side (what happened, then
+     what to do), and the same words the bot uses in Discord for the same
+     things. Every number has its unit; ages and durations are written
+     one way ("14 min ago", "2 h 9 min"); a hike's or a vote's time reads
+     as it does in Discord ("Sat, 5 Dec 2026 · 09:00"). ("Content rules"
+     in `docs/design-system.md`.)
+   - **Numbers.** Counts and forecast columns people compare are in
+     tabular figures and right-aligned, with the unit once in the column
+     head. ("Layout rules" in `docs/design-system.md`.)
    - **Dark scheme.** Every colour, border, image and focus ring still
      works on the dark background. ("Colour" in `docs/design-system.md`.)
    - **Visual direction.** Hiking-themed through restraint: the blaze only
      as a marker, contour lines only in the header or an empty state, no
-     photos, emoji, decorative gradients or shadows outside overlays.
-     ("Visual direction" in `docs/design-system.md`.)
+     photos, emoji, decorative gradients or shadows outside overlays, and
+     none of the marks of generated work: pill badges on everything, cards
+     with a coloured edge for decoration, an eyebrow above every heading,
+     everything centred. ("Visual direction" and "Nothing that marks
+     generated work" in `docs/design-system.md`.)
 
-   A screenshot does not show focus, keyboard order or motion: check those
-   in a browser against the dev server ("Run the bot locally" in the root
-   `AGENTS.md`). Without a browser, list a page's controls in focus order
-   and read their labels from the HTML:
+7. Measure what can be measured rather than judging it from the images.
+   Run the contrast and token tests:
+
+   ```sh
+   npx vitest run test/web/contrast.test.ts test/web/token-use.test.ts
+   ```
+
+   For every other rule in "Measure what can be measured" in
+   `docs/design-system.md` (eased colour, the press on touch, busy, links
+   on the main path, tabular right-aligned numbers, targets, sideways
+   overflow and cut words, layout shift), measure it as that table's
+   middle column says, in a browser against the dev server ("Run the bot
+   locally" in the root `AGENTS.md`), at 390px with touch emulation and at
+   200% zoom. Where the pull request's checks include the automated check
+   the table's last column names, read its result instead. Say in the
+   review which rules you measured and how.
+
+   A screenshot does not show focus, keyboard order, a press or motion
+   either: check those in the browser too. Without a browser, list a
+   page's controls in focus order and read their labels from the HTML:
 
    ```sh
    curl -fsS http://localhost:8787/ | grep -oE '<(a|button|input|select|textarea|label|h[1-6])\b[^>]*>'
    ```
 
-4. Give each finding a severity:
+8. Give each finding a severity. Three kinds of finding have a fixed
+   severity; write the kind in the finding's line:
    - **blocker**: a visitor cannot do the job, or the page breaks or shuts
      someone out (unreadable text, a control without a label, sideways
      scrolling on a phone, a dead end).
    - **major**: the job is hard, slow or misleading (no clear primary action
      or two of them, contrast below the minimum, a target under 44px, a
-     state that looks broken, words that differ from the bot's).
+     state that looks broken, words that differ from the bot's, a number
+     without its unit).
+     - **honest feedback**: a press that does not show at once (with a
+       finger too), a form that posts without showing it is busy, an
+       eased colour, or a heading, count, caption or age that describes
+       data not on the screen.
+     - **main path in a sentence**: the thing the question sentence is
+       about is reached only by a link inside running text.
+     - **presence**, misleading: an element that suggests something that
+       is not true, such as a status pill on a vote that has closed.
    - **minor**: noticeably off without getting in the way (uneven spacing,
      misalignment, a component that differs from its siblings).
+     - **presence**: an element that answers no question for the person
+       in the sentence, or one another element already answers.
    - **nit**: taste.
-5. Fix every blocker and major, take the screenshots again and repeat from
-   step 1. Fix or explain the rest.
-6. Write the findings into the `## Design review` section of the pull
-   request description, one line each: the severity, the page, viewport and
-   scheme, what you saw, and what was done about it:
+9. Fix every blocker and major in what your change adds or changes, take
+   the screenshots again and repeat from step 1. Fix or explain the rest.
+   A finding in a component or page your change does not touch, such as
+   a shared button that eases its colour, goes in the review marked
+   **existing**, with no fix asked of this pull request.
+10. Write the findings into the `## Design review` section of the pull
+    request description, under the question sentence and the presence
+    table, one line each: the severity, the kind where it has one, the
+    page, viewport and scheme, what you saw, and what was done about it:
 
-   ```text
-   - **major** home (phone, dark): the link colour is hard to tell from the text. Fixed: links are underlined.
-   - **nit** not-found (desktop, light): the page is short and leaves the screen empty below. Left: an error page stays short.
-   ```
+    ```text
+    Question: a member who tapped the link in the vote's Discord message, on their phone, wants to see which places are in the location vote and vote for the ones they would go to.
 
-   When you find nothing, say what you checked, page by page.
+    - **major** (honest feedback) server-location-vote (phone, light): "Save votes" shows no press until the finger lifts, and nothing shows the votes are being sent. Fixed: the button is pressed from the touch and busy until the page answers.
+    - **major** (main path in a sentence) server-empty-admin (phone, light): the only way to start the vote is "start one" inside the empty state's sentence. Fixed: "Start location vote" is a button under it.
+    - **minor** (presence) server-location-vote (phone, light): the eyebrow "Location vote" above the card heading "Location vote" answers nothing the heading does not. Fixed: the eyebrow is gone.
+    - **major** home (phone, dark): the link colour is hard to tell from the text. Fixed: links are underlined.
+    - **nit** not-found (desktop, light): the page is short and leaves the screen empty below. Left: an error page stays short.
+    ```
+
+    When you find nothing, say what you checked, page by page.
 
 ## Describe a UI change in the pull request
 
@@ -1392,17 +1518,30 @@ As the reviewer of a pull request that changes `src/web/`, `public/` or
    git show "$(git merge-base origin/main HEAD)":docs/screenshots/<file> | cmp - /tmp/review/before/<file>
    ```
 
-3. Open every before and after image and go through the checklist in
-   "Review your own UI change as a designer" yourself, before reading the
-   author's `## Design review`. Be critical: judge the page as a member
-   who has never seen it would, independently of the author's notes.
-4. Compare your findings with the author's. Request changes for every
-   blocker or major the author missed, or recorded without fixing:
+3. Read only the question sentence at the top of the author's
+   `## Design review`. If it is missing, or does not name who is looking
+   and what they are trying to find out or do, request changes for that
+   first: the page cannot be judged without it.
+4. Open every before and after image and follow steps 4 to 8 of "Review
+   your own UI change as a designer" yourself, before reading the rest of
+   the author's `## Design review`: judge each page against its question
+   sentence, apply the presence test element by element and write your
+   own presence table, check the hierarchy in greyscale, go through the
+   checklist, read the measured checks, and give each finding its
+   severity and kind (presence, honest feedback, main path in a
+   sentence). Be critical: judge the page as a member who has never seen
+   it would, independently of the author's notes.
+5. Compare your findings and your presence table with the author's.
+   Request changes for every blocker or major in what the pull request
+   adds or changes that the author missed, or recorded without fixing. A
+   finding in a part the pull request does not touch is recorded as
+   **existing** and is no reason to request changes:
 
    ```sh
    gh pr review <n> --request-changes --body-file <file>
    ```
 
-5. In the review, say what you saw in the screenshots, page by page, at
-   each viewport and scheme. A review of a UI pull request that does not
-   say what was seen in the screenshots is not a design review.
+6. In the review, say what you saw in the screenshots, page by page, at
+   each viewport and scheme, which measured checks you read and which
+   rules you measured by hand. A review of a UI pull request that does
+   not say what was seen in the screenshots is not a design review.
