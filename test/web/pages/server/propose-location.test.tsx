@@ -127,6 +127,27 @@ describe("ProposeLocation", () => {
     );
   });
 
+  it("shows the bot's sentence naming the member's location instead of the forms once they proposed one", async () => {
+    const html = render(
+      <ProposeLocation
+        view={viewWith(
+          locationProposal({
+            refusal:
+              "You've already proposed **Summit** for this location vote. Each member proposes one location per round.",
+            again: [{ optionId: 12, label: "Canyon", details: null }],
+          }),
+        )}
+        forms={FORMS}
+      />,
+    );
+    expect(html).not.toContain("<form");
+    expect(html).not.toContain("Suggest one again");
+    expect(html).toContain("<strong>Summit</strong>");
+    expect(await spokenText(html)).toContain(
+      "You've already proposed Summit for this location vote. Each member proposes one location per round.",
+    );
+  });
+
   it.each([
     [
       "invalid_label",

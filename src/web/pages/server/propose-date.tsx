@@ -4,9 +4,10 @@
  * propose and an optional time, posting to
  * `/g/<guild id>/polls/<poll id>/options`; the server checks the days
  * again, as the bot does. A refused date shows the bot's sentence at the
- * top of the form and on the date, with what was sent kept. While no date
- * can be added (the vote is full, or the round's days have passed) it
- * shows the bot's sentence instead. Nothing while no date vote is open.
+ * top of the form and on the date, with what was sent kept. While the
+ * member may add no date (they already proposed one to this vote, the vote
+ * is full, or the round's days have passed) it shows the bot's sentence
+ * instead. Nothing while no date vote is open.
  */
 import type { WebView } from "../../../guild/web-view";
 import { CsrfField } from "../../auth/csrf";
