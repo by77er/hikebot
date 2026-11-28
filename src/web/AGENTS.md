@@ -909,9 +909,14 @@ Here the component is `pill`; use your component's name.
 
 2. Style it in `public/assets/cairn/components/pill.css`, with a comment at
    the top, using tokens only (`var(--space-2)`, `var(--color-success)`),
-   and every state it has: `:hover` and `[data-preview="hover"]`,
-   `:active` and `[data-preview="active"]`, `:disabled` or
-   `[aria-disabled="true"]`. The focus ring comes from the base layer. Use
+   and every state "States" in `docs/design-system.md` lists that it has:
+   `:hover` and `[data-preview="hover"]`; `:active`, `[data-pressed]` and
+   `[data-preview="active"]` in one rule, so a press shows with a finger
+   too; `:disabled` or `[aria-disabled="true"]`; and, if it starts work,
+   `[aria-busy="true"]` with the pressed fill. Change state with no
+   transition on any colour: a `transition` names only `opacity` or
+   `transform`, with a property list. The focus ring comes from the base
+   layer. Use
    only pairings listed in "Allowed pairings" of `docs/design-system.md`,
    or add the pairing as "Add a token" says. Then add its import to
    `public/assets/cairn/cairn.css`, in alphabetical order among the
@@ -1391,11 +1396,13 @@ before marking the pull request ready.
    For every other rule in "Measure what can be measured" in
    `docs/design-system.md` (eased colour, the press on touch, busy, links
    on the main path, tabular right-aligned numbers, targets, sideways
-   overflow and cut words, layout shift), read the result of the check
-   the table names for it in the pull request's checks. Where that check
-   did not run, measure the rule by hand in a browser against the dev
-   server ("Run the bot locally" in the root `AGENTS.md`), at 390px with
-   touch emulation and at 200% zoom, and say in the review that you did.
+   overflow and cut words, layout shift), measure it as that table's
+   middle column says, in a browser against the dev server ("Run the bot
+   locally" in the root `AGENTS.md`), at 390px with touch emulation and at
+   200% zoom. Where the pull request's checks include the automated check
+   the table's last column names, read its result instead. Say in the
+   review which rules you measured and how.
+
    A screenshot does not show focus, keyboard order, a press or motion
    either: check those in the browser too. Without a browser, list a
    page's controls in focus order and read their labels from the HTML:
