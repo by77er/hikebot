@@ -9,7 +9,11 @@ function LayoutMotion({ tokens }: SectionProps) {
     ["--measure", values.measure, "Longest line of running text"],
     ["--target-min", values["target-min"], "Smallest tap target"],
     ["Breakpoint", "48rem", "Wider gutters and more space above"],
-    ["--duration-quick", values["duration-quick"], "Hover and press"],
+    [
+      "--duration-quick",
+      values["duration-quick"],
+      "A short movement, never a colour",
+    ],
     ["--duration-moderate", values["duration-moderate"], "Things that appear"],
     ["--easing-standard", values["easing-standard"], "All motion"],
   ];

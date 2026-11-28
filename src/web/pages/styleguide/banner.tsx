@@ -17,7 +17,7 @@ function BannerSection() {
           Organisers start it from the admin panel in Discord.
         </Banner>
         <Banner tone="success" title="Your vote is saved." />
-        <Banner tone="warning" title="Voting closes in 2 hours.">
+        <Banner tone="warning" title="Voting closes in 2 h.">
           You can change your vote until then.
         </Banner>
         <Banner tone="danger" title="This round was cancelled.">
