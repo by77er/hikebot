@@ -12,6 +12,10 @@ How to build with it is in `src/web/AGENTS.md`: "Build a page from the
 design system", "Add a token" and "Add a component to the design system".
 The map picture is part of it too: "Cairn map" below.
 
+Cairn's method (the question, the presence test, the build order, honest
+feedback and the review rubric) is adapted from the design system of viz,
+`by77er/viz`.
+
 ## Who it is for, and where
 
 - **Members of a hiking group**, mostly on a phone, often outdoors or on the
@@ -28,21 +32,147 @@ schemes, and only then on a desktop.
 
 ## Principles
 
-1. **Wayfinding first.** Every page answers three questions at a glance:
+1. **Start from the question.** Every page, and every change to one,
+   begins with one sentence: who is looking, and what they are trying to
+   find out or do ("Method" below). The page is judged against that
+   sentence, not against taste.
+2. **Wayfinding first.** Every page answers three questions at a glance:
    where am I, what state is the hike in, what can I do next. There is one
    primary action per view, and it looks like one.
-2. **Quiet by default.** Calm neutral surfaces and plenty of space. Colour
-   is reserved for state and for the one primary action, so that when
-   something is coloured it means something.
-3. **Legible outdoors.** High contrast, body text of at least 16px, targets
+3. **Each element answers a question.** An element stays only if it
+   answers a question for the person in the sentence that nothing else on
+   the screen answers (the presence test, "Method" below). That goes for
+   eyebrows, leads, icons, helper text, rules and empty space as much as
+   for cards and buttons. Calm comes from what is left out, so colour is
+   kept for state and for the one primary action, and when something is
+   coloured it means something.
+4. **Legible outdoors.** High contrast, body text of at least 16px, targets
    of at least 44px. It works on a phone in sunlight and in a tent at night:
    the dark scheme is designed, not inverted.
-4. **Honest states.** Open, closed, decided, cancelled and planned look
+5. **Every input answers in the next frame, and every answer is true.** A
+   tap shows as pressed at once, with a finger as with a mouse, and a vote
+   or a proposal that takes a moment on a trailhead's signal shows it is
+   busy. Anything that describes data describes the data on the screen: a
+   forecast or a tally says how old it is, and that age is the age of what
+   is shown ("States").
+6. **Honest states.** Open, closed, decided, cancelled and planned look
    different and say so in words. Nothing is conveyed by colour alone: a
    state has a word, and usually an icon, as well as a colour.
-5. **The same words as the bot.** Labels match the Discord buttons and
+7. **The same words as the bot.** Labels match the Discord buttons and
    messages ("Vote", "Propose a location", "Start location vote", "Cancel
-   round"), so a member never has to translate between the two.
+   round"), and one event has one time on the page, in the Discord message
+   and on the event, so a member never has to translate between the two.
+
+## Method
+
+How to design a page, or a change to one, so that it can be reviewed
+against Cairn. "Designing a new page" below is the same method as a
+checklist; "Review your own UI change as a designer" in `src/web/AGENTS.md`
+is the review that judges by it.
+
+### Start from the question
+
+Write one sentence: who is looking, and what they are trying to find out or
+do. "Who it is for, and where" names the people; the sentence picks one of
+them, the place they are in and the one job:
+
+- "A member who tapped the link in the vote's Discord message, on their
+  phone, wants to see which places are in the location vote and vote for
+  the ones they would go to."
+- "A member on the bus on the morning of the hike wants to know where to
+  meet, at what time, and whether it will rain."
+- "An organiser at a desk wants to close the date vote and see that the
+  hike is planned."
+
+Every later decision is checked against the sentence. If you cannot write
+it, the page is not ready to design. It goes at the top of the pull
+request's design review, and the reviewer judges the page by it.
+
+### The presence test
+
+For each element on the screen, from largest to smallest (a section, a
+card, a heading, a line of text, an icon, a rule, a gap):
+
+1. What question does it answer for the person in the sentence?
+2. Is that question already answered by something else on the screen?
+3. If it went, what would they be unable to do or know?
+
+An element with no answer to 1, a yes to 2, or "nothing" to 3 is removed.
+Eyebrows, leads, icons, helper text, rules and empty space are elements
+too. An eyebrow "Location vote" above a card headed "Location vote" answers
+nothing the heading does not; a helper line "Optional" under a label that
+already says "(optional)" is said twice; the Discord mark on "See the vote
+in Discord" stays, because it says where the button goes faster than the
+words. Write the answers down, one row per element (the presence table):
+this test, not a feeling of "remove what you don't need", is how a page is
+judged.
+
+### Build order
+
+1. **Real words and real numbers.** The bot's words, real place names, and
+   dates and figures of the kind the bot posts, with their units ("6.7
+   miles round trip", "4 votes", "Sat, 5 Dec 2026 · 09:00"). No placeholder
+   text. For a flow across several pages and Discord messages, fix one set
+   of times and numbers first, so every screen says the same.
+2. **Hierarchy with type and space only.** Heading levels, weights and the
+   space scale, until the reading order is right in greyscale: name the
+   first three things the eye should reach, in order, and check them on a
+   greyscale copy of the screenshot.
+3. **Structure.** Cards, rules and surfaces, only where grouping is still
+   unclear without them.
+4. **Colour last.** The one primary action, then state (status pills,
+   banners), then the blaze where it marks "you are here" or "winner".
+5. **Every state** of every element and every data view ("States").
+6. **The second scheme.** Look at dark on its own; it is designed, not
+   assumed.
+7. **Phone and 200% zoom.** 390px with a finger: targets of 44px, nothing
+   sideways, nothing that needs hover, the main path a button or a
+   standalone link. Then the desktop at 200% zoom.
+
+### Nothing that marks generated work
+
+No gradient heroes, no emoji bullets, no pill badges on everything (the
+status pill marks the one state of a vote, round or hike), no card with a
+coloured edge for decoration (an edge on a banner or a form in error marks
+a state its words also say), no eyebrow above every heading, and nothing
+centred for its own sake: text is left-aligned. Cairn's eyebrow stays only
+where the presence test keeps it, such as a page whose h1 is a name and
+whose eyebrow says what kind of page it is.
+
+### Measure what can be measured
+
+What a measurement can decide is measured, not judged from a picture. Each
+checkable rule names its check: a test in `npm test`, an Undercurrent rule,
+or the page audit, which loads every page in a browser at each size,
+scheme, pointer and zoom and measures it. Until a rule's check runs, the
+reviewer measures that rule by hand in a browser and says so in the review:
+
+| Rule                                                       | How it is checked                                                                                                     |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Text, controls and the focus ring meet the contrast floors | `test/web/contrast.test.ts`, in `npm test`, for every pairing in "Allowed pairings" in both schemes.                  |
+| Only tokens in component and page CSS                      | `test/web/token-use.test.ts`, in `npm test`.                                                                          |
+| No colour is eased                                         | An Undercurrent rule on the stylesheets, and the page audit reading what each element eases as computed.              |
+| A press shows at once, with a finger as with a mouse       | The page audit: presses each control by touch and reads the fill painted in the next frame.                           |
+| A submit that takes time shows it is busy                  | The page audit: submits each form on a slowed network and reads `aria-busy` and the fill.                             |
+| The main path is not a link inside a sentence              | The page audit lists every link inside running text on each page; the reviewer checks none is the page's main path.   |
+| Numbers people compare are tabular and right-aligned       | An Undercurrent rule on the component stylesheets (`tabular-nums`), and the page audit for the alignment as rendered. |
+| Every target is at least 44 by 44px, with no overlap       | The page audit at 390px with a touch pointer.                                                                         |
+| Nothing scrolls sideways and no word is cut                | The page audit at every width from 320 to 1440px, and at 200% zoom.                                                   |
+| Layout shift stays under 0.05                              | The page audit, loading each page at both sizes, the map and the forecast included.                                   |
+| Ages and durations are written one way                     | An Undercurrent rule on `src/web/`: fails "0 s ago" and minutes written as "m".                                       |
+
+### What Cairn did not take from viz
+
+viz shows system data to engineers at desks; Cairn shows a hiking group's
+plans to members on phones outdoors. So Cairn keeps its own look: its warm
+palette (paper, pine, blaze) rather than viz's true greys and four action
+colours, because a calm warm page with one accent reads better in sunlight
+and keeps colour for state; Public Sans alone rather than Schibsted
+Grotesk and JetBrains Mono, because tabular figures give Cairn's few
+compared numbers what a mono gives viz's many; its cards rather than viz's
+rule-topped panels with no box, because a card groups one vote or one hike
+for a thumb on a small screen; and none of viz's charts or dashboards,
+which a hiking group's pages do not have.
 
 ## Visual direction
 
@@ -279,15 +409,28 @@ step up; `.stack`, `.cluster` and `.grid` apply them.
 
 ### Motion
 
-| Token                 | Value                        | Use                            |
-| --------------------- | ---------------------------- | ------------------------------ |
-| `--duration-quick`    | 120ms                        | Hover and press feedback.      |
-| `--duration-moderate` | 240ms                        | Something appearing or moving. |
-| `--easing-standard`   | `cubic-bezier(0.2, 0, 0, 1)` | All motion.                    |
+| Token                 | Value                        | Use                                          |
+| --------------------- | ---------------------------- | -------------------------------------------- |
+| `--duration-quick`    | 120ms                        | A small movement, such as a chevron turning. |
+| `--duration-moderate` | 240ms                        | Something appearing or moving.               |
+| `--easing-standard`   | `cubic-bezier(0.2, 0, 0, 1)` | All motion.                                  |
 
-Under `prefers-reduced-motion: reduce` both durations are `0ms`, so every
-transition stops without each component handling it. Motion is feedback
-only; nothing moves on its own.
+- **A press and a hover change in the next frame, with no transition.**
+  A member who taps "Save votes" on a trailhead sees it pressed at once,
+  not 120ms later.
+- **No colour is ever eased.** A transition names only `opacity` or
+  `transform`: never a colour, a background, a border colour, a
+  shorthand that holds one, or `all`, and never a duration without a
+  property list (which eases `all`). An eased colour also shows the old
+  scheme for a moment when the device turns dark. Checked by an
+  Undercurrent rule and the page audit ("Measure what can be measured").
+- **Motion moves opacity and position only**, as feedback to something
+  the member did. Nothing loops, pulses or moves on its own. Data never
+  animates into place: a tally bar is drawn at its length, a count is
+  drawn at its value.
+- **Reduced motion removes transitions.** Under
+  `prefers-reduced-motion: reduce` both durations are `0ms`, so every
+  transition stops without each component handling it.
 
 ### Layout and fixed sizes
 
@@ -369,8 +512,9 @@ Block, element, modifier, in lower case with hyphens:
 - A **component** is a block named after it: `.button`, `.banner`,
   `.card`. Its parts are `__part` (`.card__title`), its variants
   `--variant` (`.button--primary`).
-- **States** come from the platform, not classes: `:hover`, `:active`,
-  `:focus-visible`, `:disabled`, `[aria-disabled="true"]`,
+- **States** come from the platform, not classes: `:hover`, `:active`
+  and its `[data-pressed]` twin ("States"), `:focus-visible`,
+  `:disabled`, `[aria-disabled="true"]`, `[aria-busy="true"]`,
   `[aria-current="page"]`. `[data-preview="hover|active|focus"]` shows a
   state on the style guide only.
 - **Layout** classes name the arrangement: `.shell` and its parts,
@@ -932,10 +1076,95 @@ its styles in `public/assets/cairn/components/`, its unit test in
   `--loose`, `--section`), `.cluster` (a wrapping row; `--nowrap` keeps an
   icon beside words that wrap) and `.grid` (cards
   side by side, one column on a phone). A page's structure: the
-  `.page-heading` (eyebrow, h1, lead), then sections `--space-7` apart.
+  `.page-heading` (an h1, with an eyebrow and a lead only where the
+  presence test keeps them), then sections `--space-7` apart.
 - **The primary action** sits right after what it acts on, never at the
   bottom of a long page only; on a phone it may fill the width
   (`block`).
+- **The main path is never a link inside a sentence.** A link in running
+  text keeps the line's height, so it is a small target for a thumb on a
+  trailhead, and it reads as an aside. The thing the page's question
+  sentence is about ("Vote", "Open the hike thread", "Start location
+  vote") is a button, or a standalone link whose whole row is its 44px
+  target. A link inside a sentence is only ever a way to something else,
+  such as the project's source in the footer. Checked by the page audit
+  ("Measure what can be measured").
+- **Numbers people compare line up.** Counts in a tally and the columns
+  of a forecast use tabular figures (`font-variant-numeric:
+tabular-nums`), align right, and carry their unit once, in the column
+  head ("Rain, mm", "Wind, km/h"), with the cells bare. A column whose
+  cells have different units is left-aligned with a unit in each cell. A
+  list with no column head, such as the tally's rows, says the unit at
+  each count ("4 votes"). Public Sans has tabular figures, so Cairn has no
+  monospace face for numbers. Checked by an Undercurrent rule and the
+  page audit.
+- **Measured, not judged by eye:** targets, sideways overflow, cut words,
+  links on the main path and layout shift are measured by the checks in
+  "Measure what can be measured", at 320 to 1440px and at 200% zoom.
+- **A part that loads after the page reserves its size.** The map and
+  anything drawn from data that arrives later take their final height in
+  the markup, so nothing below them moves when they arrive (layout shift
+  under 0.05).
+
+## States
+
+Every element and every view says what is true at every moment, and
+answers every input in the next frame.
+
+### Every element
+
+Every interactive element defines **rest, hover, focus-visible, pressed,
+disabled**, and **busy** if it starts work. That includes the small ones:
+a link in the footer, a tally row's "Show details", the user menu's rows,
+the switch-server link.
+
+- **Pressed** shows in the next frame, never eased, and outranks hover.
+  Browsers apply `:active` to a finger only when it lifts, so on a phone a
+  plain `:active` shows the press too late or not at all. Cairn shows a
+  press on touch with one small shared script, loaded by every page, that
+  marks the control under the finger `data-pressed` from `pointerdown`
+  until the finger lifts, leaves or the browser takes the gesture as a
+  scroll. Every `:active` rule has its `[data-pressed]` twin. Without
+  JavaScript, `:active` alone is the press. Checked by the page audit.
+- **Busy** is the state of a control whose work takes time: "Save votes"
+  or "Propose location" posting over a trailhead's signal. From the
+  submit, the same script sets `aria-busy="true"` on the button that
+  submitted; it holds its pressed fill, never eases, and ignores a second
+  press, so a vote is not sent twice. Without JavaScript, the browser's
+  own loading indicator is the busy state. Checked by the page audit.
+- **Disabled** says why near the control when the reason is not on the
+  screen already ("Voting closed Sat, 5 Dec 2026 · 18:00").
+- **Chosen** (a ticked vote, the current page) is marked by a tick, a
+  ring or the blaze, with words, as each component says.
+
+### Every data view
+
+A vote's tally, the hike log, the forecast, the map and the server list
+each define:
+
+- **Loading.** Pages are drawn on the server, so a page arrives whole.
+  A part that loads after it (the interactive map) keeps its size and
+  what was there before (the map picture or its words), and says what it
+  is waiting for in words, never a spinner over data.
+- **Empty.** Say what was asked and that nothing matched: "Nobody has
+  proposed a location for this vote." under the location vote, not a bare
+  "Nothing here".
+- **Error.** What happened, then what to do: "The forecast could not be
+  fetched. The bot tries again every hour; the hike thread has the last
+  one."
+- **Partial.** Say what is missing, next to it: "Forecast for 09:00 to
+  15:00 only; later hours are not out yet."
+- **First run**, where a view can have had nothing: a server with no hike
+  yet is not empty but new: "No hikes yet. The first one appears here when
+  a date vote closes."
+
+### Chrome that describes data describes the data on screen
+
+Headings, counts, captions, ages and accessible names come from what is
+drawn, not from a request in flight. A forecast or a tally says how old it
+is ("Updated 14 min ago"), and that age is the age of what is shown: the
+time the forecast was fetched, or the votes were counted, not the time the
+page was served. The exact time goes in a `<time datetime>` beside it.
 
 ## Forms
 
@@ -946,7 +1175,8 @@ form components, and works without JavaScript:
    a form that changes something" in `src/web/AGENTS.md`). `novalidate`
    leaves the checking to the server, so every error appears the same way,
    in the bot's words; `required` and `maxlength` stay on the controls,
-   which still announce them and stop overlong typing.
+   which still announce them and stop overlong typing. While it posts,
+   the button that submitted it is busy ("States").
 2. **Rows, then actions.** Form rows are 32px apart (`.stack.stack--loose`),
    in the order a member thinks of them; the form actions bar follows the
    last one. One question per row; a choice group for several related
@@ -957,9 +1187,23 @@ form components, and works without JavaScript:
    announced), the `<title>` starting with "Error: ", and each error at its
    field, tied by `aria-describedby`, with `aria-invalid` on the control.
 4. **A form that succeeds redirects** with `303` to the page that shows the
-   result, with a success banner saying what happened in the bot's words.
-5. **An action that cannot be undone** goes through a confirmation page.
-6. **Text from members is text.** Values go into the markup as JSX
+   result, so the page works without JavaScript and a reload does not post
+   again. The change is its own confirmation where it can be: the page
+   shows what is now true, and the banner says it in the bot's words
+   rather than only what happened ("You voted for Snow Lake and
+   Rattlesnake Ledge.", not "Your votes are saved.").
+5. **An action its opposite undoes says what is now true in place.** A
+   vote can be changed until the vote closes, a proposal withdrawn, a
+   setting set back: next to the thing, the page says what is now true and
+   how to change it ("You voted for Snow Lake. You can change your votes
+   until the vote closes Wed, 2 Dec 2026 · 18:00."), with the form still
+   there to change it again, and the redirect's fragment and `autofocus`
+   bring the member back to it. Which applies when: in place, when the
+   form sits next to what it changed (a vote, a proposal, a setting); a
+   banner that says what is now true, when the result is somewhere else
+   (an admin starting a vote, an action taken on a confirmation page).
+6. **An action that cannot be undone** goes through a confirmation page.
+7. **Text from members is text.** Values go into the markup as JSX
    expressions, never as HTML.
 
 A text field's limit is shown as words and enforced with `maxlength`; it
@@ -1007,8 +1251,28 @@ Cairn meets WCAG 2.2 AA:
   organiser; a hike thread.
 - **States in words**: open, closed, decided, cancelled, planned.
 - **No emoji, no exclamation marks**, no jokes in error messages.
-- **Numbers** as digits, with tabular figures in tallies and tables;
-  dates as the bot shows them.
+- **From the reader's side: what happened, then what to do.** "The map
+  link could not be read. Paste a Google Maps, OpenStreetMap or Apple Maps
+  link, or lat, lon.", not "Invalid input". After an action, say what is
+  now true ("Forms").
+- **Numbers as digits, and every number carries its unit**: "6.7 miles
+  round trip", "1,800 ft of gain", "4 votes", "7 members have voted",
+  "12 °C". A forecast column carries the unit once, in its head ("Layout
+  rules"). Tallies and tables use tabular figures.
+- **Ages and durations in one format.** An age is "just now" under 5 s,
+  then "12 s ago", "14 min ago", "3 h ago", and beyond a day the date and
+  time as the bot writes them: "Updated 14 min ago" under the forecast,
+  "Updated Thu, 3 Dec 2026 · 07:00" two days later. Never "0 s ago";
+  minutes are "min", never "m". A duration has at most two parts, largest
+  first: a hike of "5 h 30 min", a vote that "closes in 2 h 9 min".
+- **One event has one time everywhere.** The hike's start, a vote's
+  closing time and a forecast's hour are written the way the bot writes
+  them, `Sat, 5 Dec 2026 · 09:00`, in the server's time zone, on the web
+  page, in the Discord message, in the hike thread and on the Discord
+  event, so a member who reads "The location vote closes Wed, 2 Dec
+  2026 · 18:00" on the page reads the same in Discord. Figures shown
+  together agree: "7 members have voted" and the counts under it are
+  counted from the same votes at the same moment.
 
 ## Cairn map
 
@@ -1228,20 +1492,50 @@ path, so a browser fetches them once a deploy.
 
 ## Designing a new page
 
-1. **Who and where.** Write down who opens the page, on what device, and
-   what they came to do. Design it at 390px first.
-2. **Answer the three questions.** Where am I (the h1 and the eyebrow),
-   what state is the hike in (in words, with a banner or a status), what
-   can I do next (one primary button).
-3. **Build from the parts.** `Layout` at the task width unless it is an
-   overview; `.page-heading`; `.stack` sections; existing components. A new
-   look is a new component in the design system, not page CSS.
-4. **Use tokens only**, and only the pairings in "Allowed pairings".
-5. **Write it in the bot's words**, in sentence case, with verbs on
-   buttons.
-6. **Check every state**: empty, one item, many items (25), a 100-character
-   name, an error, disabled, signed out.
-7. **Check accessibility**: heading order, focus order and visibility,
-   44px targets, nothing by colour alone, no sideways scrolling.
-8. **Look at it** in both schemes at both sizes, as "Review your own UI
-   change as a designer" in `src/web/AGENTS.md` says.
+The method ("Method") as a checklist, in its order:
+
+1. **Write the question sentence.** Who opens the page, where, on what
+   device, and what they are trying to find out or do, in one sentence
+   ("Start from the question"). It usually names a member on a phone who
+   came from a link in Discord. If you cannot write it, stop: the page is
+   not ready to design.
+2. **Run the presence test before drawing anything.** List what the
+   person in the sentence needs, largest first, each with the question it
+   answers and nothing else on the page answers (the presence table). The
+   three questions come first: where am I (the h1), what state is the hike
+   in (in words, with a banner or a status), what can I do next (one
+   primary button, never a link inside a sentence). Anything with no row
+   is not built: no eyebrow, lead, icon, helper text, rule or gap for its
+   own sake.
+3. **Write the real words and numbers.** The bot's words in sentence case,
+   verbs on buttons, real names and dates of the kind the bot posts,
+   numbers with units, times as the bot writes them ("Content rules"). No
+   placeholder text.
+4. **Set the hierarchy with type and space only**, from the parts:
+   `Layout` at the task width unless it is an overview, `.page-heading`,
+   `.stack` sections. Name the first three things the eye should reach and
+   check them on a greyscale copy of the screenshot.
+5. **Add structure**: existing components, cards where grouping needs
+   them. A new look is a new component in the design system, not page CSS.
+6. **Add colour last**: tokens only, and only the pairings in "Allowed
+   pairings".
+7. **Run the presence test again** on the drawn page, element by element,
+   largest to smallest, and update the table. Remove each element that
+   answers nothing, or answers what something else already does.
+8. **Design every state** ("States"):
+   - each data view: loading, empty (what was asked and that nothing
+     matched), error (what happened, then what to do), partial (what is
+     missing), and first run where it can have had nothing; and the
+     content's extremes: one item, many items (25), a 100-character name;
+   - each control, small links included: rest, hover, focus-visible,
+     pressed (on touch too), disabled, and busy if it starts work;
+   - after each action: what is now true, in place or in a banner
+     ("Forms"); signed out.
+9. **Look at the second scheme** on its own.
+10. **Check the phone and 200% zoom**: 390px with a finger, 44px targets,
+    nothing sideways, nothing that needs hover, heading and focus order,
+    nothing by colour alone; then the desktop at 200% zoom. Read the
+    measured checks ("Measure what can be measured") rather than judging
+    those from a picture.
+11. **Review it** as "Review your own UI change as a designer" in
+    `src/web/AGENTS.md` says.
