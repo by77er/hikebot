@@ -42,6 +42,7 @@ import { playRound } from "../polls/helpers";
 
 const OWNER = "400000000000000001";
 const MEMBER = "400000000000000002";
+const OTHER_MEMBER = "400000000000000003";
 const TEXT = "300000000000000001";
 const NEWS = "300000000000000002";
 const FORUM = "300000000000000003";
@@ -169,9 +170,10 @@ function proposeSubmit(
   name: string,
   details = "",
   map = "",
+  userId = MEMBER,
 ): APIModalSubmitInteraction {
   const interaction = modalInteraction(LOCATION_IDS.propose(pollId), guildId);
-  Object.assign(interaction, { member: { user: { id: MEMBER }, roles: [] } });
+  Object.assign(interaction, { member: { user: { id: userId }, roles: [] } });
   Object.assign(interaction.data, {
     components: [
       [LOCATION_IDS.name, name],
@@ -651,7 +653,9 @@ describe("proposing a location", () => {
       "**place 3** is already on the list. Vote for it instead.",
     );
     await send(proposeSubmit(guild, pollId, "Place 24"));
-    reply = await send(proposeSubmit(guild, pollId, "Place 25"));
+    reply = await send(
+      proposeSubmit(guild, pollId, "Place 25", "", "", OTHER_MEMBER),
+    );
     expect(text(reply.data.components)).toContain(
       "This vote already has 25 locations",
     );
@@ -867,14 +871,19 @@ describe("suggesting a past location again", () => {
     });
   }
 
-  function click(customId: string, guild: string) {
+  function click(customId: string, guild: string, userId = MEMBER) {
     const interaction = componentInteraction(customId, guild);
-    Object.assign(interaction, { member: { user: { id: MEMBER }, roles: [] } });
+    Object.assign(interaction, { member: { user: { id: userId }, roles: [] } });
     return interaction;
   }
 
-  function pick(guild: string, pollId: number, optionId: number) {
-    const interaction = click(LOCATION_IDS.again(pollId), guild);
+  function pick(
+    guild: string,
+    pollId: number,
+    optionId: number,
+    userId = MEMBER,
+  ) {
+    const interaction = click(LOCATION_IDS.again(pollId), guild, userId);
     Object.assign(interaction.data, {
       component_type: ComponentType.StringSelect,
       values: [String(optionId)],
@@ -950,7 +959,7 @@ describe("suggesting a past location again", () => {
       Array.from({ length: 24 }, (_, i) => `Place ${String(i)}`),
     );
     await send(pick(guild, pollId, lakeId));
-    let reply = await send(pick(guild, pollId, lakeId));
+    let reply = await send(pick(guild, pollId, lakeId, OTHER_MEMBER));
     expect(text(reply.data.components)).toBe(
       "This vote already has 25 locations, the most it can hold. Vote for one of them instead.",
     );
@@ -1005,5 +1014,78 @@ describe("suggesting a past location again", () => {
       "Nothing was started. Remove this location and try again:\n- **Ridge** was the hike on Sat, 5 Dec 2026 · 11:00. It can be suggested again after 2 more hikes.",
     );
     expect(await activeRound(guild)).toBeNull();
+  });
+
+  describe("one proposal per member", () => {
+    const ALREADY = (label: string) =>
+      `You've already proposed **${label}** for this location vote. Each member proposes one location per round.`;
+
+    async function labels(guild: string, pollId: number) {
+      return runInDurableObject(stub(guild), (_i, state) =>
+        new PollStore(state.storage)
+          .getPoll(pollId)
+          ?.options.map((o) => o.label),
+      );
+    }
+
+    it("refuses Propose a location and New location with the sentence naming the member's location, opening nothing", async () => {
+      const guild = "location-one-button";
+      const { pollId } = await secondRound(guild, ["Summit"]);
+      let reply = await send(proposeSubmit(guild, pollId, "Meadow"));
+      expect(text(reply.data.components)).toMatch(/^Added \*\*Meadow\*\*/);
+      for (const id of [
+        LOCATION_IDS.propose(pollId),
+        LOCATION_IDS.newLocation(pollId),
+      ]) {
+        reply = await send(click(id, guild));
+        expect(reply.type).toBe(
+          InteractionResponseType.ChannelMessageWithSource,
+        );
+        expect(reply.data).toMatchObject({ flags: 32768 | 64 });
+        expect(text(reply.data.components)).toBe(ALREADY("Meadow"));
+        expect(selectOf(reply.data.components)).toBeUndefined();
+      }
+      // Another member still gets the suggest-again message.
+      reply = await send(
+        click(LOCATION_IDS.propose(pollId), guild, OTHER_MEMBER),
+      );
+      expect(selectOf(reply.data.components)).toBeDefined();
+    });
+
+    it("refuses a stale modal and a stale select with the same sentence, adding nothing", async () => {
+      const guild = "location-one-stale";
+      const { pollId, lakeId } = await secondRound(guild, ["Summit"]);
+      await send(proposeSubmit(guild, pollId, "Meadow"));
+      let reply = await send(proposeSubmit(guild, pollId, "Pass"));
+      expect(reply.data).toMatchObject({ flags: 32768 | 64 });
+      expect(text(reply.data.components)).toBe(ALREADY("Meadow"));
+      reply = await send(pick(guild, pollId, lakeId));
+      expect(reply.type).toBe(InteractionResponseType.UpdateMessage);
+      expect(text(reply.data.components)).toBe(ALREADY("Meadow"));
+      expect(selectOf(reply.data.components)).toBeUndefined();
+      expect(await labels(guild, pollId)).toEqual(["Summit", "Meadow"]);
+    });
+
+    it("counts a pick: the select is gone after it, and the modal is refused", async () => {
+      const guild = "location-one-pick";
+      const { pollId, lakeId } = await secondRound(guild);
+      await send(pick(guild, pollId, lakeId));
+      const reply = await send(proposeSubmit(guild, pollId, "Meadow"));
+      expect(text(reply.data.components)).toBe(ALREADY("Lake"));
+      expect(await labels(guild, pollId)).toEqual(["Lake"]);
+    });
+
+    it("leaves the admin's starting list out: the owner who started with five locations proposes one", async () => {
+      const guild = "location-one-owner";
+      const { pollId } = await secondRound(guild, ["A", "B", "C", "D", "E"]);
+      const reply = await send(
+        proposeSubmit(guild, pollId, "Meadow", "", "", OWNER),
+      );
+      expect(text(reply.data.components)).toMatch(/^Added \*\*Meadow\*\*/);
+      const again = await send(
+        click(LOCATION_IDS.propose(pollId), guild, OWNER),
+      );
+      expect(text(again.data.components)).toBe(ALREADY("Meadow"));
+    });
   });
 });

@@ -86,6 +86,21 @@
       }
     },
     {
+      "name": "server-date-vote-proposed",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-date-vote",
+      "user": "400000000000000001",
+      "submit": {
+        "from": "/g/220000000000000101",
+        "action": "/g/220000000000000101/polls/2/options",
+        "fields": {
+          "date": "2030-06-14",
+          "time": "17:30"
+        }
+      }
+    },
+    {
       "name": "server-empty",
       "path": "/g/220000000000000101",
       "status": 200,
@@ -205,6 +220,22 @@
         "fields": {
           "name": "snow lake",
           "details": "From the Alpental lot again, as last year.",
+          "map": ""
+        }
+      }
+    },
+    {
+      "name": "server-location-vote-proposed",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-location-vote",
+      "user": "400000000000000001",
+      "submit": {
+        "from": "/g/220000000000000101",
+        "action": "/g/220000000000000101/polls/1/options",
+        "fields": {
+          "name": "Heather Lake",
+          "details": "",
           "map": ""
         }
       }

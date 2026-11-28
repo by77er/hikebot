@@ -477,8 +477,8 @@ export class RoundPlayer {
   /**
    * Stores `round` in the guild's object as the bot would have stored it
    * after members played it that far: its location vote, and from
-   * `date_voting` on its date vote, each option with the members who voted
-   * for it, the winners once a vote closed, and for a `complete` round its
+   * `date_voting` on its date vote, each option (as the owner's starting
+   * list) with the members who voted for it, the winners once a vote closed, and for a `complete` round its
    * thread and event. The polls' messages are in the text channel, with
    * made-up ids. Nothing is posted, so nothing waits: for the screenshots'
    * seeds, which run outside Vitest and cannot wait with `eventually`.
@@ -525,10 +525,11 @@ export class RoundPlayer {
         const label =
           kind === "date" ? dateOptionLabel(option.label) : option.label;
         const [added] = await sql.exec<{ id: number }>(
+          // The owner's starting list, so no member's one proposal.
           `INSERT INTO poll_options (poll_id, label, label_key, details,
              date_value, proposed_by, created_at, place_lat, place_lon,
-             place_name, place_status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+             place_name, place_status, starting)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1) RETURNING id`,
           pollId,
           label,
           // The bot keys a date by its value, a location by its label.

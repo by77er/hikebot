@@ -202,7 +202,10 @@ function lastRound(name: string): Promise<RoundView | null> {
   return inGuild(name, (_c, store) => store.getLastRound());
 }
 
-/** Adds `labels` to the open location vote and has members vote. */
+/**
+ * Adds `labels` to the open location vote, the first proposed by Ana and
+ * the next by Ben (each member proposes one), and has members vote.
+ */
 function proposeAndVote(
   name: string,
   labels: string[],
@@ -211,8 +214,8 @@ function proposeAndVote(
   return inGuild(name, (_c, store) => {
     const poll = store.getActiveRound()?.locationPoll;
     if (!poll) throw new Error("no location vote");
-    for (const label of labels) {
-      store.addOption(poll.id, { label, proposedBy: ANA });
+    for (const [i, label] of labels.entries()) {
+      store.addOption(poll.id, { label, proposedBy: [ANA, BEN][i] ?? ANA });
     }
     voteFor(store, poll.id, votes);
   });

@@ -377,4 +377,42 @@ describe("the web view's round", () => {
       defaultTime: "11:00",
     });
   });
+
+  it("refuses a member who proposed a location with the bot's sentence naming it, and no one else", async () => {
+    const g = await setUp();
+    await g.store((s) => {
+      const poll = startLocationVote(s, ["Ridge", "Lake"]);
+      s.addOption(poll.id, { label: "Summit", proposedBy: ANA });
+    });
+    expect((await g.view(ANA)).round?.vote?.propose).toMatchObject({
+      kind: "location",
+      refusal:
+        "You've already proposed **Summit** for this location vote. Each member proposes one location per round.",
+    });
+    expect((await g.view(BEN)).round?.vote?.propose.refusal).toBeNull();
+    // The owner's starting list does not count.
+    expect((await g.view(OWNER)).round?.vote?.propose.refusal).toBeNull();
+  });
+
+  it("refuses a member who proposed a date with the bot's sentence naming it, and no one else", async () => {
+    const g = await setUp();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.UTC(2030, 5, 1, 18));
+    await g.store((s) => {
+      const where = startLocationVote(s, ["Lake"]);
+      s.closePoll(where.id, OWNER);
+      const poll = s.startDatePoll(where.roundId, OWNER, [
+        "2030-06-08",
+        "2030-06-15",
+      ]);
+      s.proposeDate(poll.id, ANA, "2030-06-09", "America/Los_Angeles");
+    });
+    expect((await g.view(ANA)).round?.vote?.propose).toMatchObject({
+      kind: "date",
+      refusal:
+        "You've already proposed **Sun, 9 Jun 2030 · 11:00** for this date vote. Each member proposes one date per round.",
+    });
+    expect((await g.view(BEN)).round?.vote?.propose.refusal).toBeNull();
+    expect((await g.view(OWNER)).round?.vote?.propose.refusal).toBeNull();
+  });
 });

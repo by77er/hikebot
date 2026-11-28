@@ -6,7 +6,8 @@
  * fields: the name, the details and the map link or coordinates. Both post
  * to `/g/<guild id>/polls/<poll id>/options`. A refused proposal shows the
  * bot's sentence at the top of its form and on its field, with what was
- * sent kept. While the vote is full it shows the bot's sentence instead.
+ * sent kept. While the member may add no location (they already proposed
+ * one to this vote, or it is full) it shows the bot's sentence instead.
  * Nothing while no location vote is open.
  */
 import type { WebView } from "../../../guild/web-view";

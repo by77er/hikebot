@@ -16,7 +16,8 @@ export type PollErrorCode =
   | "too_few_options"
   | "unknown_option"
   | "no_options"
-  | "location_on_cooldown";
+  | "location_on_cooldown"
+  | "already_proposed";
 
 export class PollError extends Error {
   override readonly name = "PollError";

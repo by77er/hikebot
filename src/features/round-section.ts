@@ -10,6 +10,7 @@ import type { WebViewSource } from "../guild/web-view";
 import { DEFAULT_HIKE_TIME } from "../polls/dates";
 import {
   MAX_OPTIONS,
+  alreadyProposedMessage,
   proposeDays,
   type PollKind,
   type PollView,
@@ -71,7 +72,10 @@ export interface WebOpenVote {
 /** Propose a location, as the button offers it in Discord. */
 export interface WebLocationProposal {
   kind: "location";
-  /** The bot's sentence when the vote is full, null while there is room. */
+  /**
+   * The bot's sentence when the viewer may add no location: they already
+   * proposed one to this vote, or the vote is full. Null while they may.
+   */
   refusal: string | null;
   /**
    * Past locations the viewer may suggest again, as the bot's "Suggest one
@@ -90,8 +94,9 @@ export interface WebLocationProposal {
 export interface WebDateProposal {
   kind: "date";
   /**
-   * The bot's sentence when no date can be added: the vote is full, or
-   * the round's days have passed. Null while a member may add one.
+   * The bot's sentence when the viewer may add no date: they already
+   * proposed one to this vote, the vote is full, or the round's days have
+   * passed. Null while they may.
    */
   refusal: string | null;
   /** The first and last day a member may propose, `YYYY-MM-DD`. */
@@ -183,9 +188,15 @@ function locationProposal(
   source: WebViewSource,
 ): WebLocationProposal {
   const past = source.store.listPastLocations(source.viewerId, poll.id);
+  const own = source.store.getProposal(poll.id, source.viewerId);
   return {
     kind: "location",
-    refusal: poll.options.length >= MAX_OPTIONS ? TOO_MANY : null,
+    refusal:
+      own !== null
+        ? alreadyProposedMessage("location", own.label)
+        : poll.options.length >= MAX_OPTIONS
+          ? TOO_MANY
+          : null,
     again: suggestable(past).map((p) => ({
       optionId: p.optionId,
       label: p.label,
@@ -197,12 +208,15 @@ function locationProposal(
 
 function dateProposal(poll: PollView, source: WebViewSource): WebDateProposal {
   const { first, last } = pollProposalDays(source.storage, poll, source.now);
+  const own = source.store.getProposal(poll.id, source.viewerId);
   const refusal =
-    poll.options.length >= MAX_OPTIONS
-      ? FULL
-      : first > last
-        ? proposeDays(first, last, true)
-        : null;
+    own !== null
+      ? alreadyProposedMessage("date", own.label)
+      : poll.options.length >= MAX_OPTIONS
+        ? FULL
+        : first > last
+          ? proposeDays(first, last, true)
+          : null;
   return {
     kind: "date",
     refusal,

@@ -66,6 +66,25 @@ describe("ProposeDate", () => {
     );
   });
 
+  it("shows the bot's sentence naming the member's date instead of the form once they proposed one", async () => {
+    const html = render(
+      <ProposeDate
+        view={viewWith(
+          dateProposal({
+            refusal:
+              "You've already proposed **Sun, 9 Jun 2030 · 09:00** for this date vote. Each member proposes one date per round.",
+          }),
+        )}
+        forms={FORMS}
+      />,
+    );
+    expect(html).not.toContain("<form");
+    expect(html).toContain("<strong>Sun, 9 Jun 2030 · 09:00</strong>");
+    expect(await spokenText(html)).toContain(
+      "You've already proposed Sun, 9 Jun 2030 · 09:00 for this date vote. Each member proposes one date per round.",
+    );
+  });
+
   it.each([
     ["invalid_date", "Pick a date."],
     [

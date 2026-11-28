@@ -26,7 +26,7 @@ const ID = {
 const guilds = new Map<number, TestGuild>();
 
 beforeAll(() => {
-  for (const n of [20, 21, 22, 23, 24, 25]) {
+  for (const n of [20, 21, 22, 23, 24, 25, 26, 27]) {
     guilds.set(n, play.guild(n, { name: "Ridge Walkers" }));
   }
 });
@@ -212,7 +212,10 @@ it("proposes a location from the web, which members then vote for in Discord, an
     "Mailbox Peak 1 vote",
   );
 
-  const refused = await client.submitForm(added, options, {
+  // Ana has proposed her one location; Ben types the same name again.
+  const benClient = await signIn(g, ben);
+  const benPage = await benClient.get(`/g/${g.guildId}`);
+  const refused = await benClient.submitForm(benPage, options, {
     name: "mailbox peak",
     details: "Again",
     map: "",
@@ -258,6 +261,19 @@ it("suggests a past location again from the web, and refuses a resting one in bo
   expect(page.body).not.toMatch(/<option value="\d+">Alpine Lake<\/option>/);
 
   const options = actionOf(page, "options");
+  // A refused proposal is not one: Ana can still suggest one again.
+  const cooldown =
+    "**Alpine Lake** was the hike on Sat, 8 Jun 2030 · 11:00. It can be suggested again after 2 more hikes.";
+  const typed = await client.submitForm(page, options, {
+    name: "Alpine Lake",
+    details: "",
+    map: "",
+  });
+  expect(typed.status).toBe(422);
+  expect(typed.body).toContain(
+    cooldown.replace("**Alpine Lake**", "<strong>Alpine Lake</strong>"),
+  );
+
   const again = await followed(
     client,
     await client.submitForm(page, options, { again: bear ?? "" }),
@@ -268,18 +284,6 @@ it("suggests a past location again from the web, and refuses a resting one in bo
     expect(text).toContain("**Bear Creek** · 0 votes");
     expect(text).toContain(`Proposed by <@${ana.actor.userId}>`);
   });
-
-  const cooldown =
-    "**Alpine Lake** was the hike on Sat, 8 Jun 2030 · 11:00. It can be suggested again after 2 more hikes.";
-  const typed = await client.submitForm(again, options, {
-    name: "Alpine Lake",
-    details: "",
-    map: "",
-  });
-  expect(typed.status).toBe(422);
-  expect(typed.body).toContain(
-    cooldown.replace("**Alpine Lake**", "<strong>Alpine Lake</strong>"),
-  );
 
   // The same location typed in Discord gets the same sentence. With Bear
   // Creek on the vote and Alpine Lake resting, nothing can be suggested
@@ -315,9 +319,20 @@ it("proposes a date from the web within the allowed days, and the server refuses
     ),
   );
   const options = actionOf(page, "options");
+  const far = await client.submitForm(page, options, {
+    date: plusDays(today, 40),
+    time: "",
+  });
+  expect(far.status).toBe(422);
+  expect(textOf(far.body)).toContain(
+    `is more than 31 days away. Propose a day from ${today} to ${plusDays(today, 31)}, or ask an admin to plan further ahead.`,
+  );
+  expect(far.body).toContain(`value="${plusDays(today, 40)}"`);
+  expect(textOf(far.body)).toContain("Your date was not added.");
+
   const added = await followed(
     client,
-    await client.submitForm(page, options, {
+    await client.submitForm(far, options, {
       date: plusDays(today, 5),
       time: "09:00",
     }),
@@ -329,17 +344,6 @@ it("proposes a date from the web within the allowed days, and the server refuses
       `**${banner ?? ""}** · 0 votes`,
     );
   });
-
-  const far = await client.submitForm(added, options, {
-    date: plusDays(today, 40),
-    time: "",
-  });
-  expect(far.status).toBe(422);
-  expect(textOf(far.body)).toContain(
-    `is more than 31 days away. Propose a day from ${today} to ${plusDays(today, 31)}, or ask an admin to plan further ahead.`,
-  );
-  expect(far.body).toContain(`value="${plusDays(today, 40)}"`);
-  expect(textOf(far.body)).toContain("Your date was not added.");
 });
 
 it("refuses a member removed from the server after loading the page, and a forged POST from another site", async () => {
@@ -403,4 +407,151 @@ it("refuses a vote on a poll that closed after the page loaded with the bot's se
   const shown = textOf((await client.get(`/g/${g.guildId}`)).body);
   expect(shown).not.toContain("This vote has closed.");
   expect(shown).not.toContain("Save votes");
+});
+
+it("takes one location and one date per member from Discord and the web together: the second is refused with the same sentence everywhere, and stores nothing", async () => {
+  const g = guild(26);
+  const [ana, ben] = g.members as [Member, Member];
+  const panel = await play.setUpPanel(g);
+  const poll = await play.startLocationVote(g, panel, "Ridge");
+  const client = await signIn(g, ana);
+  const before = await client.get(`/g/${g.guildId}`);
+  const options = actionOf(before, "options");
+  const already =
+    "You've already proposed **Mailbox Peak** for this location vote. Each member proposes one location per round.";
+  const alreadyHtml = already.replace(
+    "**Mailbox Peak**",
+    "<strong>Mailbox Peak</strong>",
+  );
+
+  // Ana opens the modal in Discord, then proposes in it.
+  const propose = idStarting(play.shown(poll), "hb:location:propose:");
+  const modal = await ana.click(poll, propose);
+  expect(modal.type).toBe(InteractionResponseType.Modal);
+  await ana.submitModal(modal, { [ID.name]: "Mailbox Peak" }, poll);
+  expectEphemeral(ana, "Added **Mailbox Peak** to the location vote.");
+
+  // Propose a location again: the sentence, and no modal.
+  const again = await ana.click(poll, propose);
+  expect(again.type).toBe(InteractionResponseType.ChannelMessageWithSource);
+  expectEphemeral(ana, already);
+  // The modal she opened before is stale: the same sentence.
+  await ana.submitModal(modal, { [ID.name]: "Lake Twenty-Two" }, poll);
+  expectEphemeral(ana, already);
+
+  // The web page shows the sentence in place of the form, the vote form
+  // stays, and a POST sent anyway is refused with the same sentence.
+  const page = await client.get(`/g/${g.guildId}`);
+  expect(page.body).toContain(alreadyHtml);
+  expect(page.body).not.toContain('name="name"');
+  expect(textOf(page.body)).toContain("Save votes");
+  // Sent from the page as it was before she proposed.
+  const forged = await client.submitForm(before, options, {
+    name: "Lake Twenty-Two",
+    details: "",
+    map: "",
+  });
+  expect(forged.status).toBe(422);
+  expect(forged.body).toContain(alreadyHtml);
+
+  // Ben still proposes; the poll message keeps its button and the rule.
+  const benModal = await ben.click(poll, propose);
+  await ben.submitModal(benModal, { [ID.name]: "Bear Creek" }, poll);
+  expectEphemeral(ben, "Added **Bear Creek** to the location vote.");
+  await eventually(() => {
+    const text = messageText(play.shown(poll));
+    expect(text).toContain("**Bear Creek** · 0 votes");
+    expect(text).toContain("One proposal per member.");
+  });
+  expect(messageText(play.shown(poll))).not.toContain("Lake Twenty-Two");
+
+  // Ana's location doesn't use up her date.
+  await play.vote(ben, poll, ["Mailbox Peak"]);
+  await play.closeVote(g.owner, panel, "location vote");
+  const today = todayInLosAngeles();
+  const when = await play.startDateVote(
+    g,
+    panel,
+    [plusDays(today, 3), plusDays(today, 4)].join("\n"),
+  );
+  const dateBefore = await client.get(`/g/${g.guildId}`);
+  await play.proposeDate(ana, when, plusDays(today, 5));
+  expectEphemeral(ana, "Added **");
+  const label = /Added \*\*([^*]+)\*\*/.exec(messageText(ana.lastReply()))?.[1];
+  const dateAlready = `You've already proposed **${label ?? ""}** for this date vote. Each member proposes one date per round.`;
+  const dateButton = await ana.click(
+    when,
+    idStarting(play.shown(when), "hb:date:propose:"),
+  );
+  expect(dateButton.type).toBe(
+    InteractionResponseType.ChannelMessageWithSource,
+  );
+  expectEphemeral(ana, dateAlready);
+  const datePage = await client.get(`/g/${g.guildId}`);
+  expect(datePage.body).toContain(
+    dateAlready.replace(
+      `**${label ?? ""}**`,
+      `<strong>${label ?? ""}</strong>`,
+    ),
+  );
+  expect(datePage.body).not.toContain('name="date"');
+  const forgedDate = await client.submitForm(
+    dateBefore,
+    actionOf(dateBefore, "options"),
+    {
+      date: plusDays(today, 6),
+      time: "",
+    },
+  );
+  expect(forgedDate.status).toBe(422);
+  expect(textOf(forgedDate.body)).toContain(
+    textOf(dateAlready.replaceAll("**", "")),
+  );
+  // Ben, who proposed a location, still proposes a date.
+  await play.proposeDate(ben, when, plusDays(today, 6));
+  expectEphemeral(ben, "Added **");
+});
+
+it("keeps one of two proposals a member sends from Discord and the web at once", async () => {
+  const g = guild(27);
+  const [ana] = g.members as [Member];
+  const panel = await play.setUpPanel(g);
+  const poll = await play.startLocationVote(g, panel, "Ridge");
+  const client = await signIn(g, ana);
+  const page = await client.get(`/g/${g.guildId}`);
+  const modal = await ana.click(
+    poll,
+    idStarting(play.shown(poll), "hb:location:propose:"),
+  );
+
+  // Both are sent before either answers.
+  const [, web] = await Promise.all([
+    ana.submitModal(modal, { [ID.name]: "Mailbox Peak" }, poll),
+    client.submitForm(page, actionOf(page, "options"), {
+      name: "Bear Creek",
+      details: "",
+      map: "",
+    }),
+  ]);
+  const shown = await client.get(`/g/${g.guildId}`);
+  const proposed = ["Mailbox Peak", "Bear Creek"].filter((label) =>
+    textOf(shown.body).includes(label),
+  );
+  expect(proposed).toHaveLength(1);
+  const first = proposed[0] ?? "";
+  expect(shown.body).toContain(
+    `You've already proposed <strong>${first}</strong> for this location vote.`,
+  );
+  if (first === "Mailbox Peak") {
+    expect(web.status).toBe(422);
+  } else {
+    expect(web.status).toBe(303);
+    expectEphemeral(
+      ana,
+      "You've already proposed **Bear Creek** for this location vote.",
+    );
+  }
+  await eventually(() => {
+    expect(messageText(play.shown(poll))).toContain(`**${first}** · 0 votes`);
+  });
 });

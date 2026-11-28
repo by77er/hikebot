@@ -31,8 +31,17 @@ function appliedNames(storage: DurableObjectStorage): string[] {
     .map((row) => row.name);
 }
 
-/** Takes the database back from 0009_weather to 0008_round_map_picture. */
+/** Takes the database back from 0010_option_starting to 0009_weather. */
+function undoOptionStarting(storage: DurableObjectStorage): void {
+  storage.sql.exec("ALTER TABLE poll_options DROP COLUMN starting");
+  storage.sql.exec(
+    "DELETE FROM _migrations WHERE name = '0010_option_starting'",
+  );
+}
+
+/** Takes the database back from 0010_option_starting to 0008_round_map_picture. */
 function undoWeather(storage: DurableObjectStorage): void {
+  undoOptionStarting(storage);
   for (const column of [
     "forecast",
     "forecast_fetched_at",
@@ -44,7 +53,7 @@ function undoWeather(storage: DurableObjectStorage): void {
   storage.sql.exec("DELETE FROM _migrations WHERE name = '0009_weather'");
 }
 
-/** Takes the database back from 0009_weather to 0007_guild_cadence. */
+/** Takes the database back from 0010_option_starting to 0007_guild_cadence. */
 function undoMapPicture(storage: DurableObjectStorage): void {
   undoWeather(storage);
   storage.sql.exec("ALTER TABLE rounds DROP COLUMN map_picture_key");
@@ -53,7 +62,7 @@ function undoMapPicture(storage: DurableObjectStorage): void {
   );
 }
 
-/** Takes the database back from 0009_weather to 0006_places. */
+/** Takes the database back from 0010_option_starting to 0006_places. */
 function undoCadence(storage: DurableObjectStorage): void {
   undoMapPicture(storage);
   for (const column of [
@@ -600,6 +609,48 @@ describe("migrations", () => {
       expect(
         state.storage.sql.exec("SELECT units FROM guild_settings").one(),
       ).toEqual({ units: "metric" });
+    });
+  });
+
+  it("add the starting column to a database at 0009, counting its options as proposals", async () => {
+    const stub = stubFor("schema-option-starting");
+    await runInDurableObject(stub, (_instance, state) => {
+      undoOptionStarting(state.storage);
+      state.storage.sql.exec(
+        `INSERT INTO rounds (status, started_by, started_at)
+         VALUES ('location_voting', '21', 1)`,
+      );
+      state.storage.sql.exec(
+        `INSERT INTO polls (round_id, kind, status, opened_by, opened_at)
+         VALUES (1, 'location', 'open', '21', 1)`,
+      );
+      state.storage.sql.exec(
+        `INSERT INTO poll_options (poll_id, label, label_key, proposed_by, created_at)
+         VALUES (1, 'Ridge', 'ridge', '21', 1)`,
+      );
+      expect(appliedNames(state.storage)).toEqual(
+        shipped.slice(0, shipped.indexOf("0010_option_starting")),
+      );
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(appliedNames(state.storage)).toEqual(shipped);
+      expect(
+        state.storage.sql
+          .exec("SELECT label, starting FROM poll_options")
+          .toArray(),
+      ).toEqual([{ label: "Ridge", starting: 0 }]);
+      state.storage.sql.exec("UPDATE poll_options SET starting = 1");
+    });
+
+    await evictDurableObject(stub);
+
+    await runInDurableObject(stub, (_instance, state) => {
+      expect(
+        state.storage.sql.exec("SELECT starting FROM poll_options").one(),
+      ).toEqual({ starting: 1 });
     });
   });
 

@@ -12,6 +12,7 @@ import {
   type APIMessageTopLevelComponent,
 } from "discord-api-types/v10";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { DATE_POLL } from "../../src/features/date-vote";
 import { LOCATION_POLL } from "../../src/features/location-vote";
 import {
   MAX_MESSAGE_COMPONENTS,
@@ -163,6 +164,28 @@ describe("renderPollMessage", () => {
     expect(text(view)).toContain("No one has voted yet.");
     expect(ids(view)).toEqual([POLL_IDS.vote(1), "hb:location:propose:1"]);
     expectWithinLimits(view);
+  });
+
+  it("says under the buttons that each member proposes one, while open only", () => {
+    for (const wording of [LOCATION_POLL, DATE_POLL]) {
+      const open = renderPollMessage(poll({ kind: wording.kind }), wording);
+      const body = flatten(nodes(open))[0]?.components ?? [];
+      expect(body.at(-2)?.type).toBe(ComponentType.ActionRow);
+      expect(body.at(-1)).toEqual({
+        type: ComponentType.TextDisplay,
+        content: "-# One proposal per member.",
+      });
+      const closed = renderPollMessage(
+        poll({
+          kind: wording.kind,
+          status: "closed",
+          options: [option(1, "Ridge", 1)],
+          winnerOptionId: 1,
+        }),
+        wording,
+      );
+      expect(text(closed)).not.toContain("One proposal per member.");
+    }
   });
 
   it("lists the options by votes, ties in proposal order, with details and proposer", () => {
@@ -326,6 +349,9 @@ describe("places on the poll message", () => {
       expectWithinLimits(view);
       expect(text(view).match(/Proposed by <@1\d{19}>/g)).toHaveLength(25);
       expect(text(view)).toContain(`**00${"L".repeat(78)}**`);
+      expect(text(view).includes("One proposal per member.")).toBe(
+        status === "open",
+      );
     }
   });
 });

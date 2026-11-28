@@ -185,6 +185,9 @@ export type PollWordings = Partial<Record<PollKind, PollWording>>;
 
 export const VOTE_CLOSED_MESSAGE = "This vote has closed.";
 
+/** The open poll message's line under its buttons. */
+export const PROPOSAL_RULE_LINE = "-# One proposal per member.";
+
 /** Discord's limits on one message. */
 export const MAX_MESSAGE_COMPONENTS = 40;
 export const MAX_MESSAGE_TEXT = 4000;
@@ -219,7 +222,8 @@ export const POLL_IDS = {
 
 /**
  * The public poll message: heading, instructions, the options by votes with
- * their details and proposer, the voter count and, while open, the buttons.
+ * their details and proposer, the voter count and, while open, the buttons
+ * and the one-proposal rule under them.
  * Closed, it marks the winner (and a tie broken at random) and has no
  * buttons; cancelled (closed without a winner) it says so. A located
  * option shows its place name and a `map` link, under a line of
@@ -267,6 +271,7 @@ export function renderPollMessage(
     foot.length +
     (anyLocated ? OSM_ATTRIBUTION.length + 1 : 0) +
     (ranked.length === 0 ? wording.empty.length : 0) +
+    (open ? PROPOSAL_RULE_LINE.length : 0) +
     ranked.reduce(
       (sum, _option, i) =>
         sum +
@@ -303,6 +308,7 @@ export function renderPollMessage(
         ...wording.extraButtons(poll),
       ),
     );
+    body.push(textDisplay(PROPOSAL_RULE_LINE));
   }
   return [container(body)];
 }
