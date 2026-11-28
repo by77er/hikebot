@@ -1112,10 +1112,11 @@ describe("proposing a date", () => {
     guildId: string,
     pollId: number,
     date: string,
+    userId = MEMBER,
   ): APIModalSubmitInteraction {
     const interaction = modalInteraction(DATE_IDS.propose(pollId), guildId);
     Object.assign(interaction, {
-      member: { user: { id: MEMBER }, roles: [] },
+      member: { user: { id: userId }, roles: [] },
     });
     Object.assign(interaction.data, {
       components: [
@@ -1192,8 +1193,15 @@ describe("proposing a date", () => {
   it("accepts today, 31 days ahead and the same day at another time", async () => {
     const guild = "date-propose-edges";
     const pollId = await openDatePoll(guild);
-    for (const date of ["2026-11-18", "2026-12-19", "2026-11-28 08:00"]) {
-      const reply = await send(proposeSubmit(guild, pollId, date));
+    // Three members, as each proposes one date.
+    for (const [i, date] of [
+      "2026-11-18",
+      "2026-12-19",
+      "2026-11-28 08:00",
+    ].entries()) {
+      const reply = await send(
+        proposeSubmit(guild, pollId, date, `40000000000000010${String(i)}`),
+      );
       expect(text(reply.data.components)).toMatch(/^Added \*\*/);
     }
     expect(await options(guild, pollId)).toHaveLength(5);
@@ -1260,8 +1268,14 @@ describe("proposing a date", () => {
         `${label} is outside this round's dates. Propose a day from 2026-11-21 to 2026-12-04: the 14 days after the date vote closes.`,
       );
     }
-    for (const date of ["2026-11-21 08:00", "2026-12-02", "2026-12-04"]) {
-      const reply = await send(proposeSubmit(guild, pollId, date));
+    for (const [i, date] of [
+      "2026-11-21 08:00",
+      "2026-12-02",
+      "2026-12-04",
+    ].entries()) {
+      const reply = await send(
+        proposeSubmit(guild, pollId, date, `40000000000000010${String(i)}`),
+      );
       expect(text(reply.data.components)).toMatch(/^Added \*\*/);
     }
     expect(await options(guild, pollId)).toHaveLength(5);

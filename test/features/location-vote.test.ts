@@ -42,6 +42,7 @@ import { playRound } from "../polls/helpers";
 
 const OWNER = "400000000000000001";
 const MEMBER = "400000000000000002";
+const OTHER_MEMBER = "400000000000000003";
 const TEXT = "300000000000000001";
 const NEWS = "300000000000000002";
 const FORUM = "300000000000000003";
@@ -169,9 +170,10 @@ function proposeSubmit(
   name: string,
   details = "",
   map = "",
+  userId = MEMBER,
 ): APIModalSubmitInteraction {
   const interaction = modalInteraction(LOCATION_IDS.propose(pollId), guildId);
-  Object.assign(interaction, { member: { user: { id: MEMBER }, roles: [] } });
+  Object.assign(interaction, { member: { user: { id: userId }, roles: [] } });
   Object.assign(interaction.data, {
     components: [
       [LOCATION_IDS.name, name],
@@ -651,7 +653,9 @@ describe("proposing a location", () => {
       "**place 3** is already on the list. Vote for it instead.",
     );
     await send(proposeSubmit(guild, pollId, "Place 24"));
-    reply = await send(proposeSubmit(guild, pollId, "Place 25"));
+    reply = await send(
+      proposeSubmit(guild, pollId, "Place 25", "", "", OTHER_MEMBER),
+    );
     expect(text(reply.data.components)).toContain(
       "This vote already has 25 locations",
     );
@@ -867,14 +871,19 @@ describe("suggesting a past location again", () => {
     });
   }
 
-  function click(customId: string, guild: string) {
+  function click(customId: string, guild: string, userId = MEMBER) {
     const interaction = componentInteraction(customId, guild);
-    Object.assign(interaction, { member: { user: { id: MEMBER }, roles: [] } });
+    Object.assign(interaction, { member: { user: { id: userId }, roles: [] } });
     return interaction;
   }
 
-  function pick(guild: string, pollId: number, optionId: number) {
-    const interaction = click(LOCATION_IDS.again(pollId), guild);
+  function pick(
+    guild: string,
+    pollId: number,
+    optionId: number,
+    userId = MEMBER,
+  ) {
+    const interaction = click(LOCATION_IDS.again(pollId), guild, userId);
     Object.assign(interaction.data, {
       component_type: ComponentType.StringSelect,
       values: [String(optionId)],
@@ -950,7 +959,7 @@ describe("suggesting a past location again", () => {
       Array.from({ length: 24 }, (_, i) => `Place ${String(i)}`),
     );
     await send(pick(guild, pollId, lakeId));
-    let reply = await send(pick(guild, pollId, lakeId));
+    let reply = await send(pick(guild, pollId, lakeId, OTHER_MEMBER));
     expect(text(reply.data.components)).toBe(
       "This vote already has 25 locations, the most it can hold. Vote for one of them instead.",
     );

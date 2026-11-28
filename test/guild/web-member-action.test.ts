@@ -360,6 +360,84 @@ describe("webPropose a past location again", () => {
   });
 });
 
+describe("webPropose one location per member", () => {
+  const ALREADY = (label: string) =>
+    `You've already proposed **${label}** for this location vote. Each member proposes one location per round.`;
+  const newOne = (name: string): WebProposal => ({
+    kind: "location",
+    name,
+    details: "",
+    map: "",
+  });
+
+  it("refuses a new location after one suggested again, and adds nothing", async () => {
+    const g = setUp();
+    const poll = await g.store((s) => afterLakeHike(s));
+    const canyon = await g.store(
+      (s) =>
+        s.listPastLocations(ANA, poll.id).find((p) => p.label === "Canyon")
+          ?.optionId,
+    );
+    await g.propose(poll.id, { kind: "again", optionId: canyon ?? 0 });
+    expect(await g.propose(poll.id, newOne("Summit"))).toEqual({
+      kind: "refused",
+      code: "already_proposed",
+      message: ALREADY("Canyon"),
+    });
+    expect(
+      (await g.store((s) => s.getPoll(poll.id)))?.options.map((o) => o.label),
+    ).toEqual(["Ridge", "Canyon"]);
+  });
+
+  it("refuses one suggested again after a new location, and adds nothing", async () => {
+    const g = setUp();
+    const poll = await g.store((s) => afterLakeHike(s));
+    const canyon = await g.store(
+      (s) =>
+        s.listPastLocations(ANA, poll.id).find((p) => p.label === "Canyon")
+          ?.optionId,
+    );
+    await g.propose(poll.id, newOne("Summit"));
+    expect(
+      await g.propose(poll.id, { kind: "again", optionId: canyon ?? 0 }),
+    ).toEqual({
+      kind: "refused",
+      code: "already_proposed",
+      message: ALREADY("Summit"),
+    });
+    expect(
+      (await g.store((s) => s.getPoll(poll.id)))?.options.map((o) => o.label),
+    ).toEqual(["Ridge", "Summit"]);
+  });
+
+  it("keeps one of two proposals sent at once", async () => {
+    const g = setUp();
+    const poll = await g.store((s) => locationVote(s, ["Ridge"]));
+    const results = await Promise.all([
+      g.propose(poll.id, newOne("Lake")),
+      g.propose(poll.id, newOne("Summit")),
+    ]);
+    expect(results.map((r) => r.kind).sort()).toEqual(["done", "refused"]);
+    const options = (await g.store((s) => s.getPoll(poll.id)))?.options ?? [];
+    expect(options.filter((o) => o.proposedBy === ANA)).toHaveLength(1);
+  });
+
+  it("lets the owner, who started the vote with its locations, propose one", async () => {
+    const g = setUp();
+    const poll = await g.store((s) =>
+      locationVote(s, ["Ridge", "Lake", "Canyon", "Summit", "Falls"]),
+    );
+    expect(await g.propose(poll.id, newOne("Meadow"), OWNER)).toMatchObject({
+      kind: "done",
+    });
+    expect(await g.propose(poll.id, newOne("Pass"), OWNER)).toEqual({
+      kind: "refused",
+      code: "already_proposed",
+      message: ALREADY("Meadow"),
+    });
+  });
+});
+
 describe("webPropose a date", () => {
   const date = (day: string, time = ""): WebProposal => ({
     kind: "date",
@@ -375,12 +453,27 @@ describe("webPropose a date", () => {
       banner: "Added Sun, 9 Jun 2030 · 09:00.",
       note: null,
     });
-    expect(await g.propose(poll.id, date("2030-06-22"))).toMatchObject({
+    expect(await g.propose(poll.id, date("2030-06-22"), OWNER)).toMatchObject({
       banner: "Added Sat, 22 Jun 2030 · 11:00.",
     });
     const options = (await g.store((s) => s.getPoll(poll.id)))?.options ?? [];
-    expect(options.filter((o) => o.proposedBy === ANA)).toHaveLength(2);
+    expect(options.filter((o) => o.proposedBy === ANA)).toHaveLength(1);
+    // The owner's: the two starting dates and the one proposed.
+    expect(options.filter((o) => o.proposedBy === OWNER)).toHaveLength(3);
     expect(await g.refreshMarked(poll.id)).toBeDefined();
+  });
+
+  it("refuses a member's second date with the bot's sentence and adds nothing", async () => {
+    const g = setUp();
+    const poll = await g.store((s) => dateVote(s));
+    await g.propose(poll.id, date("2030-06-09", "09:00"));
+    expect(await g.propose(poll.id, date("2030-06-22"))).toEqual({
+      kind: "refused",
+      code: "already_proposed",
+      message:
+        "You've already proposed **Sun, 9 Jun 2030 · 09:00** for this date vote. Each member proposes one date per round.",
+    });
+    expect((await g.store((s) => s.getPoll(poll.id)))?.options).toHaveLength(3);
   });
 
   it.each([

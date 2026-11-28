@@ -159,6 +159,14 @@ export const migrations: readonly Migration[] = [
         CHECK (units IN ('imperial', 'metric'));
     `,
   },
+  {
+    // Whether an option is from the admin's starting list (the initial
+    // locations of Start location vote, the date vote's starting dates)
+    // rather than a member's proposal. Options from before it count as
+    // proposals.
+    name: "0010_option_starting",
+    sql: "ALTER TABLE poll_options ADD COLUMN starting INTEGER NOT NULL DEFAULT 0",
+  },
 ];
 
 /**

@@ -310,6 +310,15 @@ export function cooldownMessage(resting: RestingLocation): string {
   return `**${resting.label}** was the hike${when}. It can be suggested again after ${left}.`;
 }
 
+/**
+ * Why a member who already proposed `label` to a poll of `kind` this round
+ * is refused another: "You've already proposed **Eagle Peak** for this
+ * location vote. Each member proposes one location per round."
+ */
+export function alreadyProposedMessage(kind: PollKind, label: string): string {
+  return `You've already proposed **${label}** for this ${kind} vote. Each member proposes one ${kind} per round.`;
+}
+
 interface ValidOption {
   label: string;
   key: string;
@@ -317,6 +326,8 @@ interface ValidOption {
   dateValue: string | null;
   proposedBy: string;
   place: OptionPlace | null;
+  /** From the admin's starting list, so not a member's proposal. */
+  starting: boolean;
 }
 
 /** A place still to be looked up. */
@@ -366,6 +377,7 @@ function validateLocation(option: NewOption): ValidOption {
     dateValue: null,
     proposedBy: option.proposedBy,
     place: option.place ?? PENDING_PLACE,
+    starting: false,
   };
 }
 
@@ -388,6 +400,7 @@ function validateDate(
     dateValue: parsed.value,
     proposedBy,
     place: null,
+    starting: false,
   };
 }
 
@@ -441,7 +454,10 @@ export class PollStore {
     userId: string,
     initialLocations: readonly NewOption[] = [],
   ): RoundView {
-    const valid = initialLocations.map(validateLocation);
+    const valid = initialLocations.map((option) => ({
+      ...validateLocation(option),
+      starting: true,
+    }));
     if (valid.length > MAX_OPTIONS) {
       throw new PollError(
         "too_many_options",
@@ -469,11 +485,16 @@ export class PollStore {
 
   /**
    * Adds an option to an open poll. On a date poll the label is parsed with
-   * `parseDateOption` and stored as its display label.
+   * `parseDateOption` and stored as its display label. On a location poll
+   * it is the proposer's one proposal: refused when they already have one
+   * on the poll.
    */
   addOption(pollId: number, option: NewOption): OptionView {
     return this.storage.transactionSync(() => {
       const poll = this.openPollRow(pollId);
+      if (poll.kind === "location") {
+        this.refuseSecondProposal(poll, option.proposedBy);
+      }
       const valid =
         poll.kind === "date"
           ? validateDate(
@@ -504,8 +525,8 @@ export class PollStore {
    * today and `MAX_PROPOSAL_DAYS_AHEAD` days after today in `timeZone`,
    * both included, judged at `this.now()`; with a `window` (`YYYY-MM-DD`
    * days, both included), inside it instead, and never before today.
-   * Refuses a date and time already on the poll and a full poll; votes
-   * already cast are kept.
+   * Refuses a member who already proposed a date to the poll, a date and
+   * time already on the poll and a full poll; votes already cast are kept.
    */
   proposeDate(
     pollId: number,
@@ -519,6 +540,7 @@ export class PollStore {
       if (poll.kind !== "date") {
         throw new PollError("invalid_state", "This poll does not take dates.");
       }
+      this.refuseSecondProposal(poll, userId);
       const valid = validateDate(line, userId);
       const day = (valid.dateValue ?? "").slice(0, 10);
       const today = todayIn(timeZone, this.now());
@@ -594,6 +616,25 @@ export class PollStore {
       }
       return this.pollView(poll, userId);
     });
+  }
+
+  /**
+   * The option `userId` proposed to poll `pollId`, leaving out the admin's
+   * starting list; null when they have proposed none. A member proposes at
+   * most one per poll, so at most one per vote of a round.
+   */
+  getProposal(pollId: number, userId: string): OptionView | null {
+    const row = this.sql
+      .exec<{ id: number }>(
+        `SELECT id FROM poll_options
+         WHERE poll_id = ? AND proposed_by = ? AND starting = 0
+         ORDER BY id LIMIT 1`,
+        pollId,
+        userId,
+      )
+      .toArray()[0];
+    if (!row) return null;
+    return this.optionRows(pollId).find((o) => o.id === row.id) ?? null;
   }
 
   getPoll(pollId: number, viewerId: string | null = null): PollView | null {
@@ -840,7 +881,10 @@ export class PollStore {
     userId: string,
     dates: readonly string[],
   ): PollView {
-    const valid = dates.map((line) => validateDate(line, userId));
+    const valid = dates.map((line) => ({
+      ...validateDate(line, userId),
+      starting: true,
+    }));
     const seen = new Set<string>();
     for (const option of valid) {
       if (seen.has(option.key)) {
@@ -1209,8 +1253,8 @@ export class PollStore {
       `INSERT INTO poll_options
          (poll_id, label, label_key, details, date_value, proposed_by, created_at,
           place_lat, place_lon, place_name, place_status, place_attempts,
-          place_next_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+          place_next_at, starting)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       pollId,
       option.label,
       option.key,
@@ -1224,7 +1268,23 @@ export class PollStore {
       place?.status ?? null,
       place?.attempts ?? 0,
       place?.status === "pending" ? at : null,
+      option.starting ? 1 : 0,
     );
+  }
+
+  /**
+   * Refuses `userId` a second proposal to `poll` with `already_proposed`,
+   * naming their first. Called inside the insert's transaction, so two
+   * proposals racing cannot both pass.
+   */
+  private refuseSecondProposal(poll: PollRow, userId: string): void {
+    const proposal = this.getProposal(poll.id, userId);
+    if (proposal) {
+      throw new PollError(
+        "already_proposed",
+        alreadyProposedMessage(poll.kind, proposal.label),
+      );
+    }
   }
 
   private optionCount(pollId: number): number {

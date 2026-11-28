@@ -5,6 +5,7 @@ import {
   COOLDOWN_HIKES,
   MAX_OPTIONS,
   PENDING_PLACE,
+  alreadyProposedMessage,
   cooldownMessage,
   type PollStore,
 } from "../../src/polls/store";
@@ -139,8 +140,13 @@ describe("addOption", () => {
   it("enforces label and details lengths", async () => {
     await withStore((store) => {
       const pollId = store.startRound("u-admin").locationPoll?.id ?? 0;
+      let member = 0;
       const add = (label: string, details?: string) =>
-        store.addOption(pollId, { label, details, proposedBy: "u1" });
+        store.addOption(pollId, {
+          label,
+          details,
+          proposedBy: `u${String(++member)}`,
+        });
       expectCode(() => add(""), "invalid_label");
       expectCode(() => add("   "), "invalid_label");
       expectCode(() => add("x".repeat(81)), "invalid_label");
@@ -171,10 +177,14 @@ describe("addOption", () => {
     await withStore((store) => {
       const pollId = store.startRound("u-admin").locationPoll?.id ?? 0;
       for (let i = 0; i < MAX_OPTIONS; i++) {
-        store.addOption(pollId, { label: `L${String(i)}`, proposedBy: "u1" });
+        store.addOption(pollId, {
+          label: `L${String(i)}`,
+          proposedBy: `u${String(i)}`,
+        });
       }
       expectCode(
-        () => store.addOption(pollId, { label: "one more", proposedBy: "u1" }),
+        () =>
+          store.addOption(pollId, { label: "one more", proposedBy: "u-new" }),
         "too_many_options",
       );
       expect(store.getPoll(pollId)?.options).toHaveLength(MAX_OPTIONS);
@@ -509,14 +519,21 @@ describe("proposeDate", () => {
       await withStore(
         (store) => {
           const poll = openDatePoll(store);
+          // A new member each time: each proposes one date.
+          let member = 0;
           const propose = (line: string) =>
-            store.proposeDate(poll.id, "u-member", line, zone);
+            store.proposeDate(
+              poll.id,
+              `u-member${String(++member)}`,
+              line,
+              zone,
+            );
           expectCode(() => propose(yesterday), "date_in_past");
           expectCode(() => propose(after), "date_too_far");
           expect(store.getPoll(poll.id)?.options.length).toBe(2);
           expect(propose(today)).toMatchObject({
             dateValue: `${today} 11:00`,
-            proposedBy: "u-member",
+            proposedBy: "u-member3",
             votes: 0,
           });
           expect(propose(`${last} 23:59`).dateValue).toBe(`${last} 23:59`);
@@ -554,8 +571,15 @@ describe("proposeDate", () => {
       (store) => {
         const poll = openDatePoll(store);
         const window = { first: "2026-11-21", last: "2026-12-04" };
+        let member = 0;
         const propose = (line: string) =>
-          store.proposeDate(poll.id, "u-member", line, LA, window);
+          store.proposeDate(
+            poll.id,
+            `u-member${String(++member)}`,
+            line,
+            LA,
+            window,
+          );
         // Today and tomorrow are inside the usual month, not the window.
         expectCode(() => propose("2026-11-18"), "date_outside_window");
         expectCode(() => propose("2026-11-20 23:59"), "date_outside_window");
@@ -580,12 +604,19 @@ describe("proposeDate", () => {
     await withStore(
       (store) => {
         const poll = openDatePoll(store);
+        let member = 0;
         const message = (
           line: string,
           window: { first: string; last: string },
         ) => {
           try {
-            store.proposeDate(poll.id, "u-member", line, LA, window);
+            store.proposeDate(
+              poll.id,
+              `u-member${String(++member)}`,
+              line,
+              LA,
+              window,
+            );
           } catch (error) {
             return isPollError(error) ? `${error.code}: ${error.message}` : "";
           }
@@ -616,8 +647,9 @@ describe("proposeDate", () => {
     await withStore(
       (store) => {
         const poll = openDatePoll(store);
+        let member = 0;
         const propose = (line: string) =>
-          store.proposeDate(poll.id, "u-member", line, LA);
+          store.proposeDate(poll.id, `u-member${String(++member)}`, line, LA);
         expectCode(() => propose("next Saturday"), "invalid_date");
         expectCode(() => propose("2026-11-31"), "invalid_date");
         expectCode(() => propose("2026-11-28"), "duplicate_option");
@@ -1203,16 +1235,15 @@ describe("listPastLocations", () => {
 
   it("lists the viewer's own suggestions first, each group most recent first", async () => {
     const labels = await withStore((store) => {
-      const round = store.startRound("u-admin");
-      const pollId = round.locationPoll?.id ?? 0;
-      for (const [label, by] of [
-        ["Mine old", "u1"],
-        ["Theirs old", "u2"],
-        ["Mine new", "u1"],
-        ["Theirs new", "u3"],
-      ] as const) {
-        store.addOption(pollId, { label, proposedBy: by });
-      }
+      // Each member proposes one location per round, so over two rounds.
+      const earlier = store.startRound("u-admin");
+      const earlierPoll = earlier.locationPoll?.id ?? 0;
+      store.addOption(earlierPoll, { label: "Mine old", proposedBy: "u1" });
+      store.addOption(earlierPoll, { label: "Theirs old", proposedBy: "u2" });
+      store.cancelRound(earlier.id, "u-admin");
+      const pollId = store.startRound("u-admin").locationPoll?.id ?? 0;
+      store.addOption(pollId, { label: "Mine new", proposedBy: "u1" });
+      store.addOption(pollId, { label: "Theirs new", proposedBy: "u3" });
       return store
         .listPastLocations("u1", pollId)
         .map((p) => [p.label, p.proposedByViewer]);
@@ -1529,6 +1560,272 @@ describe("places", () => {
       point: SI,
       name: "Mount Si",
       attempts: 1,
+    });
+  });
+});
+
+/** The `already_proposed` refusal of `fn`, with its message. */
+function secondProposal(fn: () => unknown): string {
+  try {
+    fn();
+  } catch (error) {
+    if (isPollError(error, "already_proposed")) return error.message;
+    throw error;
+  }
+  throw new Error("expected already_proposed");
+}
+
+describe("one proposal per member", () => {
+  /** 12:00 UTC on Thu 19 Nov 2026. */
+  const NOW = Date.UTC(2026, 10, 19, 12);
+  const ZONE = "UTC";
+
+  function openDatePoll(store: PollStore) {
+    const round = decidedRound(store);
+    return store.startDatePoll(round.id, "u-admin", [
+      "2026-11-28",
+      "2026-12-12",
+    ]);
+  }
+
+  it("refuses a member's second location with already_proposed, naming the first, and writes nothing", async () => {
+    await withStore((store, storage) => {
+      const pollId = store.startRound("u-admin").locationPoll?.id ?? 0;
+      const first = store.addOption(pollId, {
+        label: "Ridge",
+        proposedBy: "u1",
+      });
+      expect(store.getProposal(pollId, "u1")).toEqual(first);
+      expect(
+        secondProposal(() =>
+          store.addOption(pollId, { label: "Lake", proposedBy: "u1" }),
+        ),
+      ).toBe(
+        "You've already proposed **Ridge** for this location vote. Each member proposes one location per round.",
+      );
+      // Refused whatever the second one is: a duplicate or an invalid one too.
+      expectCode(
+        () => store.addOption(pollId, { label: "Ridge", proposedBy: "u1" }),
+        "already_proposed",
+      );
+      expectCode(
+        () => store.addOption(pollId, { label: "", proposedBy: "u1" }),
+        "already_proposed",
+      );
+      expect(count(storage, "poll_options")).toBe(1);
+      // Another member still proposes.
+      store.addOption(pollId, { label: "Lake", proposedBy: "u2" });
+      expect(store.getPoll(pollId)?.options.map((o) => o.label)).toEqual([
+        "Ridge",
+        "Lake",
+      ]);
+    });
+  });
+
+  it("refuses a member's second date with already_proposed, naming the first, and writes nothing", async () => {
+    await withStore(
+      (store) => {
+        const poll = openDatePoll(store);
+        store.proposeDate(poll.id, "u1", "2026-12-05 09:00", ZONE);
+        expect(
+          secondProposal(() =>
+            store.proposeDate(poll.id, "u1", "2026-12-06", ZONE),
+          ),
+        ).toBe(
+          "You've already proposed **Sat, 5 Dec 2026 · 09:00** for this date vote. Each member proposes one date per round.",
+        );
+        expect(store.getPoll(poll.id)?.options).toHaveLength(3);
+        expect(store.getProposal(poll.id, "u1")?.label).toBe(
+          "Sat, 5 Dec 2026 · 09:00",
+        );
+        expect(store.getProposal(poll.id, "u2")).toBeNull();
+        store.proposeDate(poll.id, "u2", "2026-12-06", ZONE);
+        expect(store.getPoll(poll.id)?.options).toHaveLength(4);
+      },
+      { now: () => NOW },
+    );
+  });
+
+  it("does not count the admin's starting list: an admin who started with five locations, or the starting dates, still proposes one", async () => {
+    await withStore(
+      (store) => {
+        const round = store.startRound(
+          "u-admin",
+          locations("A", "B", "C", "D", "E"),
+        );
+        const pollId = round.locationPoll?.id ?? 0;
+        expect(store.getProposal(pollId, "u-admin")).toBeNull();
+        store.addOption(pollId, { label: "F", proposedBy: "u-admin" });
+        expectCode(
+          () => store.addOption(pollId, { label: "G", proposedBy: "u-admin" }),
+          "already_proposed",
+        );
+        store.setVotes(pollId, "u1", [round.locationPoll?.options[0]?.id ?? 0]);
+        store.closePoll(pollId, "u-admin");
+        const datePoll = store.startDatePoll(round.id, "u-admin", [
+          "2026-11-28",
+          "2026-12-12",
+        ]);
+        expect(store.getProposal(datePoll.id, "u-admin")).toBeNull();
+        store.proposeDate(datePoll.id, "u-admin", "2026-12-05", ZONE);
+        expect(
+          secondProposal(() =>
+            store.proposeDate(datePoll.id, "u-admin", "2026-12-06", ZONE),
+          ),
+        ).toMatch(/^You've already proposed \*\*Sat, 5 Dec 2026 · 11:00\*\*/);
+      },
+      { now: () => NOW },
+    );
+  });
+
+  it("counts a location and a date apart: a member who proposed a location still proposes a date, and the date leaves the location as it was", async () => {
+    await withStore(
+      (store) => {
+        const round = store.startRound("u-admin", locations("Ridge"));
+        const locationPoll = round.locationPoll?.id ?? 0;
+        const location = store.addOption(locationPoll, {
+          label: "Lake",
+          proposedBy: "u1",
+        });
+        store.setVotes(locationPoll, "u2", [location.id]);
+        store.closePoll(locationPoll, "u-admin");
+        const datePoll = store.startDatePoll(round.id, "u-admin", [
+          "2026-11-28",
+          "2026-12-12",
+        ]);
+        // u1 proposed a location, u2 did not; both propose a date.
+        const date = store.proposeDate(datePoll.id, "u1", "2026-12-05", ZONE);
+        store.proposeDate(datePoll.id, "u2", "2026-12-06", ZONE);
+        expect(store.getProposal(datePoll.id, "u1")).toEqual(date);
+        expect(store.getProposal(locationPoll, "u1")?.id).toBe(location.id);
+      },
+      { now: () => NOW },
+    );
+  });
+
+  it("starts each round fresh", async () => {
+    await withStore(
+      (store) => {
+        const round = store.startRound("u-admin", locations("Ridge"));
+        const first = round.locationPoll?.id ?? 0;
+        store.addOption(first, { label: "Lake", proposedBy: "u1" });
+        store.cancelRound(round.id, "u-admin");
+        const next = store.startRound("u-admin").locationPoll?.id ?? 0;
+        expect(store.getProposal(next, "u1")).toBeNull();
+        expect(
+          store.addOption(next, { label: "Summit", proposedBy: "u1" }).label,
+        ).toBe("Summit");
+        store.cancelRound(store.getActiveRound()?.id ?? 0, "u-admin");
+        // And a date proposed in a completed round leaves the next one free.
+        const dateVote = (label: string) => {
+          const r = store.startRound("u-admin", locations(label));
+          store.closePoll(r.locationPoll?.id ?? 0, "u-admin");
+          return store.startDatePoll(r.id, "u-admin", [
+            "2026-11-28",
+            "2026-12-12",
+          ]);
+        };
+        const firstDates = dateVote("Hill");
+        store.proposeDate(firstDates.id, "u1", "2026-12-05", ZONE);
+        store.closePoll(firstDates.id, "u-admin");
+        const laterDates = dateVote("Valley");
+        expect(
+          store.proposeDate(laterDates.id, "u1", "2026-12-05", ZONE).label,
+        ).toBe("Sat, 5 Dec 2026 · 11:00");
+      },
+      { now: () => NOW },
+    );
+  });
+
+  it("counts a location suggested again, in either order", async () => {
+    await withStore((store) => {
+      const earlier = store.startRound("u-admin", locations("Old A", "Old B"));
+      store.cancelRound(earlier.id, "u-admin");
+      const pollId = store.startRound("u-admin").locationPoll?.id ?? 0;
+      const [a, b] = store
+        .listPastLocations("u1", pollId)
+        .sort((x, y) => x.optionId - y.optionId);
+      const again = (by: string, optionId: number) => {
+        const source = store.getOption(optionId);
+        return store.addOption(pollId, {
+          label: source?.label ?? "",
+          proposedBy: by,
+        });
+      };
+      // Suggested again first, then a new one.
+      again("u1", a?.optionId ?? 0);
+      expect(
+        secondProposal(() =>
+          store.addOption(pollId, { label: "New", proposedBy: "u1" }),
+        ),
+      ).toBe(alreadyProposedMessage("location", "Old A"));
+      // A new one first, then one suggested again.
+      store.addOption(pollId, { label: "New", proposedBy: "u2" });
+      expect(secondProposal(() => again("u2", b?.optionId ?? 0))).toBe(
+        alreadyProposedMessage("location", "New"),
+      );
+      expect(store.getPoll(pollId)?.options.map((o) => o.label)).toEqual([
+        "Old A",
+        "New",
+      ]);
+    });
+  });
+
+  it("refuses the second of two proposals inside one transaction, which sees the first", async () => {
+    await withStore(
+      (store, storage) => {
+        const round = store.startRound("u-admin");
+        const pollId = round.locationPoll?.id ?? 0;
+        storage.transactionSync(() => {
+          store.addOption(pollId, { label: "Ridge", proposedBy: "u1" });
+          expectCode(
+            () => store.addOption(pollId, { label: "Lake", proposedBy: "u1" }),
+            "already_proposed",
+          );
+        });
+        expect(store.getPoll(pollId)?.options.map((o) => o.label)).toEqual([
+          "Ridge",
+        ]);
+        store.closePoll(pollId, "u-admin");
+        const datePoll = store.startDatePoll(round.id, "u-admin", [
+          "2026-11-28",
+          "2026-12-12",
+        ]);
+        storage.transactionSync(() => {
+          store.proposeDate(datePoll.id, "u1", "2026-12-05", ZONE);
+          expectCode(
+            () => store.proposeDate(datePoll.id, "u1", "2026-12-06", ZONE),
+            "already_proposed",
+          );
+        });
+        expect(store.getPoll(datePoll.id)?.options).toHaveLength(3);
+      },
+      { now: () => NOW },
+    );
+  });
+
+  it("refuses a proposal before the poll is full, and the closed poll before either", async () => {
+    await withStore((store) => {
+      const pollId = store.startRound("u-admin").locationPoll?.id ?? 0;
+      for (let i = 0; i < MAX_OPTIONS; i++) {
+        store.addOption(pollId, {
+          label: `L${String(i)}`,
+          proposedBy: `u${String(i)}`,
+        });
+      }
+      expectCode(
+        () => store.addOption(pollId, { label: "x", proposedBy: "u0" }),
+        "already_proposed",
+      );
+      expectCode(
+        () => store.addOption(pollId, { label: "x", proposedBy: "u-new" }),
+        "too_many_options",
+      );
+      store.closePoll(pollId, "u-admin");
+      expectCode(
+        () => store.addOption(pollId, { label: "x", proposedBy: "u0" }),
+        "poll_closed",
+      );
     });
   });
 });
