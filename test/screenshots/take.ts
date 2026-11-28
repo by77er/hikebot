@@ -25,7 +25,7 @@
  *
  * Each page is also audited (`audit.ts`), in the same browser and on the
  * same frozen clock and seed data as its shots: in each shot's
- * configuration just before the shot, and in three configurations it only
+ * configuration right after the shot, and in three configurations it only
  * measures and writes no PNG for. When any finding is not allowed in
  * `audit-allow.json`, or an allowance there matches no finding, the run
  * exits non-zero with the findings, page by page. With `--audit` it only
@@ -57,6 +57,7 @@ import {
   readAllowances,
   SHIFT_OBSERVER,
   smallestTypeToken,
+  stopShiftCount,
   type AuditConfig,
   type Finding,
   type PageFinding,
@@ -313,11 +314,9 @@ async function capture(
         `${entry.name} (${entry.path}) at ${config.name}:\n${failures.join("\n")}`,
       );
     }
-    const found = await auditPage(page, {
-      targets: config.targets,
-      coarse: config.coarse,
-      smallestText: options.smallestText,
-    });
+    // The shot is taken as it would be without the audit, which then
+    // measures the page as shot; the shot's own resizing is not a shift.
+    await stopShiftCount(page);
     const png = options.shoot
       ? await page.screenshot({
           type: "png",
@@ -325,6 +324,11 @@ async function capture(
           captureBeyondViewport: true,
         })
       : null;
+    const found = await auditPage(page, {
+      targets: config.targets,
+      coarse: config.coarse,
+      smallestText: options.smallestText,
+    });
     return { png, found };
   } finally {
     await context.close();

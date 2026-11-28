@@ -10,6 +10,7 @@ import {
   readAllowances,
   SHIFT_OBSERVER,
   smallestTypeToken,
+  stopShiftCount,
   type AuditOptions,
   type Finding,
   type PageFinding,
@@ -234,6 +235,36 @@ describe("auditPage", () => {
         ready: "document.body.dataset.done === 'yes'",
       }),
     ).toEqual([]);
+  });
+
+  it("shift: counts nothing that moves after stopShiftCount", async () => {
+    const context = await browser.createBrowserContext();
+    try {
+      const page = await context.newPage();
+      await page.setViewport({ width: 390, height: 844 });
+      await page.evaluateOnNewDocument(SHIFT_OBSERVER);
+      await page.goto(`${base}/plain`, { waitUntil: "load" });
+      await stopShiftCount(page);
+      // Push the page down once it has been drawn, and wait until the
+      // browser has reported the shift.
+      await page.evaluate(`new Promise((resolve) => {
+        new PerformanceObserver(resolve).observe({ type: "layout-shift" });
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const late = document.createElement("div");
+          late.style.height = "300px";
+          document.body.prepend(late);
+        }));
+      })`);
+      expect(
+        await auditPage(page, {
+          targets: false,
+          coarse: false,
+          smallestText: 14,
+        }),
+      ).toEqual([]);
+    } finally {
+      await context.close();
+    }
   });
 
   it("overlap: reports words another element is drawn over", async () => {

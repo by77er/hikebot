@@ -3,7 +3,7 @@
  * leaving it to be judged from an image. `take.ts` opens each page of
  * `pages.json` in every configuration of `AUDIT_CONFIGS`, the four it takes
  * shots in and three it only measures, and runs `auditPage` on it once the
- * page is ready to be shot. The measurements themselves run in the page,
+ * page is ready to be shot (after the shot, where there is one). The measurements themselves run in the page,
  * from `audit-page.js`; each finding names its check:
  *
  * - `overflow`: the document scrolls sideways.
@@ -19,7 +19,8 @@
  *   is reached by scrolling and not cut.
  * - `small-text`: text under the smallest `--font-size-*` token.
  * - `shift`: a cumulative layout shift of `SHIFT_LIMIT` or more from the
- *   document's start until it is ready, with no input given.
+ *   document's start until it is ready (`stopShiftCount`), with no input
+ *   given.
  * - `overlap`: a word whose centre, hit-tested, belongs to another element.
  *
  * Findings an entry of `audit-allow.json` names (page, check, selector,
@@ -142,14 +143,15 @@ export const AUDIT_CONFIGS: AuditConfig[] = [
 
 /**
  * Runs in the page before its own scripts and sums every layout shift
- * from the document's start, keeping a node the largest one moved. No
- * input is given while the page loads, so every entry counts. A string,
- * as the scripts in `take.ts` are.
+ * from the document's start until `stopShiftCount`, keeping a node the
+ * largest one moved. No input is given while the page loads, so every
+ * entry counts. A string, as the scripts in `take.ts` are.
  */
 export const SHIFT_OBSERVER = `(() => {
-  const shift = { total: 0, largest: null, largestValue: 0 };
+  const shift = { total: 0, largest: null, largestValue: 0, stopped: false };
   window.__hikebotShift = shift;
   new PerformanceObserver((list) => {
+    if (shift.stopped) return;
     for (const entry of list.getEntries()) {
       shift.total += entry.value;
       if (entry.value > shift.largestValue) {
@@ -159,6 +161,15 @@ export const SHIFT_OBSERVER = `(() => {
     }
   }).observe({ type: "layout-shift", buffered: true });
 })();`;
+
+/**
+ * Stops summing layout shifts, once the page is ready: what moves after
+ * that, such as the page resized for a full-page shot, did not move while
+ * it loaded.
+ */
+export async function stopShiftCount(page: Page): Promise<void> {
+  await page.evaluate(`window.__hikebotShift.stopped = true`);
+}
 
 const PAGE_SCRIPT = readFileSync(
   new URL("./audit-page.js", import.meta.url),
