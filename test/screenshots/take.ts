@@ -23,6 +23,14 @@
  * code runs (turning JavaScript off in the browser would also stop the
  * script's own waits).
  *
+ * Each page is also audited (`audit.ts`), in the same browser and on the
+ * same frozen clock and seed data as its shots: in each shot's
+ * configuration just before the shot, and in three configurations it only
+ * measures and writes no PNG for. When any finding is not allowed in
+ * `audit-allow.json`, or an allowance there matches no finding, the run
+ * exits non-zero with the findings, page by page. With `--audit` it only
+ * audits: it writes, and deletes, no PNG.
+ *
  * With `--check` it then prints the SHA-256 of each PNG, to compare with
  * another machine's without copying the files, and fails if any file in
  * `docs/screenshots/` differs from what is committed, listing them: the
@@ -41,16 +49,25 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Browser, CDPSession } from "puppeteer-core";
 import { PageClient } from "../e2e/harness/web";
+import {
+  applyAllowances,
+  AUDIT_CONFIGS,
+  auditPage,
+  formatReport,
+  readAllowances,
+  SHIFT_OBSERVER,
+  smallestTypeToken,
+  type AuditConfig,
+  type Finding,
+  type PageFinding,
+} from "./audit";
 import { launchBrowser } from "./browser";
 import { cdnReply, isMissingPicture } from "./discord-cdn";
 import {
-  SCHEMES,
   screenshotFile,
   screenshotFiles,
-  VIEWPORTS,
   type PageList,
   type ScreenshotPage,
-  type ViewportName,
 } from "./pages";
 import { SEEDS } from "./seeds";
 
@@ -74,9 +91,19 @@ process.env.XDG_CONFIG_HOME = join(ROOT, ".wrangler", "e2e-config");
 
 async function main(): Promise<void> {
   const check = process.argv.includes("--check");
+  const auditOnly = process.argv.includes("--audit");
+  if (check && auditOnly) {
+    throw new Error("--check and --audit cannot be given together");
+  }
   const list = JSON.parse(
     readFileSync(new URL("./pages.json", import.meta.url), "utf8"),
   ) as PageList;
+  const allowances = readAllowances(
+    readFileSync(new URL("./audit-allow.json", import.meta.url), "utf8"),
+    list.pages.map((page) => page.name),
+  );
+  const smallestText = smallestTypeToken();
+  const findings: PageFinding[] = [];
   for (const page of list.pages) {
     if (!(page.seed in SEEDS)) {
       throw new Error(
@@ -102,7 +129,7 @@ async function main(): Promise<void> {
   const outDir = join(ROOT, OUT_DIR);
   mkdirSync(outDir, { recursive: true });
   const expected = new Set(screenshotFiles(list));
-  for (const file of readdirSync(outDir)) {
+  for (const file of auditOnly ? [] : readdirSync(outDir)) {
     if (file.endsWith(".png") && !expected.has(file)) {
       rmSync(join(outDir, file));
       console.log(`deleted ${OUT_DIR}/${file}: no page in pages.json makes it`);
@@ -121,22 +148,29 @@ async function main(): Promise<void> {
         const seed = SEEDS[page.seed];
         if (seed) await seed(e2e);
         const submitted = page.submit ? await submit(e2e.url, page) : null;
-        for (const viewport of Object.keys(VIEWPORTS) as ViewportName[]) {
-          for (const scheme of SCHEMES) {
-            const file = screenshotFile(page.name, viewport, scheme);
-            if (page.map) mapBrowser ??= await launchBrowser({ webgl: true });
-            const png = await capture(
-              page.map && mapBrowser ? mapBrowser : browser,
-              e2e.url,
-              page,
-              viewport,
-              scheme,
-              submitted,
-            );
+        for (const config of AUDIT_CONFIGS) {
+          const shoot = config.shot !== null && !auditOnly;
+          if (page.map) mapBrowser ??= await launchBrowser({ webgl: true });
+          const { png, found } = await capture(
+            page.map && mapBrowser ? mapBrowser : browser,
+            e2e.url,
+            page,
+            config,
+            submitted,
+            { shoot, smallestText },
+          );
+          for (const finding of found) {
+            findings.push({ page: page.name, config: config.name, ...finding });
+          }
+          if (png && config.shot) {
+            const file = screenshotFile(page.name, config.shot, config.scheme);
             writeFileSync(join(outDir, file), png);
             console.log(`wrote ${OUT_DIR}/${file}`);
           }
         }
+        console.log(
+          `audited ${page.name}: ${String(findings.filter((finding) => finding.page === page.name).length)} finding(s)`,
+        );
       } finally {
         await run.close();
       }
@@ -144,6 +178,16 @@ async function main(): Promise<void> {
   } finally {
     await browser.close();
     await mapBrowser?.close();
+  }
+
+  const { failing, stale } = applyAllowances(findings, allowances);
+  if (failing.length > 0 || stale.length > 0) {
+    console.error(formatReport(failing, stale));
+    process.exitCode = 1;
+  } else {
+    console.log(
+      `The audit found nothing to fix on ${String(list.pages.length)} page(s) in ${String(AUDIT_CONFIGS.length)} configurations (${String(findings.length)} allowed).`,
+    );
   }
 
   if (check) {
@@ -169,14 +213,19 @@ async function main(): Promise<void> {
   }
 }
 
+/**
+ * Opens the page in `config` and, once it is ready to be shot, audits it
+ * and, with `shoot`, takes its full-page PNG.
+ */
 async function capture(
   browser: Browser,
   base: URL,
   entry: ScreenshotPage,
-  viewport: ViewportName,
-  scheme: (typeof SCHEMES)[number],
+  config: AuditConfig,
   submitted: Submitted | null,
-): Promise<Uint8Array> {
+  options: { shoot: boolean; smallestText: number },
+): Promise<{ png: Uint8Array | null; found: Finding[] }> {
+  const { scheme } = config;
   const context = await browser.createBrowserContext();
   try {
     const page = await context.newPage();
@@ -223,14 +272,14 @@ async function capture(
       failures.push(`page error: ${String(error)}`);
     });
 
-    const size = VIEWPORTS[viewport];
-    await page.setViewport({ ...size, deviceScaleFactor: 1 });
+    await page.setViewport(config.viewport);
     await page.emulateMediaFeatures([
       { name: "prefers-color-scheme", value: scheme },
       { name: "prefers-reduced-motion", value: "reduce" },
     ]);
     await page.emulateTimezone("UTC");
     await page.evaluateOnNewDocument(FREEZE_CLOCK);
+    await page.evaluateOnNewDocument(SHIFT_OBSERVER);
     const session = await page.createCDPSession();
     await session.send("Emulation.setLocaleOverride", { locale: "en-US" });
 
@@ -261,14 +310,22 @@ async function capture(
     }
     if (failures.length > 0) {
       throw new Error(
-        `${entry.name} (${entry.path}) at ${viewport} ${scheme}:\n${failures.join("\n")}`,
+        `${entry.name} (${entry.path}) at ${config.name}:\n${failures.join("\n")}`,
       );
     }
-    return await page.screenshot({
-      type: "png",
-      fullPage: true,
-      captureBeyondViewport: true,
+    const found = await auditPage(page, {
+      targets: config.targets,
+      coarse: config.coarse,
+      smallestText: options.smallestText,
     });
+    const png = options.shoot
+      ? await page.screenshot({
+          type: "png",
+          fullPage: true,
+          captureBeyondViewport: true,
+        })
+      : null;
+    return { png, found };
   } finally {
     await context.close();
   }

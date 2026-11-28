@@ -20,6 +20,7 @@
     "cf-typegen": "wrangler types",
     "screenshots": "tsx test/screenshots/take.ts",
     "screenshots:check": "tsx test/screenshots/take.ts --check",
+    "screenshots:audit": "tsx test/screenshots/take.ts --audit",
     "screenshots:table": "tsx test/screenshots/table.ts",
     "description:check": "tsx test/screenshots/description.ts",
     "maps:samples": "tsx scripts/draw-map-samples.ts"
