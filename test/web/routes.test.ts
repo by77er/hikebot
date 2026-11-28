@@ -217,14 +217,18 @@ describe("static assets", () => {
     await response.arrayBuffer();
   });
 
-  it("serves the press script as JavaScript, under the versioned path too", async () => {
-    for (const path of [`/assets/${PRESS_SCRIPT}`, assetPath(PRESS_SCRIPT)]) {
+  it("serves the press and ages scripts as JavaScript, under the versioned path too", async () => {
+    for (const path of [
+      `/assets/${PRESS_SCRIPT}`,
+      assetPath(PRESS_SCRIPT),
+      assetPath("cairn/ages.mjs"),
+    ]) {
       const response = await get(path);
       expect(response.status, path).toBe(200);
       expect(response.headers.get("Content-Type"), path).toMatch(
         /^(text|application)\/javascript/,
       );
-      expect(await response.text()).toContain("data-pressed");
+      expect(await response.text()).toMatch(/data-pressed|data-age/);
     }
   });
 

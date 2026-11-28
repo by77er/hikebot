@@ -15,6 +15,7 @@ import { EmptyState } from "../../components/empty-state";
 import { DiscordIcon } from "../../components/icons";
 import { StatusPill } from "../../components/status-pill";
 import type { PageForms } from "./forms";
+import { closingNext, nextSentence } from "./schedule-line";
 import { VoteForm } from "./vote-form";
 
 export function CurrentStep({
@@ -71,6 +72,19 @@ function LocationDecided({
   );
 }
 
+/**
+ * When the open vote closes, as the schedule says it ("The location vote
+ * closes Wed, 5 Jun 2030 · 09:00, and the date vote opens."), or that an
+ * admin closes it.
+ */
+function closingText(view: WebView, round: WebRoundSection): string {
+  const next = closingNext(view);
+  if (next !== null) return nextSentence(next);
+  return round.step === "date_vote_open"
+    ? "The date vote closes when an admin closes it."
+    : "The location vote closes when an admin closes it.";
+}
+
 function OpenVote({
   view,
   round,
@@ -95,6 +109,7 @@ function OpenVote({
               Where: <strong>{round.location.label}</strong>
             </p>
           )}
+          <p>{closingText(view, round)}</p>
           {isDate && (
             <p class="u-muted">Times are in {view.settings.timeZone}.</p>
           )}

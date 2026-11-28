@@ -89,9 +89,43 @@ describe("the web view's forecast of the planned hike", () => {
       updatedAt: forecast.updatedAt,
       // 26 hours before 09:00 on the 22nd.
       updatedLabel: "Sat, 21 Nov 2026 · 07:00",
+      fetchedAt: forecast.fetchedAt,
+      stale: false,
+      partial: null,
     });
     expect(view.hours[0]?.code).toBe(0);
     expect(structuredClone(view)).toEqual(view);
+  });
+
+  it("is stale once it has not been fetched for over three hours, the job trying every hour", async () => {
+    const now = Date.UTC(2026, 10, 20, 12);
+    const forecast = stored(joshuaTree, "imperial", "2026-11-22 09:00");
+    const fresh = await forecastView("2026-11-22 09:00", {
+      ...forecast,
+      fetchedAt: now - 3 * HOUR,
+    });
+    expect(fresh).toMatchObject({ kind: "forecast", stale: false });
+    const stale = await forecastView("2026-11-22 09:00", {
+      ...forecast,
+      fetchedAt: now - 3 * HOUR - 60_000,
+    });
+    expect(stale).toMatchObject({ kind: "forecast", stale: true });
+  });
+
+  it("names the hours of a forecast that does not reach the end of the thread's hours yet", async () => {
+    const forecast = stored(joshuaTree, "imperial", "2026-11-22 09:00");
+    const start = hikeStart("2026-11-22 09:00", LA);
+    const view = await forecastView("2026-11-22 09:00", {
+      ...forecast,
+      forecast: {
+        ...forecast.forecast,
+        // Nothing after 11:00, as when the hike is 16 days ahead.
+        hours: forecast.forecast.hours.filter((h) => h.at <= start + 2 * HOUR),
+      },
+    });
+    if (view?.kind !== "forecast") throw new Error("no forecast");
+    expect(view.hours.at(-1)?.time).toBe("11:00");
+    expect(view.partial).toEqual({ from: "07:00", to: "11:00" });
   });
 
   it("has a wet and windy day in °C, mm and km/h, with the freezing level the thread notes", async () => {

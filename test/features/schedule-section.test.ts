@@ -53,7 +53,7 @@ describe("the web view's schedule", () => {
       next: {
         kind: "start-location-vote",
         at: NEXT_WEDNESDAY,
-        when: "Wednesday 09:00",
+        when: "Wed, 2 Jan 2030 · 09:00",
       },
       waiting: null,
     });
@@ -66,7 +66,7 @@ describe("the web view's schedule", () => {
     expect(schedule?.next).toEqual({
       kind: "close-location-vote",
       at: NEXT_WEDNESDAY,
-      when: "Wednesday 09:00",
+      when: "Wed, 2 Jan 2030 · 09:00",
     });
   });
 
@@ -77,7 +77,7 @@ describe("the web view's schedule", () => {
     expect(schedule?.next).toEqual({
       kind: "close-location-vote",
       at: NEXT_WEDNESDAY + 7 * DAY,
-      when: "Wednesday 9 Jan 09:00",
+      when: "Wed, 9 Jan 2030 · 09:00",
     });
   });
 
@@ -88,7 +88,7 @@ describe("the web view's schedule", () => {
     expect(schedule?.next).toEqual({
       kind: "start-location-vote",
       at: NEXT_WEDNESDAY + 14 * DAY,
-      when: "Wednesday 16 Jan 09:00",
+      when: "Wed, 16 Jan 2030 · 09:00",
     });
   });
 

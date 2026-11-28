@@ -17,28 +17,31 @@ const AT = Date.UTC(2030, 5, 5, 7);
 
 describe("ScheduleLine", () => {
   it.each([
-    ["start-location-vote", "The next location vote opens Wednesday 09:00."],
+    [
+      "start-location-vote",
+      "The next location vote opens Wed, 5 Jun 2030 · 09:00.",
+    ],
     [
       "close-location-vote",
-      "The location vote closes Wednesday 09:00, and the date vote opens.",
+      "The location vote closes Wed, 5 Jun 2030 · 09:00, and the date vote opens.",
     ],
     [
       "hold-location-vote",
-      "The location vote closes Wednesday 09:00 if anyone has voted, and the date vote opens.",
+      "The location vote closes Wed, 5 Jun 2030 · 09:00 if anyone has voted, and the date vote opens.",
     ],
-    ["start-date-vote", "The date vote opens Wednesday 09:00."],
-    ["close-date-vote", "The date vote closes Wednesday 09:00."],
+    ["start-date-vote", "The date vote opens Wed, 5 Jun 2030 · 09:00."],
+    ["close-date-vote", "The date vote closes Wed, 5 Jun 2030 · 09:00."],
     [
       "hold-date-vote",
-      "The date vote closes Wednesday 09:00 if anyone has voted.",
+      "The date vote closes Wed, 5 Jun 2030 · 09:00 if anyone has voted.",
     ],
     [
       "cancel-quiet-round",
-      "The date vote closes Wednesday 09:00 if anyone has voted; if nobody has, the round is cancelled.",
+      "The date vote closes Wed, 5 Jun 2030 · 09:00 if anyone has voted; if nobody has, the round is cancelled.",
     ],
   ] as const)("says what happens next for %s", async (kind, words) => {
     const text = await line(
-      schedule({ next: { kind, at: AT, when: "Wednesday 09:00" } }),
+      schedule({ next: { kind, at: AT, when: "Wed, 5 Jun 2030 · 09:00" } }),
     );
     expect(text).toBe(
       `Schedule ${words} The bot opens and closes the votes on Wednesdays at 09:00 (${TIME_ZONE}); a date vote runs for 2 days.`,
@@ -52,11 +55,11 @@ describe("ScheduleLine", () => {
           next: {
             kind: "start-location-vote",
             at: AT,
-            when: "Wednesday 19 Jun 09:00",
+            when: "Wed, 19 Jun 2030 · 09:00",
           },
         }),
       ),
-    ).toContain("The next location vote opens Wednesday 19 Jun 09:00.");
+    ).toContain("The next location vote opens Wed, 19 Jun 2030 · 09:00.");
   });
 
   it("says why it does nothing yet", async () => {

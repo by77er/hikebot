@@ -23,7 +23,7 @@ import {
   NO_FORECAST_TEXT,
   type NoForecastReason,
 } from "../../../../src/features/weather-state";
-import { hikeStart } from "../../../../src/polls/dates";
+import { hikeStart, parseDateOption } from "../../../../src/polls/dates";
 import type { Units } from "../../../../src/weather/forecast";
 import { readForecast } from "../../../../src/weather/open-meteo";
 import type { PageForms } from "../../../../src/web/pages/server/forms";
@@ -53,10 +53,13 @@ export const TIME_ZONE = "Europe/Berlin";
 /** The time zone the recorded forecasts in test/weather/fixtures are for. */
 export const RECORDED_ZONE = "America/Los_Angeles";
 export const MARKUP = "<script>alert(1)</script><b>Ridge</b>";
+/** When the views here are read: Sat, 1 Jun 2030 · 11:00 in Berlin. */
+export const NOW = Date.UTC(2030, 5, 1, 9);
 
 /** A member's view of a server with nothing planned and no hikes. */
 export function baseView(overrides: Partial<WebView> = {}): WebView {
   return {
+    now: NOW,
     server: {
       id: GUILD,
       name: "Ridge Walkers",
@@ -179,7 +182,7 @@ export function plannedHike(
       at: Date.UTC(2030, 5, 15, 7),
       date: "2030-06-15",
       time: "09:00",
-      label: "Sat, 15 Jun 2030",
+      label: "Sat, 15 Jun 2030 · 09:00",
       timeZone: TIME_ZONE,
     },
     threadId: "300000000000007010",
@@ -200,7 +203,10 @@ export function logEntry(
   return {
     roundId: n,
     location: { label, details: null, proposedBy: VIEWER },
-    date: { value: `2030-06-${day} 09:30`, label: `2030-06-${day}` },
+    date: {
+      value: `2030-06-${day} 09:30`,
+      label: parseDateOption(`2030-06-${day} 09:30`)?.label ?? "",
+    },
     threadUrl: `https://discord.com/channels/${GUILD}/3000000000000071${day}`,
     eventUrl: null,
     completedAt: Date.UTC(2030, 4, n),
@@ -368,6 +374,7 @@ export function forecastOf(
     },
     { start, end: start + 4 * 3_600_000 },
     RECORDED_ZONE,
+    start - 26 * 3_600_000 + 14 * 60_000,
   );
 }
 
@@ -386,7 +393,7 @@ export function schedule(overrides: Partial<WebSchedule> = {}): WebSchedule {
     next: {
       kind: "close-location-vote",
       at: Date.UTC(2030, 5, 5, 7),
-      when: "Wednesday 09:00",
+      when: "Wed, 5 Jun 2030 · 09:00",
     },
     waiting: null,
     ...overrides,

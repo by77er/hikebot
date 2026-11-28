@@ -51,6 +51,7 @@ export function VoteForm({
             : option.viewerVoted,
         }))}
         voterCount={vote.voterCount}
+        counted={{ at: view.now, timeZone: view.settings.timeZone }}
         empty={
           isDate
             ? "No date has been proposed yet."

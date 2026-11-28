@@ -1,14 +1,15 @@
 /**
  * Forecast table: the hourly forecast of a hike, one row per hour, as the
  * hike thread shows it. Each row is the hour (its header), the conditions
- * in words with their weather icon, the temperature with what it feels
- * like, the chance and amount of rain or snow, and the wind with its
- * gusts; a value Open-Meteo did not give is a dash. Each cell carries its
- * units and says what its second figure is ("feels 47°", "gusts 12"), so
- * the headers stay one short word and a cell reads on its own; on a phone
- * the second figure sits under the first, so five columns fit 390px, and
- * from the breakpoint beside it. The caption names the day and the time
- * zone.
+ * in words with their weather icon, then the numbers a member compares
+ * down the column: the temperature with what it feels like, the chance of
+ * rain or snow, its amount, and the wind with its gusts. Each column's
+ * unit is said once, in its head under its name ("Temp" over "°F"), and
+ * the cells are bare figures in tabular digits, aligned right ("Layout
+ * rules" in docs/design-system.md); a value Open-Meteo did not give is a
+ * dash. On a phone a cell's second figure ("feels 47") sits under the
+ * first, so six columns fit 390px, and from the breakpoint beside it. The
+ * caption names the day and the time zone.
  */
 import { WeatherIcon } from "./weather-icons";
 
@@ -53,10 +54,6 @@ function whole(value: number | null): string {
   return value === null ? NONE : String(Math.round(value));
 }
 
-function degrees(value: number | null): string {
-  return value === null ? NONE : `${whole(value)}°`;
-}
-
 function Figures({ first, second }: { first: string; second: string }) {
   return (
     <>
@@ -65,13 +62,27 @@ function Figures({ first, second }: { first: string; second: string }) {
   );
 }
 
-/** A header shortened to fit a phone, read out in full. */
-function Short({ shown, spoken }: { shown: string; spoken: string }) {
+/**
+ * A number column's head: its name, shortened to fit a phone and read out
+ * in full, over its unit, read out as "Temperature, °F".
+ */
+function Head({
+  shown,
+  spoken,
+  unit,
+}: {
+  shown: string;
+  spoken: string;
+  unit: string;
+}) {
   return (
-    <>
-      <span aria-hidden="true">{shown}</span>
-      <span class="u-visually-hidden">{spoken}</span>
-    </>
+    <th scope="col" class="forecast-table__number">
+      <span aria-hidden="true">
+        {shown}
+        <span class="forecast-table__unit">{unit}</span>
+      </span>
+      <span class="u-visually-hidden">{`${spoken}, ${unit}`}</span>
+    </th>
   );
 }
 
@@ -83,13 +94,10 @@ export function ForecastTable({ caption, hours, units }: ForecastTableProps) {
         <tr>
           <th scope="col">Time</th>
           <th scope="col">Conditions</th>
-          <th scope="col">
-            <Short shown="Temp" spoken="Temperature" />
-          </th>
-          <th scope="col">
-            <Short shown="Rain" spoken="Rain or snow" />
-          </th>
-          <th scope="col">Wind</th>
+          <Head shown="Temp" spoken="Temperature" unit={units.temperature} />
+          <Head shown="Chance" spoken="Chance of rain or snow" unit="%" />
+          <Head shown="Rain" spoken="Rain or snow" unit={units.precipitation} />
+          <Head shown="Wind" spoken="Wind" unit={units.wind} />
         </tr>
       </thead>
       <tbody>
@@ -106,33 +114,23 @@ export function ForecastTable({ caption, hours, units }: ForecastTableProps) {
                 {hour.conditions}
               </span>
             </td>
-            <td>
+            <td class="forecast-table__number">
               <Figures
-                first={`${degrees(hour.temperature)}${hour.temperature === null ? "" : units.temperature.replace("°", "")}`}
-                second={`feels\u00a0${degrees(hour.feelsLike)}`}
+                first={whole(hour.temperature)}
+                second={`feels\u00a0${whole(hour.feelsLike)}`}
               />
             </td>
-            <td>
-              <Figures
-                first={
-                  hour.precipitationChance === null
-                    ? NONE
-                    : `${whole(hour.precipitationChance)}%`
-                }
-                second={
-                  hour.precipitation === null
-                    ? NONE
-                    : `${hour.precipitation.toFixed(units.decimals)}\u00a0${units.precipitation}`
-                }
-              />
+            <td class="forecast-table__number">
+              {whole(hour.precipitationChance)}
             </td>
-            <td>
+            <td class="forecast-table__number">
+              {hour.precipitation === null
+                ? NONE
+                : hour.precipitation.toFixed(units.decimals)}
+            </td>
+            <td class="forecast-table__number">
               <Figures
-                first={
-                  hour.wind === null
-                    ? NONE
-                    : `${whole(hour.wind)}\u00a0${units.wind}`
-                }
+                first={whole(hour.wind)}
                 second={`gusts\u00a0${whole(hour.gusts)}`}
               />
             </td>

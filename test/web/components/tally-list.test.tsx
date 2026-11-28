@@ -43,6 +43,27 @@ describe("TallyList", () => {
     );
   });
 
+  it("says when the votes were counted, kept true by the ages script", async () => {
+    const at = Date.UTC(2030, 5, 1, 9);
+    const html = render(
+      <TallyList
+        label="Locations"
+        options={options(2)}
+        voterCount={4}
+        counted={{ at, timeZone: "Europe/Berlin" }}
+      />,
+    );
+    expect(await spokenText(html)).toMatch(
+      /^4 members have voted. Counted just now. Locations/,
+    );
+    expect(html).toContain(
+      '<time datetime="2030-06-01T09:00:00.000Z" data-age data-zone="Europe/Berlin" data-clock>just now</time>',
+    );
+    expect(html).toContain(
+      '<script type="module" src="/assets/v/dev/cairn/ages.mjs"></script>',
+    );
+  });
+
   it("says the empty sentence, and nothing else, when there are no options", () => {
     expect(
       render(

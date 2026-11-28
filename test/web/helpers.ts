@@ -10,10 +10,18 @@ export interface PageOutline {
   mainId: string | null;
   /** Element names in document order, such as `header`, `main`. */
   elements: string[];
-  /** Scripts other than the shell's press script, which `pressScript` notes. */
+  /**
+   * Scripts other than Cairn's own modules (`cairnScripts`): any other is
+   * an injected script, or the map's.
+   */
   scripts: number;
   /** Whether the page loads the shell's press script (`PRESS_SCRIPT`). */
   pressScript: boolean;
+  /**
+   * Cairn's modules the page loads from its versioned path, by file name
+   * (`press.mjs`, `ages.mjs`), once each however often they are named.
+   */
+  cairnScripts: string[];
   styleElements: number;
   styleAttributes: number;
   eventAttributes: number;
@@ -32,6 +40,7 @@ export async function outline(html: string): Promise<PageOutline> {
     elements: [],
     scripts: 0,
     pressScript: false,
+    cairnScripts: [],
     styleElements: 0,
     styleAttributes: 0,
     eventAttributes: 0,
@@ -53,12 +62,17 @@ export async function outline(html: string): Promise<PageOutline> {
         if (element.tagName === "body") inBody = true;
         if (element.tagName === "script") {
           const src = element.getAttribute("src") ?? "";
+          const cairn =
+            /^\/assets\/v\/[A-Za-z0-9-]+\/cairn\/([a-z-]+\.mjs)$/.exec(
+              src,
+            )?.[1];
           if (
-            /^\/assets\/v\/[A-Za-z0-9-]+\/cairn\/press\.mjs$/.test(src) &&
-            element.getAttribute("type") === "module" &&
-            !page.pressScript
+            cairn !== undefined &&
+            element.getAttribute("type") === "module"
           ) {
-            page.pressScript = true;
+            if (cairn === "press.mjs") page.pressScript = true;
+            if (!page.cairnScripts.includes(cairn))
+              page.cairnScripts.push(cairn);
           } else {
             page.scripts += 1;
           }

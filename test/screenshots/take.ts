@@ -468,12 +468,19 @@ const FREEZE_CLOCK = `(() => {
  * Sets every clock reading the Worker wrote into the page, a `time` element
  * marked `data-clock` with its `data-zone` (such as the time now on the
  * settings page), to `FROZEN_TIME` in that zone, written as the bot writes
- * it (`Sat 02:00`): the Worker's clock cannot be frozen. A string for the
+ * it (`Sat 02:00`), or, for an age (`data-age`, such as when the votes were
+ * counted), to "just now": the Worker's clock cannot be frozen. A string for the
  * same reason as `FREEZE_CLOCK`.
  */
 const FREEZE_PAGE_CLOCKS = `(() => {
   const at = new Date(${String(FROZEN_TIME)});
   for (const clock of document.querySelectorAll("time[data-clock]")) {
+    if (clock.hasAttribute("data-age")) {
+      // An age of the page's own clock reading: no time at all.
+      clock.dateTime = at.toISOString();
+      clock.textContent = "just now";
+      continue;
+    }
     const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: clock.dataset.zone,
       weekday: "short",

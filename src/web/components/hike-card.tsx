@@ -44,6 +44,13 @@ export interface HikeStart {
   time: string;
   /** The server's time zone, such as `America/Los_Angeles`. */
   timeZone: string;
+  /**
+   * The date and time as the bot writes them in Discord,
+   * `Sat, 5 Dec 2026 · 11:00`; give it so the card says exactly what the
+   * hike's message, thread and event say. Without it the card writes the
+   * same form from `date` and `time`.
+   */
+  label?: string;
 }
 
 export interface HikeLinks {
@@ -124,7 +131,8 @@ export function HikeCard({
             <ClockIcon class="hike-card__icon" size="small" />
             <span>
               <time datetime={`${start.date}T${start.time}`}>
-                {`${weekday}, ${day} ${month} ${year} · ${start.time}`}
+                {start.label ??
+                  `${weekday}, ${day} ${month} ${year} · ${start.time}`}
               </time>{" "}
               <span class="hike-card__zone">{start.timeZone}</span>
             </span>

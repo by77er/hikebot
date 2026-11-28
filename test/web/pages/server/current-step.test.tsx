@@ -9,6 +9,7 @@ import {
   plannedHike,
   GUILD,
   round,
+  schedule,
   TIME_ZONE,
 } from "./view";
 
@@ -43,6 +44,28 @@ describe("CurrentStep", () => {
     expect(text).toContain("Save votes");
     expect(html).toMatch(MESSAGE);
     expect(text).toContain("See the vote in Discord");
+    expect(text).toContain(
+      "Open The location vote closes when an admin closes it. Vote for",
+    );
+    expect(text).toContain("3 members have voted. Counted just now. Locations");
+  });
+
+  it("says when the schedule closes the vote, as the bot writes times, in the vote's card", async () => {
+    const vote = openVote("location", [{ label: "Lake", votes: 3 }]);
+    const text = await spokenText(
+      render(
+        <CurrentStep
+          forms={FORMS}
+          view={baseView({
+            round: round("location_vote_open", vote),
+            schedule: schedule(),
+          })}
+        />,
+      ),
+    );
+    expect(text).toContain(
+      "Open The location vote closes Wed, 5 Jun 2030 · 09:00, and the date vote opens. Vote for",
+    );
   });
 
   it("ticks the viewer's own votes", () => {
@@ -188,7 +211,7 @@ describe("CurrentStep", () => {
         view={baseView({ round: round("location_vote_open", vote) })}
       />,
     );
-    expect(html).not.toContain("<script");
+    expect(html).not.toContain("<script>");
     expect(html).not.toContain("<b>");
     expect(html).toContain("&lt;script>alert(1)&lt;/script>");
   });

@@ -122,10 +122,24 @@
       "user": "400000000000000001"
     },
     {
+      "name": "server-hike-forecast-partial",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-hike-forecast-partial",
+      "user": "400000000000000001"
+    },
+    {
       "name": "server-hike-forecast-rain",
       "path": "/g/220000000000000101",
       "status": 200,
       "seed": "server-hike-forecast-rain",
+      "user": "400000000000000001"
+    },
+    {
+      "name": "server-hike-forecast-stale",
+      "path": "/g/220000000000000101",
+      "status": 200,
+      "seed": "server-hike-forecast-stale",
       "user": "400000000000000001"
     },
     {

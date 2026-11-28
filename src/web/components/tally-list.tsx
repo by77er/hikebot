@@ -1,12 +1,15 @@
 /**
  * Tally list: every option of a vote as a `TallyRow`, in the order the
  * poll message gives them (locations by votes, dates by date), under the
- * number of members who have voted, in the bot's words. Up to 25 rows; with
+ * number of members who have voted, in the bot's words, and, for a tally
+ * that may be left open on a screen, when it was counted ("Counted just
+ * now", kept true by `Age`). Up to 25 rows; with
  * more than `COLLAPSE_AFTER` the details fold behind "Details", so the
  * labels and counts stay scannable on a phone. With a located option, the
  * list ends with OpenStreetMap's credit. Given `choice`, every row is
  * votable: put it inside a `TallyVote` form.
  */
+import { Age } from "./age";
 import { OsmCredit } from "./map-links";
 import { TallyRow, type TallyOption } from "./tally-row";
 
@@ -26,6 +29,11 @@ export interface TallyListProps {
   empty?: string;
   /** Makes every row a checkbox with this name. */
   choice?: { name: string };
+  /**
+   * When the votes were counted (the page's read) and the server's time
+   * zone, for a tally that can go stale on an open page.
+   */
+  counted?: { at: number; timeZone: string };
 }
 
 /** The bot's line under a poll: "No one has voted yet.", "3 members have voted." */
@@ -44,6 +52,7 @@ export function TallyList({
   tiedOptions,
   empty = "There is nothing to vote for yet.",
   choice,
+  counted,
 }: TallyListProps) {
   if (options.length === 0) {
     return <p class="tally-list__empty">{empty}</p>;
@@ -51,7 +60,23 @@ export function TallyList({
   const collapse = options.length > COLLAPSE_AFTER;
   return (
     <div class="tally-list">
-      <p class="tally-list__voters">{votersText(voterCount)}</p>
+      <p class="tally-list__voters">
+        {votersText(voterCount)}
+        {counted && (
+          <>
+            {" "}
+            <span class="u-muted">
+              Counted{" "}
+              <Age
+                at={counted.at}
+                now={counted.at}
+                timeZone={counted.timeZone}
+              />
+              .
+            </span>
+          </>
+        )}
+      </p>
       <ol class="tally-list__rows" aria-label={label}>
         {options.map((option) => (
           <li key={option.id} class="tally-list__item">
