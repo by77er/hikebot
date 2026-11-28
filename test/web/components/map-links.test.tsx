@@ -47,6 +47,20 @@ describe("MapLinks", () => {
     ).toBe("Map of Lake");
   });
 
+  it("gives the compact Map link a whole touch target only when it stands alone", () => {
+    const alone = render(
+      <MapLinks
+        place={{ ...PLACE, name: null }}
+        variant="compact"
+        label="Lake"
+      />,
+    );
+    expect(alone).toContain('class="u-target"');
+    expect(
+      render(<MapLinks place={PLACE} variant="compact" label="Lake" />),
+    ).not.toContain("u-target");
+  });
+
   it("puts a name with markup in it as text", () => {
     const html = render(
       <MapLinks place={{ ...PLACE, name: "<script>alert(1)</script>" }} />,

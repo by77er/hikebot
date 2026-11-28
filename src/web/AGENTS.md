@@ -1130,12 +1130,44 @@ Here the component is `pill`; use your component's name.
 1. Run the script. It prints `wrote docs/screenshots/<file>` for each file,
    and exits non-zero naming the page, viewport and scheme when a page
    answers with another status than its entry in
-   `test/screenshots/pages.json` gives, or a file it loads fails:
+   `test/screenshots/pages.json` gives, or a file it loads fails. It also
+   audits every page, as "Audit the pages" says, and ends with
+   `The audit found nothing to fix on <n> page(s) in 7 configurations`:
 
    ```sh
    npm run screenshots
    pgrep -x workerd || echo "no workerd left"
    ```
+
+   When the audit finds something, the run exits non-zero after writing
+   the PNGs and prints the findings page by page, one line each: the
+   configuration, the check, a CSS selector that matches only that element
+   on the page, its first words, and what was measured:
+
+   ```text
+   server-location-vote-located
+     390 coarse  target  li.tally-list__item:nth-of-type(2) > div.tally-row.tally-row--votable > p.cluster.cluster--tight.cluster--nowrap.u-small.u-muted > span > a "Map of Mailbox Peak": 28.4 px × 16 px, under 44 × 44 px
+   ```
+
+   Fix each one in the page or in Cairn ("Audit the pages" says what each
+   check measures), and run the script again. Only when the fix is too
+   large for the change at hand, allow the finding: add an entry to
+   `"allow"` in `test/screenshots/audit-allow.json` with the page, the
+   check and the selector exactly as the report prints them, and a reason
+   that says why it stays and what would fix it:
+
+   ```json
+   {
+     "page": "servers-one",
+     "check": "cut",
+     "selector": "span.app-header__name",
+     "reason": "The header shows at most 128px of the name; the whole name is in the open menu. To fix: let the header show the whole name."
+   }
+   ```
+
+   An entry covers that element in every configuration. An entry that
+   matches no finding fails the run too, listed under `match no finding
+any more`: delete it.
 
 2. If Chromium does not start (for example
    `libnspr4.so: cannot open shared object file`), delete what the
@@ -1164,6 +1196,56 @@ Here the component is `pill`; use your component's name.
    ```sh
    gh run view <run-id> --log | grep -E '[0-9a-f]{64}  docs/screenshots/'
    sha256sum docs/screenshots/*.png
+   ```
+
+## Audit the pages
+
+1. Run the audit alone, which writes no PNG. It opens every page of
+   `test/screenshots/pages.json` as "Take the screenshots" does, in seven
+   configurations: `phone light`, `phone dark`, `desktop light` and
+   `desktop dark`, as the screenshots are taken, then `320` (320 CSS px
+   wide), `390 coarse` (390 px with a coarse pointer and touch) and
+   `desktop 200%` (the 1280 px window at 200% zoom: 640 CSS px at twice
+   the scale), and exits non-zero with the findings page by page:
+
+   ```sh
+   npm run screenshots:audit
+   ```
+
+2. Read each finding by its check:
+   - `overflow`: the page scrolls sideways at that width; the selector
+     names the first element that sticks out past the window. Make it wrap
+     or shrink.
+   - `target`: a link, button, form control, summary, `[role=button]` or
+     label wrapping a control is under 44 × 44 CSS px, measured at 390 px
+     (`phone light`, `phone dark` and `390 coarse`); a checkbox or radio is
+     measured with its label. A link inside running text is not a target.
+     Give the control `--target-min` (a link standing alone on a small
+     line: `.u-target`). Something that must stay small goes inside an
+     element with `data-audit-exempt="<why>"`; without a reason it is a
+     finding itself.
+   - `inline-main-path`: the page's primary action (`.button--primary`, or
+     an element marked `data-main-path`) is a link inside a sentence. Make
+     it a button standing on its own.
+   - `cut`: a word is clipped by a box with `overflow: hidden`, cut with
+     `text-overflow: ellipsis`, or lies past the window's edge. Text in a
+     box that scrolls sideways on purpose is not cut. Let the text wrap.
+   - `small-text`: text is drawn smaller than the smallest `--font-size-*`
+     token in `public/assets/cairn/tokens.css`. Use the token.
+   - `shift`: the layout moved by a cumulative layout shift of 0.05 or more
+     while the page loaded, with no input; the selector names an element
+     the largest shift moved. Reserve the space before the content arrives.
+   - `overlap`: a word, hit-tested at the centre of the part of it that
+     shows, lands on another element: one is drawn over the other, or a
+     control's hit area covers another control's words. Give them room.
+3. Fix each finding, or allow it as "Take the screenshots" says, and run
+   the audit again until it prints
+   `The audit found nothing to fix on <n> page(s) in 7 configurations`.
+   To check one rule of the audit itself, run its tests, which open a
+   fixture page that breaks each check and one that passes it:
+
+   ```sh
+   npx vitest run test/screenshots/audit.test.ts
    ```
 
 ## Add a page to the screenshots
@@ -1286,7 +1368,8 @@ Here the component is `pill`; use your component's name.
 ## Review your own UI change as a designer
 
 Do this for every change to `src/web/`, `public/` or `docs/screenshots/`,
-before marking the pull request ready.
+before marking the pull request ready. The audit must be clean ("Audit the
+pages") before the visual review starts.
 
 1. Follow "Take the screenshots", then list the screenshots your change
    adds, changes or removes:

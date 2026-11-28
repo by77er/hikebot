@@ -41,7 +41,7 @@ describe("ServerTile", () => {
     expect(await spokenText(html)).toBe("Lake Loop");
   });
 
-  it("keeps a 100-character name whole in the markup, for the stylesheet to clamp", async () => {
+  it("keeps a 100-character name whole, to wrap rather than be cut short", async () => {
     const html = render(
       <ServerTile server={{ id: "3", name: LONG_NAME, icon: null }} />,
     );

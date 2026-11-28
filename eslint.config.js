@@ -41,6 +41,13 @@ export default defineConfig(
     languageOptions: { globals: globals.browser, sourceType: "module" },
   },
   {
+    // The page audit's measurements, evaluated in the page as a classic
+    // script by test/screenshots/audit.ts.
+    files: ["test/screenshots/audit-page.js"],
+    extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: { globals: globals.browser, sourceType: "script" },
+  },
+  {
     // End-to-end tests drive the Worker only over HTTP; the probe Worker is
     // Worker code and builds on src/.
     files: ["test/e2e/**/*.ts"],

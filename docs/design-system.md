@@ -150,19 +150,19 @@ page at each size, scheme, pointer and zoom). A rule whose automated check
 is not in the repository is measured by hand in the review, as its middle
 column says, and the review says so.
 
-| Rule                                                       | Measured in a review by                                                                                                | Automated check it belongs in                                        |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Text, controls and the focus ring meet the contrast floors | `test/web/contrast.test.ts`, in `npm test`, for every pairing in "Allowed pairings" in both schemes.                   | That test.                                                           |
-| Only tokens in component and page CSS                      | `test/web/token-use.test.ts`, in `npm test`.                                                                           | That test.                                                           |
-| No colour is eased                                         | Reading every `transition` in the changed stylesheets: only `opacity` or `transform`, always with a property list.     | An Undercurrent rule on the stylesheets, and a page audit.           |
-| A press shows at once, with a finger as with a mouse       | Pressing each control with touch emulation at 390px: the pressed fill shows while the finger is down.                  | A page audit.                                                        |
-| A submit that takes time shows it is busy                  | Submitting each form on a throttled network: the button holds its pressed fill and `aria-busy` until the page answers. | A page audit.                                                        |
-| The main path is not a link inside a sentence              | Checking that the thing the question sentence is about is a button or a standalone link.                               | A page audit listing every link inside running text.                 |
-| Numbers people compare are tabular and right-aligned       | Reading the component's CSS for `tabular-nums` and the screenshot for the alignment.                                   | An Undercurrent rule on the component stylesheets, and a page audit. |
-| Every target is at least 44 by 44px, with no overlap       | The browser's element inspector at 390px.                                                                              | A page audit.                                                        |
-| Nothing scrolls sideways and no word is cut                | The page at 320px, 390px and 1440px wide, and at 200% zoom.                                                            | A page audit.                                                        |
-| Layout shift stays under 0.05                              | The browser's performance panel, loading the page at both sizes.                                                       | A page audit.                                                        |
-| Ages and durations are written one way                     | Reading the page's words against "Content rules".                                                                      | An Undercurrent rule on `src/web/` ("0 s ago", minutes as "m").      |
+| Rule                                                       | Measured in a review by                                                                                                                                                                                                          | Automated check it belongs in                                        |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Text, controls and the focus ring meet the contrast floors | `test/web/contrast.test.ts`, in `npm test`, for every pairing in "Allowed pairings" in both schemes.                                                                                                                             | That test.                                                           |
+| Only tokens in component and page CSS                      | `test/web/token-use.test.ts`, in `npm test`.                                                                                                                                                                                     | That test.                                                           |
+| No colour is eased                                         | Reading every `transition` in the changed stylesheets: only `opacity` or `transform`, always with a property list.                                                                                                               | An Undercurrent rule on the stylesheets, and a page audit.           |
+| A press shows at once, with a finger as with a mouse       | Pressing each control with touch emulation at 390px: the pressed fill shows while the finger is down.                                                                                                                            | A page audit.                                                        |
+| A submit that takes time shows it is busy                  | Submitting each form on a throttled network: the button holds its pressed fill and `aria-busy` until the page answers.                                                                                                           | A page audit.                                                        |
+| The main path is not a link inside a sentence              | `npm run screenshots:audit`, check `inline-main-path`: the primary action (`.button--primary` or `[data-main-path]`) is not a link inside a sentence; and checking that the thing the question sentence is about is that action. | The page audit (`test/screenshots/audit.ts`).                        |
+| Numbers people compare are tabular and right-aligned       | Reading the component's CSS for `tabular-nums` and the screenshot for the alignment.                                                                                                                                             | An Undercurrent rule on the component stylesheets, and a page audit. |
+| Every target is at least 44 by 44px, with no overlap       | `npm run screenshots:audit`, checks `target` (at 390px, fine and coarse pointer) and `overlap`.                                                                                                                                  | The page audit.                                                      |
+| Nothing scrolls sideways and no word is cut                | `npm run screenshots:audit`, checks `overflow` and `cut`, at 320px, 390px (fine and coarse pointer), 1280px and at 200% zoom.                                                                                                    | The page audit.                                                      |
+| Layout shift stays under 0.05                              | `npm run screenshots:audit`, check `shift`, loading each page in every configuration.                                                                                                                                            | The page audit.                                                      |
+| Ages and durations are written one way                     | Reading the page's words against "Content rules".                                                                                                                                                                                | An Undercurrent rule on `src/web/` ("0 s ago", minutes as "m").      |
 
 ### What Cairn did not take from viz
 
@@ -526,7 +526,8 @@ Block, element, modifier, in lower case with hyphens:
   `.stack`, `.cluster`, `.grid`, `.page-heading`, `.list-reset`.
 - **Page** styles are blocks named after the page: `.styleguide-swatch`.
 - **Utilities** start with `u-`: `.u-visually-hidden`, `.u-muted`,
-  `.u-small`, `.u-lead`, `.u-numeric`.
+  `.u-small`, `.u-lead`, `.u-numeric`, `.u-target` (a link standing alone
+  on a small line, at least 44px high and wide).
 
 ## The page shell
 
@@ -837,8 +838,9 @@ its styles in `public/assets/cairn/components/`, its unit test in
     OpenStreetMap's credit, "© OpenStreetMap contributors", linking its
     copyright page. `compact`, in a vote's row, as the poll message does:
     one small muted line, a map pin, the place name and a **Map** link
-    named after the option ("Map of Lake Serene"); the tally list carries
-    the credit once, under its rows.
+    named after the option ("Map of Lake Serene"); without a place name the
+    Map link stands alone and is a whole 44px target; the tally list
+    carries the credit once, under its rows.
   - _Variants:_ `full`, `compact`; with or without a place name.
   - _States:_ the links' and buttons' own.
   - _Do:_ use plain links. _Don't:_ embed a map, a tile or a picture from
@@ -946,10 +948,9 @@ its styles in `public/assets/cairn/components/`, its unit test in
 - **Server tile** (`server-tile.tsx`, its own style guide page): one server
   to choose, as one link to `/g/<id>` with one focus ring: the server's
   icon or initials (Avatar, decorative), its name and a chevron, at least
-  44px high. The name wraps over two lines and then ends with "…" (the
-  whole name stays in the markup, and is the link's accessible name); a
-  long word breaks rather than widening the tile. States: default, hover
-  (stronger edge, underlined name), focus-visible, active.
+  44px high. The name wraps onto as many lines as it needs and is never
+  cut short; a long word breaks rather than widening the tile. States:
+  default, hover (stronger edge, underlined name), focus-visible, active.
   `ServerTileList` lays tiles out in one column below the breakpoint and
   in a grid of tiles at least `--width-tile-min` wide from it, each row as
   tall as its tallest tile.
