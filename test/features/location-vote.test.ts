@@ -1015,4 +1015,77 @@ describe("suggesting a past location again", () => {
     );
     expect(await activeRound(guild)).toBeNull();
   });
+
+  describe("one proposal per member", () => {
+    const ALREADY = (label: string) =>
+      `You've already proposed **${label}** for this location vote. Each member proposes one location per round.`;
+
+    async function labels(guild: string, pollId: number) {
+      return runInDurableObject(stub(guild), (_i, state) =>
+        new PollStore(state.storage)
+          .getPoll(pollId)
+          ?.options.map((o) => o.label),
+      );
+    }
+
+    it("refuses Propose a location and New location with the sentence naming the member's location, opening nothing", async () => {
+      const guild = "location-one-button";
+      const { pollId } = await secondRound(guild, ["Summit"]);
+      let reply = await send(proposeSubmit(guild, pollId, "Meadow"));
+      expect(text(reply.data.components)).toMatch(/^Added \*\*Meadow\*\*/);
+      for (const id of [
+        LOCATION_IDS.propose(pollId),
+        LOCATION_IDS.newLocation(pollId),
+      ]) {
+        reply = await send(click(id, guild));
+        expect(reply.type).toBe(
+          InteractionResponseType.ChannelMessageWithSource,
+        );
+        expect(reply.data).toMatchObject({ flags: 32768 | 64 });
+        expect(text(reply.data.components)).toBe(ALREADY("Meadow"));
+        expect(selectOf(reply.data.components)).toBeUndefined();
+      }
+      // Another member still gets the suggest-again message.
+      reply = await send(
+        click(LOCATION_IDS.propose(pollId), guild, OTHER_MEMBER),
+      );
+      expect(selectOf(reply.data.components)).toBeDefined();
+    });
+
+    it("refuses a stale modal and a stale select with the same sentence, adding nothing", async () => {
+      const guild = "location-one-stale";
+      const { pollId, lakeId } = await secondRound(guild, ["Summit"]);
+      await send(proposeSubmit(guild, pollId, "Meadow"));
+      let reply = await send(proposeSubmit(guild, pollId, "Pass"));
+      expect(reply.data).toMatchObject({ flags: 32768 | 64 });
+      expect(text(reply.data.components)).toBe(ALREADY("Meadow"));
+      reply = await send(pick(guild, pollId, lakeId));
+      expect(reply.type).toBe(InteractionResponseType.UpdateMessage);
+      expect(text(reply.data.components)).toBe(ALREADY("Meadow"));
+      expect(selectOf(reply.data.components)).toBeUndefined();
+      expect(await labels(guild, pollId)).toEqual(["Summit", "Meadow"]);
+    });
+
+    it("counts a pick: the select is gone after it, and the modal is refused", async () => {
+      const guild = "location-one-pick";
+      const { pollId, lakeId } = await secondRound(guild);
+      await send(pick(guild, pollId, lakeId));
+      const reply = await send(proposeSubmit(guild, pollId, "Meadow"));
+      expect(text(reply.data.components)).toBe(ALREADY("Lake"));
+      expect(await labels(guild, pollId)).toEqual(["Lake"]);
+    });
+
+    it("leaves the admin's starting list out: the owner who started with five locations proposes one", async () => {
+      const guild = "location-one-owner";
+      const { pollId } = await secondRound(guild, ["A", "B", "C", "D", "E"]);
+      const reply = await send(
+        proposeSubmit(guild, pollId, "Meadow", "", "", OWNER),
+      );
+      expect(text(reply.data.components)).toMatch(/^Added \*\*Meadow\*\*/);
+      const again = await send(
+        click(LOCATION_IDS.propose(pollId), guild, OWNER),
+      );
+      expect(text(again.data.components)).toBe(ALREADY("Meadow"));
+    });
+  });
 });

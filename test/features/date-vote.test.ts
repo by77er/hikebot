@@ -1102,9 +1102,9 @@ describe("proposing a date", () => {
     });
   }
 
-  function proposeClick(guildId: string, pollId: number) {
+  function proposeClick(guildId: string, pollId: number, userId = MEMBER) {
     const click = componentInteraction(DATE_IDS.propose(pollId), guildId);
-    Object.assign(click, { member: { user: { id: MEMBER }, roles: [] } });
+    Object.assign(click, { member: { user: { id: userId }, roles: [] } });
     return click;
   }
 
@@ -1139,6 +1139,29 @@ describe("proposing a date", () => {
       (_i, state) => new PollStore(state.storage).getPoll(pollId)?.options,
     );
   }
+
+  it("refuses Propose a date and a stale modal once the member proposed one, naming it, while another member and the admin still propose", async () => {
+    const guild = "date-propose-one";
+    const pollId = await openDatePoll(guild);
+    const already =
+      "You've already proposed **Sat, 5 Dec 2026 · 09:00** for this date vote. Each member proposes one date per round.";
+    await send(proposeSubmit(guild, pollId, "2026-12-05 09:00"));
+    let reply = await send(proposeClick(guild, pollId));
+    expect(reply.type).toBe(InteractionResponseType.ChannelMessageWithSource);
+    expect(reply.data.flags).toBe(
+      MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+    );
+    expect(text(reply.data.components)).toBe(already);
+    reply = await send(proposeSubmit(guild, pollId, "2026-12-06"));
+    expect(text(reply.data.components)).toBe(already);
+    expect(await options(guild, pollId)).toHaveLength(3);
+    // The owner entered the starting dates, which do not count.
+    reply = await send(proposeClick(guild, pollId, OWNER));
+    expect(reply.type).toBe(InteractionResponseType.Modal);
+    reply = await send(proposeSubmit(guild, pollId, "2026-12-06", OWNER));
+    expect(text(reply.data.components)).toMatch(/^Added \*\*/);
+    expect(await options(guild, pollId)).toHaveLength(4);
+  });
 
   it("opens a modal with one short Date field naming the last day and the default time", async () => {
     const guild = "date-propose-modal";

@@ -46,6 +46,7 @@ import {
   MAX_OPTIONS,
   MIN_DATE_OPTIONS,
   PollStore,
+  alreadyProposedMessage,
   type OptionView,
   type PollView,
   type RoundView,
@@ -366,7 +367,10 @@ function pollIdArg(customIdValue: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-/** Propose a date: the modal, unless the poll is closed or full. */
+/**
+ * Propose a date: the modal, unless the poll is closed, the member already
+ * proposed a date to it or it is full.
+ */
 const openPropose: ComponentHandler = (interaction, context) => {
   const pollId = pollIdArg(interaction.data.custom_id);
   const store = new PollStore(context.storage);
@@ -376,6 +380,15 @@ const openPropose: ComponentHandler = (interaction, context) => {
   }
   if (poll.status !== "open") {
     return { response: ephemeralNotice(VOTE_CLOSED_MESSAGE) };
+  }
+  const own = store.getProposal(
+    poll.id,
+    interaction.member?.user.id ?? interaction.user?.id ?? "",
+  );
+  if (own !== null) {
+    return {
+      response: ephemeralNotice(alreadyProposedMessage("date", own.label)),
+    };
   }
   if (poll.options.length >= MAX_OPTIONS) {
     return { response: ephemeralNotice(FULL) };

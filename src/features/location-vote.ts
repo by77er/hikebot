@@ -51,6 +51,7 @@ import {
   MAX_LABEL_LENGTH,
   MAX_OPTIONS,
   PollStore,
+  alreadyProposedMessage,
   cooldownMessage,
   labelKey,
   type OptionPlace,
@@ -377,19 +378,28 @@ function proposeModal(pollId: number): APIModalInteractionResponse {
   ]);
 }
 
-/** The poll a proposal control is for, or the answer refusing it. */
+/**
+ * The poll a proposal control is for, or the answer refusing it: the poll
+ * is closed, the member already proposed a location to it, or it is full.
+ */
 function proposablePoll(
   interaction: APIMessageComponentInteraction,
   context: HandlerContext,
 ): { poll: PollView } | HandlerResult {
   const pollId = pollIdArg(interaction.data.custom_id);
-  const poll =
-    pollId === null ? null : new PollStore(context.storage).getPoll(pollId);
+  const store = new PollStore(context.storage);
+  const poll = pollId === null ? null : store.getPoll(pollId);
   if (!poll || poll.kind !== "location") {
     return { response: ephemeralNotice(UNAVAILABLE_MESSAGE) };
   }
   if (poll.status !== "open") {
     return { response: ephemeralNotice(VOTE_CLOSED_MESSAGE) };
+  }
+  const own = store.getProposal(poll.id, userIdOf(interaction));
+  if (own !== null) {
+    return {
+      response: ephemeralNotice(alreadyProposedMessage("location", own.label)),
+    };
   }
   if (poll.options.length >= MAX_OPTIONS) {
     return { response: ephemeralNotice(TOO_MANY) };
@@ -399,8 +409,8 @@ function proposablePoll(
 
 /**
  * Propose a location: the suggest-again message when a past location can
- * go on the poll again, else the modal; refused when the poll is closed or
- * full.
+ * go on the poll again, else the modal; refused when the poll is closed,
+ * the member already proposed one or the poll is full.
  */
 const openPropose: ComponentHandler = (interaction, context) => {
   const found = proposablePoll(interaction, context);
@@ -415,7 +425,10 @@ const openPropose: ComponentHandler = (interaction, context) => {
   return { response: ephemeralReply(renderSuggestAgain(found.poll.id, past)) };
 };
 
-/** New location: the modal, unless the poll is closed or full. */
+/**
+ * New location: the modal, unless the poll is closed, the member already
+ * proposed one or the poll is full.
+ */
 const openProposeModal: ComponentHandler = (interaction, context) => {
   const found = proposablePoll(interaction, context);
   if (!("poll" in found)) return found;
@@ -425,8 +438,9 @@ const openProposeModal: ComponentHandler = (interaction, context) => {
 /**
  * The suggest-again select: adds the picked past location with its saved
  * label and details and the member as proposer, refreshes the poll message,
- * and confirms in place with a fresh select. A refusal gets the answer a
- * typed proposal gets.
+ * and confirms in place; that was the member's one proposal, so the select
+ * goes. A refusal gets the answer a typed proposal gets, with a fresh
+ * select unless the member had already proposed.
  */
 const pickPastLocation: ComponentHandler = async (interaction, context) => {
   const pollId = pollIdArg(interaction.data.custom_id);
@@ -439,10 +453,13 @@ const pickPastLocation: ComponentHandler = async (interaction, context) => {
   }
   const userId = userIdOf(interaction);
   const outcome = await suggestAgain(context, userId, pollId, picked);
-  if (!outcome.ok && outcome.code === "unavailable") {
+  if (outcome.ok) {
+    return { response: update([textDisplay(added(outcome.value.label))]) };
+  }
+  if (outcome.code === "unavailable" || outcome.code === "already_proposed") {
     return { response: update([textDisplay(outcome.message)]) };
   }
-  const notice = outcome.ok ? added(outcome.value.label) : outcome.message;
+  const notice = outcome.message;
   const store = new PollStore(context.storage);
   const poll = store.getPoll(pollId);
   if (
