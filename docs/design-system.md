@@ -762,21 +762,22 @@ its styles in `public/assets/cairn/components/`, its unit test in
 - **Forecast table** (`forecast-table.tsx`, `/styleguide/forecast-table`):
   a hike's hourly forecast, as the hike thread gives it.
   - _Anatomy:_ a `table` named by its caption (the day and the time zone,
-    small and muted); columns Time, Conditions, then the numbers a member
-    compares down the column: Temp, Chance, Rain and Wind (read out as
+    small and muted); columns Time (each hour, with its conditions in
+    words and a weather icon under it), then the numbers a member compares
+    down the column: Temp, Chance, Rain and Wind (read out as
     "Temperature, °F", "Chance of rain or snow, %", "Rain or snow, in",
     "Wind, mph"). Each number column says its unit once, in its head under
     its name, and its cells are bare figures in tabular digits, aligned
     right, head included ("Layout rules"); the temperature and wind cells
     have a second figure that says what it is ("feels 46", "gusts 12").
-    One row per hour headed by its time (a `<time>`); the conditions are
+    One row per hour headed by its time (a `<time>`) and its conditions,
     words with a weather icon beside them (decorative: the words carry
     them). A value the forecast lacks is a dash, as in the thread.
   - _Variants:_ the server's units: °F, inches and mph, or °C, mm and
     km/h.
   - _States:_ none; it is not interactive.
   - _Layout:_ on a phone each second figure sits under the first in muted
-    small text and the cells are tight, so the six columns fit 390px
+    small text and the cells are tight, so the five columns fit 390px
     (checked on the screenshots); from the breakpoint it sits beside it.
     Like every table it still scrolls inside its own box rather than widen
     the page.

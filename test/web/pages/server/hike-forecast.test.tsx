@@ -44,7 +44,7 @@ describe("HikeForecast", () => {
       `Hourly forecast for Sat, 15 Jun 2030, times in ${RECORDED_ZONE}`,
     );
     expect(text).toContain(
-      "Time Conditions Temperature, °F Chance of rain or snow, % Rain or snow, in Wind, mph",
+      "Time Temperature, °F Chance of rain or snow, % Rain or snow, in Wind, mph",
     );
     expect([...html.matchAll(/<th scope="row"/g)]).toHaveLength(9);
     expect(text).toContain("Clear");

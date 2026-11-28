@@ -54,10 +54,10 @@ describe("ForecastTable", () => {
       />,
     );
     expect(await spokenText(html)).toBe(
-      "Hourly forecast for Sat, 15 Jun 2030, times in America/Los_Angeles Time Conditions Temperature, °F Chance of rain or snow, % Rain or snow, in Wind, mph 09:00 Light rain 50 feels 45 40 0.01 9 gusts 22 10:00 Clear 50 feels 45 40 0.01 9 gusts 22",
+      "Hourly forecast for Sat, 15 Jun 2030, times in America/Los_Angeles Time Temperature, °F Chance of rain or snow, % Rain or snow, in Wind, mph 09:00 Light rain 50 feels 45 40 0.01 9 gusts 22 10:00 Clear 50 feels 45 40 0.01 9 gusts 22",
     );
     expect(html).toContain(
-      '<th scope="row"><time datetime="2030-06-15T16:00:00.000Z">09:00</time></th>',
+      '<th scope="row"><time datetime="2030-06-15T16:00:00.000Z">09:00</time><span class="forecast-table__conditions"><svg',
     );
     // The icon is decorative: the words carry the conditions.
     expect(html).toMatch(
@@ -84,7 +84,7 @@ describe("ForecastTable", () => {
       ),
     );
     expect(text).toContain(
-      "c Time Conditions Temperature, °C Chance of rain or snow, % Rain or snow, mm Wind, km/h 09:00 Light rain 0 feels -7 40 3.1 31 gusts 68",
+      "c Time Temperature, °C Chance of rain or snow, % Rain or snow, mm Wind, km/h 09:00 Light rain 0 feels -7 40 3.1 31 gusts 68",
     );
   });
 
@@ -118,7 +118,6 @@ describe("ForecastTable", () => {
     );
     const heads = [...html.matchAll(/<th scope="col"( class="[^"]*")?>/g)];
     expect(heads.map(([, cls]) => cls ?? "")).toEqual([
-      "",
       "",
       ' class="forecast-table__number"',
       ' class="forecast-table__number"',

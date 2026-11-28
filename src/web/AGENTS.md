@@ -1265,7 +1265,11 @@ any more`: delete it.
    `servers-none`. A clock reading the Worker writes into a page (the time
    now somewhere) goes in a `<time data-clock data-zone={zone}>`, which the
    script sets to its frozen clock, since the Worker's clock cannot be
-   frozen.
+   frozen. An age goes in `Age` (`src/web/components/age.tsx`), which marks
+   one of the page's own clock reading (such as "Counted just now") the
+   same way; for an age of stored data, give the seed an instant before the
+   frozen clock (`FROZEN_TIME` in `test/screenshots/take.ts`), such as 14
+   minutes before it for "Updated 14 min ago".
 
    ```json
    {

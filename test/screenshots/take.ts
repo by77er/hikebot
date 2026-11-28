@@ -455,6 +455,15 @@ async function stopMotion(session: CDPSession): Promise<void> {
  */
 const FREEZE_CLOCK = `(() => {
   const at = ${String(FROZEN_TIME)};
+  // An age of the page's own clock reading reads "just now" before the
+  // page's scripts run, so they find nothing to rewrite and nothing moves.
+  document.addEventListener("readystatechange", () => {
+    if (document.readyState !== "interactive") return;
+    for (const clock of document.querySelectorAll("time[data-clock][data-age]")) {
+      clock.dateTime = new RealDate(at).toISOString();
+      clock.textContent = "just now";
+    }
+  });
   const RealDate = Date;
   globalThis.Date = new Proxy(RealDate, {
     construct: (target, args) => Reflect.construct(target, args.length === 0 ? [at] : args),

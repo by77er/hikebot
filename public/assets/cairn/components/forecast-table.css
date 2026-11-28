@@ -1,6 +1,6 @@
 /*
  * Forecast table: tight cells, and each cell's second figure under the
- * first on a phone, so six columns fit 390px; beside it from 48rem. Number
+ * first on a phone, so five columns fit 390px; beside it from 48rem. Number
  * columns align right, in tabular digits (from the base table), with their
  * unit under the name in the head.
  */
@@ -14,6 +14,9 @@
 }
 
 .forecast-table__number {
+  /* Holds the head's visually hidden name, which would otherwise sit past
+     the table's scrolling box and widen the page. */
+  position: relative;
   text-align: end;
 }
 
@@ -22,6 +25,18 @@
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-regular);
+}
+
+.forecast-table__conditions {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  font-weight: var(--font-weight-regular);
+}
+
+.forecast-table__conditions > .icon {
+  flex: none;
+  align-self: center;
 }
 
 .forecast-table__second {
@@ -43,6 +58,13 @@
     display: block;
     color: var(--color-text-muted);
     font-size: var(--font-size-small);
+    font-weight: var(--font-weight-regular);
+  }
+
+  .forecast-table__conditions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
     font-weight: var(--font-weight-regular);
   }
 

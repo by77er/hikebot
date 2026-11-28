@@ -1,14 +1,14 @@
 /**
  * Forecast table: the hourly forecast of a hike, one row per hour, as the
- * hike thread shows it. Each row is the hour (its header), the conditions
- * in words with their weather icon, then the numbers a member compares
- * down the column: the temperature with what it feels like, the chance of
+ * hike thread shows it. Each row is headed by the hour with the conditions
+ * in words and their weather icon under it, then the numbers a member
+ * compares down the column: the temperature with what it feels like, the chance of
  * rain or snow, its amount, and the wind with its gusts. Each column's
  * unit is said once, in its head under its name ("Temp" over "°F"), and
  * the cells are bare figures in tabular digits, aligned right ("Layout
  * rules" in docs/design-system.md); a value Open-Meteo did not give is a
  * dash. On a phone a cell's second figure ("feels 47") sits under the
- * first, so six columns fit 390px, and from the breakpoint beside it. The
+ * first, so five columns fit 390px, and from the breakpoint beside it. The
  * caption names the day and the time zone.
  */
 import { WeatherIcon } from "./weather-icons";
@@ -93,7 +93,6 @@ export function ForecastTable({ caption, hours, units }: ForecastTableProps) {
       <thead>
         <tr>
           <th scope="col">Time</th>
-          <th scope="col">Conditions</th>
           <Head shown="Temp" spoken="Temperature" unit={units.temperature} />
           <Head shown="Chance" spoken="Chance of rain or snow" unit="%" />
           <Head shown="Rain" spoken="Rain or snow" unit={units.precipitation} />
@@ -107,13 +106,11 @@ export function ForecastTable({ caption, hours, units }: ForecastTableProps) {
               <time datetime={new Date(hour.at).toISOString()}>
                 {hour.time}
               </time>
-            </th>
-            <td>
-              <span class="cluster cluster--tight cluster--nowrap">
+              <span class="forecast-table__conditions">
                 <WeatherIcon code={hour.code} size="small" />
                 {hour.conditions}
               </span>
-            </td>
+            </th>
             <td class="forecast-table__number">
               <Figures
                 first={whole(hour.temperature)}
