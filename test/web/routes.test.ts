@@ -135,7 +135,7 @@ describe("GET /", () => {
     const html = await response.text();
     const page = await outline(html);
     expect(page.title).toBe("Method not allowed · hikebot");
-    expect(page.text).toContain("Error 405");
+    expect(page.text).toContain("Method not allowed");
     expect(page.text).toContain(
       "This page does not accept that kind of request.",
     );
@@ -180,7 +180,7 @@ describe("unknown paths", () => {
   it("says the error in words and offers one way back home", async () => {
     const html = await (await get("/nope")).text();
     const page = await outline(html);
-    expect(page.text).toContain("Error 404");
+    expect(page.text).toContain("Page not found");
     expect(page.text).toContain("Page not found");
     expect(page.text).toContain(
       "There is no page at this address. The link may be wrong, or the page may have moved.",

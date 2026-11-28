@@ -17,7 +17,7 @@ describe("TallyRow", () => {
     expect(html).toMatch(/^<div class="tally-row">/);
     expect(html).toContain('<p class="tally-row__label">Mailbox Peak</p>');
     expect(html).toMatch(
-      /<p class="tally-row__count" id="[^"]+"><span class="tally-row__number">11<\/span> votes<\/p>/,
+      /<p class="tally-row__count" id="[^"]+"><span class="tally-row__number">11<\/span> <span class="tally-row__unit">votes<\/span><\/p>/,
     );
     expect(html).toContain(
       '<meter class="tally-row__bar" min="0" max="14" value="11" aria-hidden="true"></meter>',
@@ -37,7 +37,9 @@ describe("TallyRow", () => {
   it("says one vote in the singular, and draws no votes as an empty bar", () => {
     expect(
       render(<TallyRow option={{ ...MAILBOX, votes: 1 }} voterCount={1} />),
-    ).toContain('<span class="tally-row__number">1</span> vote</p>');
+    ).toContain(
+      '<span class="tally-row__number">1</span> <span class="tally-row__unit">vote</span></p>',
+    );
     expect(
       render(<TallyRow option={{ ...MAILBOX, votes: 0 }} voterCount={0} />),
     ).toContain('max="1" value="0"');

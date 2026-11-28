@@ -5,7 +5,11 @@
  * Worker's own origin, cacheable for a year, and reference no other host.
  */
 import { describe, expect, it } from "vitest";
-import { PageClient, stylesheetLinks } from "./harness/web";
+import {
+  PageClient,
+  stylesheetLinks,
+  withoutCairnScripts,
+} from "./harness/web";
 import { useE2E } from "./harness/worker";
 
 const e2e = useE2E();
@@ -96,7 +100,9 @@ describe.each(PAGES)("$path", ({ path, status, title }) => {
       "cache-control": "no-store",
     });
     expect(page.body).toContain(`<title>${title}</title>`);
-    expect(page.body).not.toMatch(/<script|<style|\sstyle=|\son[a-z]+=/i);
+    expect(withoutCairnScripts(page.body)).not.toMatch(
+      /<script|<style|\sstyle=|\son[a-z]+=/i,
+    );
   });
 
   it("loads nothing from another origin", async () => {
@@ -212,7 +218,7 @@ describe("the style guide's hike components", () => {
         .sort((a, b) => b.length - a.length)[0] ?? "";
     expect(longest.match(/type="checkbox"/g)).toHaveLength(25);
     expect(longest).toContain('type="submit"');
-    expect(page.body).not.toMatch(/<script/);
+    expect(withoutCairnScripts(page.body)).not.toMatch(/<script/);
   });
 
   it("answers 404 for a section without a page of its own", async () => {

@@ -28,11 +28,11 @@ export function ServersPage({
       <div class="stack stack--loose">
         <div class="page-heading">
           <h1>Choose a server</h1>
-          <p class="page-heading__lead">
-            {guilds.length === 0
-              ? "The servers you share with hikebot show here, once it is in one."
-              : "The servers you share with hikebot. Choose one to see its hikes."}
-          </p>
+          {guilds.length > 0 && (
+            <p class="page-heading__lead">
+              The servers you share with hikebot.
+            </p>
+          )}
         </div>
         {guilds.length === 0 ? (
           <EmptyState
@@ -52,7 +52,7 @@ export function ServersPage({
         <div class="stack stack--tight">
           <p class="u-muted">
             This list is from when you signed in. Joined a server, or added
-            hikebot to one since? Refresh your servers.
+            hikebot to one since?
           </p>
           <div class="cluster">
             <Button variant="quiet" href={REFRESH_PATH}>

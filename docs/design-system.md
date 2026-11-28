@@ -452,6 +452,7 @@ one is a finding in the review of a change to it.
 | `--icon-size-small`               | 16px                           | Icons next to small text.                                                                                                        |
 | `--blaze-width`, `--blaze-height` | 8px by 18px                    | The blaze.                                                                                                                       |
 | `--width-date-leaf`               | 64px                           | The hike card's calendar leaf: room for a two-digit day at h2 size and "Wed" or "Sep" in small semibold, with space either side. |
+| `--width-vote-word`               | 40px                           | The word after a tally's count ("votes" in small text), so the counts of "1 vote" and "4 votes" line up on the right.            |
 | `--avatar-size`                   | 48px                           | An avatar or server icon in a list, such as a server tile.                                                                       |
 | `--avatar-size-small`             | 32px                           | The user's avatar in the header.                                                                                                 |
 | `--width-tile-min`                | 288px                          | The narrowest a server tile gets in its grid before it wraps.                                                                    |
@@ -553,8 +554,9 @@ Content placed straight into `main` gets `--space-4` between blocks; pages
 normally lay themselves out with `.stack`. A page that only says what
 happened and offers one way on (the 404 and 405 pages, the sign-in
 outcomes, a refused form) is a `MessagePage` (`src/web/pages/message.tsx`):
-an optional eyebrow such as "Error 404", the title, a lead sentence and one
-primary button.
+the title, a lead sentence and one primary button (an optional eyebrow
+only where the presence test keeps one; the error pages have none, as
+"Page not found" says what "Error 404" would).
 
 ## Components
 
@@ -563,6 +565,17 @@ its styles in `public/assets/cairn/components/`, its unit test in
 `test/web/components/` and its style guide section in
 `src/web/pages/styleguide/`, one file each. In alphabetical order:
 
+- **Age** (`age.tsx`): how old a piece of data on the page is, in the
+  words of "Content rules" ("just now", "14 min ago", "3 h ago", from a day
+  on "Thu, 3 Dec 2026 · 07:00"), after a verb the page writes ("Updated",
+  "Counted"). A `<time datetime>` holding the instant, written by the
+  server (`ageText` in `src/web/age.ts`) and rewritten every 15 seconds by
+  `public/assets/cairn/ages.mjs`, which it loads, so the words stay true
+  on a page left open; without JavaScript they stay as served. It has no
+  style of its own and no style guide section: its words depend on the
+  clock, so it is seen on the server page's screenshots (the forecast's
+  "Updated 14 min ago", the tally's "Counted just now"), where the clock
+  is frozen.
 - **App header** (`app-header.tsx`, its own style guide page): the band at
   the top of every page, which `Layout` renders. The brand mark links home;
   then the server a page is about (`context`; on a phone a row of its own
@@ -663,8 +676,9 @@ its styles in `public/assets/cairn/components/`, its unit test in
 - **Confirmation** (`confirmation.tsx`, `/styleguide/confirmation`): the
   page between a click and an action that cannot be undone, such as
   closing a vote or cancelling a round.
-  - _Anatomy:_ an optional eyebrow (what it is about: "Location vote ·
-    open"), the bot's question as the page's h1 ("Cancel this round?"),
+  - _Anatomy:_ an optional eyebrow (the server's name on the admin
+    controls' pages, as nothing else there names the server the action is
+    taken on), the bot's question as the page's h1 ("Cancel this round?"),
     what will happen in the bot's words with what it applies to (a
     definition list), "This cannot be undone." with a warning icon, then a
     form that posts (with the CSRF field and what identifies the thing) and
@@ -748,19 +762,21 @@ its styles in `public/assets/cairn/components/`, its unit test in
 - **Forecast table** (`forecast-table.tsx`, `/styleguide/forecast-table`):
   a hike's hourly forecast, as the hike thread gives it.
   - _Anatomy:_ a `table` named by its caption (the day and the time zone,
-    small and muted); columns Time, Conditions, Temp, Rain and Wind (read
-    out as Temperature and Rain or snow); one row per hour headed by its
-    time (a `<time>`). Each cell has a first figure with its unit and a
-    second that says what it is ("50°F" and "feels 46°", "20%" and
-    "0.01 in", "6 mph" and "gusts 12"), so a cell reads on its own; the
-    conditions are words with a weather icon beside them (decorative: the
-    words carry them). A value the forecast lacks is a dash, as in the
-    thread.
+    small and muted); columns Time, Conditions, then the numbers a member
+    compares down the column: Temp, Chance, Rain and Wind (read out as
+    "Temperature, °F", "Chance of rain or snow, %", "Rain or snow, in",
+    "Wind, mph"). Each number column says its unit once, in its head under
+    its name, and its cells are bare figures in tabular digits, aligned
+    right, head included ("Layout rules"); the temperature and wind cells
+    have a second figure that says what it is ("feels 46", "gusts 12").
+    One row per hour headed by its time (a `<time>`); the conditions are
+    words with a weather icon beside them (decorative: the words carry
+    them). A value the forecast lacks is a dash, as in the thread.
   - _Variants:_ the server's units: °F, inches and mph, or °C, mm and
     km/h.
   - _States:_ none; it is not interactive.
   - _Layout:_ on a phone each second figure sits under the first in muted
-    small text and the cells are tight, so the five columns fit 390px
+    small text and the cells are tight, so the six columns fit 390px
     (checked on the screenshots); from the breakpoint it sits beside it.
     Like every table it still scrolls inside its own box rather than widen
     the page.
@@ -818,7 +834,10 @@ its styles in `public/assets/cairn/components/`, its unit test in
     `past` a sandstone one with muted figures.
   - _States_: the links' own (hover, focus, active).
   - _Do_: pass the date and time as the server's wall clock with its time
-    zone, as the bot shows them. _Don't_: reformat the bot's date label,
+    zone, as the bot shows them, and the bot's label itself as
+    `start.label`, so the card says exactly what the hike's thread and
+    event say (a test compares the page with the thread's message from one
+    round). _Don't_: reformat the bot's date label,
     or leave a link in that has nowhere to go (leave it out).
 - **Icons** (`icon.tsx`, `icons.tsx`): stroke icons on a 24-unit grid with
   a 2-unit round stroke in the current text colour, at 20px or 16px. They
@@ -975,7 +994,9 @@ its styles in `public/assets/cairn/components/`, its unit test in
   - _Purpose_: the whole vote at a glance, up to 25 options, readable on a
     phone.
   - _Anatomy_: the bot's voter line ("No one has voted yet.", "1 member
-    has voted.", "14 members have voted."), then an `<ol>` named by `label`
+    has voted.", "14 members have voted."), with, given `counted`, when the
+    votes were counted ("Counted just now.", an Age, so a page left open
+    on a phone says how old its tally is), then an `<ol>` named by `label`
     ("Locations", "Dates") of tally rows divided by hairlines, not boxed,
     so the labels and counts form two columns the eye runs down.
   - _Variants_: open and closed (with the winner and the tie note on the

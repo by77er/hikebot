@@ -3,7 +3,9 @@
  * `/g/<guild id>/admin/`: Close location vote, Close date vote, Withdraw
  * date vote and Cancel round. It asks the panel's question, restates what
  * the control does in the panel's words, and shows what it applies to: the
- * open vote's current tally, or the decided location. Only the form's POST
+ * open vote's current tally with when it was counted, or the decided
+ * location. The server's name heads it, since nothing else on the page
+ * says which server the action is taken on. Only the form's POST
  * acts; the page itself changes nothing.
  */
 import type { WebAdminAction } from "../../../../features/web-admin";
@@ -14,20 +16,6 @@ import { Confirmation } from "../../../components/confirmation";
 import { TallyList } from "../../../components/tally-list";
 import { Layout, type LayoutUser } from "../../../layout";
 import { adminPath } from "../admin-retry";
-
-/** What the round is at, for the eyebrow. */
-function eyebrow(view: WebView): string {
-  switch (view.round?.step) {
-    case "location_vote_open":
-      return "Location vote · open";
-    case "location_decided":
-      return "Location vote · decided";
-    case "date_vote_open":
-      return "Date vote · open";
-    default:
-      return view.server.name;
-  }
-}
 
 function AppliesTo({ view }: { view: WebView }) {
   const round = view.round;
@@ -52,6 +40,7 @@ function AppliesTo({ view }: { view: WebView }) {
             yourVote: option.viewerVoted,
           }))}
           voterCount={vote.voterCount}
+          counted={{ at: view.now, timeZone: view.settings.timeZone }}
           empty={
             isDate
               ? "No date has been proposed yet."
@@ -80,7 +69,7 @@ export function AdminConfirmPage({
   return (
     <Layout title={`${question} · ${view.server.name} · hikebot`} user={user}>
       <Confirmation
-        eyebrow={eyebrow(view)}
+        eyebrow={view.server.name}
         title={question}
         formAction={adminPath(view.server.id, action.kind)}
         fields={

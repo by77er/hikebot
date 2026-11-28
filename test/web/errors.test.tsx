@@ -14,11 +14,12 @@ describe("the error pages", () => {
   it("say a 404 in words, with one primary action back home", async () => {
     const { html, page } = await render(<NotFoundPage />);
     expect(page.title).toBe("Page not found · hikebot");
-    expect(page.text).toContain("Error 404");
+    // No "Error 404" eyebrow: the title says it in words.
+    expect(page.text).not.toContain("404");
     expect(page.text).toContain(
       "There is no page at this address. The link may be wrong, or the page may have moved.",
     );
-    expect(html).toContain('<p class="page-heading__eyebrow">Error 404</p>');
+    expect(html).not.toContain("page-heading__eyebrow");
     expect(html).toContain("<h1>Page not found</h1>");
     expect(
       [
@@ -31,7 +32,7 @@ describe("the error pages", () => {
   it("say a 405 in words, with the same way back home", async () => {
     const { html, page } = await render(<MethodNotAllowedPage />);
     expect(page.title).toBe("Method not allowed · hikebot");
-    expect(page.text).toContain("Error 405");
+    expect(page.text).not.toContain("405");
     expect(page.text).toContain(
       "This page does not accept that kind of request.",
     );

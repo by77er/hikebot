@@ -61,3 +61,28 @@ describe("the checks themselves", () => {
     expect(findPressWithoutTwin(css).map(({ line }) => line)).toEqual([1, 3]);
   });
 });
+
+describe("numbers people compare", () => {
+  it("are tabular in the tally, whose counts end in a word box as wide as 'votes'", async () => {
+    const css = await publicText(
+      "public/assets/cairn/components/tally-row.css",
+    );
+    expect(css).toMatch(
+      /\.tally-row__number \{[^}]*font-variant-numeric: tabular-nums;/,
+    );
+    expect(css).toMatch(
+      /\.tally-row__unit \{[^}]*min-width: var\(--width-vote-word\);/,
+    );
+    // The count sits at the end of the row's head, so the numbers align right.
+    expect(css).toMatch(/\.tally-row__label \{[^}]*flex: 1;/);
+  });
+
+  it("are tabular and right-aligned in the forecast table", async () => {
+    const base = await publicText("public/assets/cairn/cairn.css");
+    expect(base).toMatch(/table \{[^}]*font-variant-numeric: tabular-nums;/);
+    const css = await publicText(
+      "public/assets/cairn/components/forecast-table.css",
+    );
+    expect(css).toMatch(/\.forecast-table__number \{[^}]*text-align: end;/);
+  });
+});

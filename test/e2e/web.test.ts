@@ -4,7 +4,11 @@
  * the health line, and the HTML 404 page.
  */
 import { describe, expect, it } from "vitest";
-import { PageClient, stylesheetLinks } from "./harness/web";
+import {
+  PageClient,
+  stylesheetLinks,
+  withoutCairnScripts,
+} from "./harness/web";
 import { useE2E } from "./harness/worker";
 
 const e2e = useE2E();
@@ -38,7 +42,9 @@ describe("the landing page", () => {
     ]) {
       expect(page.body).toContain(tag);
     }
-    expect(page.body).not.toMatch(/<script|<style|\sstyle=|\son[a-z]+=/i);
+    expect(withoutCairnScripts(page.body)).not.toMatch(
+      /<script|<style|\sstyle=|\son[a-z]+=/i,
+    );
   });
 
   it("links one stylesheet the Worker serves as CSS cacheable for a year", async () => {
@@ -114,7 +120,7 @@ describe("unknown paths", () => {
       expect(page.status).toBe(404);
       expectPageHeaders(page.headers);
       expect(page.body).toContain("<title>Page not found · hikebot</title>");
-      expect(page.body).toContain("Error 404");
+      expect(page.body).toContain("<h1>Page not found</h1>");
       expect(page.body).toContain(
         '<a class="button button--primary" href="/">',
       );

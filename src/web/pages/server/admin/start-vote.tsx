@@ -20,18 +20,13 @@ import { adminPath } from "../admin-retry";
 
 export type StartKind = "start-location-vote" | "start-date-vote";
 
-const PAGES: Record<
-  StartKind,
-  { title: string; eyebrow: string; notStarted: string }
-> = {
+const PAGES: Record<StartKind, { title: string; notStarted: string }> = {
   "start-location-vote": {
     title: "Start location vote",
-    eyebrow: "Location vote",
     notStarted: "The location vote was not started.",
   },
   "start-date-vote": {
     title: "Start date vote",
-    eyebrow: "Date vote",
     notStarted: "The date vote was not started.",
   },
 };
@@ -77,7 +72,6 @@ export function StartVotePage({
           Back to {view.server.name}
         </BackLink>
         <div class="page-heading">
-          <p class="page-heading__eyebrow">{page.eyebrow}</p>
           <h1>{page.title}</h1>
           <p class="page-heading__lead">
             {kind === "start-location-vote"

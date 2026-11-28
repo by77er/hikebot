@@ -83,7 +83,8 @@ describe("AdminConfirmPage", () => {
       `<h1 class="confirmation__title">${close.question}</h1>`,
     );
     expect(shown.title).toBe(`${close.question} · Ridge Walkers · hikebot`);
-    expect(text).toContain("Location vote · open");
+    expect(text).toContain("Ridge Walkers Close the location vote now?");
+    expect(text).toContain("3 members have voted. Counted just now.");
     expect(text).toContain(close.consequence);
     expect(text).toContain("Lake 3 votes");
     expect(text).toContain("Ridge 1 vote");
@@ -116,7 +117,7 @@ describe("AdminConfirmPage", () => {
       `<h1 class="confirmation__title">${withdraw.confirm?.question ?? ""}</h1>`,
     );
     expect(text).toContain(withdraw.confirm?.consequence ?? "");
-    expect(text).toContain("Date vote · open");
+    expect(text).toContain("Ridge Walkers Withdraw the date vote?");
     expect(text).toContain("Location: Mailbox Peak");
     expect(text).toContain("Sat, 15 Jun 2030 · 09:00 2 votes");
     expect(text).toContain("Times are in Europe/Berlin.");

@@ -3,8 +3,9 @@
  * is on. What the bot does next by itself and when, written as the bot
  * writes times ("The next location vote opens Wed, 5 Jun 2030 · 09:00."),
  * unless it is closing the open vote, which the vote's card says; or why
- * it does nothing yet; then when it acts each week. An admin is told where
- * to change it. Nothing while the schedule is off.
+ * it does nothing yet; then when it acts each week. (An admin changes it
+ * on the Settings page, whose button heads the page.) Nothing while the
+ * schedule is off.
  */
 import type { WebSchedule } from "../../../features/schedule-section";
 import type { WebView } from "../../../guild/web-view";
@@ -89,12 +90,6 @@ export function ScheduleLine({ view }: { view: WebView }) {
         {schedule.time} ({schedule.timeZone}); a date vote runs for{" "}
         {dayCount(schedule.dateVoteDays)}.
       </p>
-      {view.viewer.isAdmin && (
-        <p class="u-muted">
-          You are an admin: change the schedule in Discord with /hike admin,
-          then Settings.
-        </p>
-      )}
     </section>
   );
 }

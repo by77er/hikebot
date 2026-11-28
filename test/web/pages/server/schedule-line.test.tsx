@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { WebSchedule } from "../../../../src/features/schedule-section";
 import { ScheduleLine } from "../../../../src/web/pages/server/schedule-line";
 import { render, spokenText } from "../../components/render";
-import { baseView, schedule, TIME_ZONE } from "./view";
+import { baseView, openVote, round, schedule, TIME_ZONE } from "./view";
 
 async function line(value: WebSchedule, isAdmin = false): Promise<string> {
   const view = baseView({ schedule: value });
@@ -78,11 +78,24 @@ describe("ScheduleLine", () => {
     );
   });
 
-  it("tells an admin where to change it", async () => {
-    expect(await line(schedule(), true)).toContain(
-      "You are an admin: change the schedule in Discord with /hike admin, then Settings.",
+  it("says the same to an admin, whose Settings button heads the page", async () => {
+    expect(await line(schedule(), true)).toBe(await line(schedule()));
+  });
+
+  it("leaves the closing of the open vote to the vote's card", async () => {
+    const text = await spokenText(
+      render(
+        <ScheduleLine
+          view={baseView({
+            schedule: schedule(),
+            round: round("location_vote_open", openVote("location", [])),
+          })}
+        />,
+      ),
     );
-    expect(await line(schedule())).not.toContain("You are an admin");
+    expect(text).toBe(
+      `Schedule The bot opens and closes the votes on Wednesdays at 09:00 (${TIME_ZONE}); a date vote runs for 2 days.`,
+    );
   });
 
   it("shows nothing while the schedule is off", () => {

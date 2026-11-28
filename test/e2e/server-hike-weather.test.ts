@@ -14,7 +14,7 @@ import {
   idStarting,
   type TestGuild,
 } from "./harness/rounds";
-import { formFields, PageClient } from "./harness/web";
+import { formFields, PageClient, withoutCairnScripts } from "./harness/web";
 import { useE2E } from "./harness/worker";
 
 const e2e = useE2E();
@@ -206,17 +206,19 @@ describe("the server's page about a planned hike", () => {
     expect(text).toContain("© OpenStreetMap contributors");
 
     // The forecast: the thread's 13:00 row, its sun times and its credit.
+    // The units are in the column heads; the cells are bare figures.
     expect(text).toContain(
-      "13:00 Overcast 50°F feels 46° 20% 0.01 in 6 mph gusts 12",
+      "Temperature, °F Chance of rain or snow, % Rain or snow, in Wind, mph",
     );
+    expect(text).toContain("13:00 Overcast 50 feels 46 20 0.01 6 gusts 12");
     expect(text).toContain("times in America/Los_Angeles");
     const sun = /Sunrise (\d\d:\d\d) · Sunset (\d\d:\d\d)/.exec(thread);
     expect(sun).not.toBeNull();
     expect(text).toContain(
       `Sunrise ${sun?.[1] ?? ""} Sunset ${sun?.[2] ?? ""}`,
     );
-    expect(text).toContain(
-      "checked every hour · Weather data by Open-Meteo.com",
+    expect(text).toMatch(
+      /Updated (just now|\d+ s ago|\d+ min ago) · Weather data by Open-Meteo\.com/,
     );
     expect(page.body).toContain('href="https://open-meteo.com/"');
     // Every hour the thread shows is a row of the page's table.
@@ -350,7 +352,8 @@ describe("the server's page about a planned hike", () => {
           `${path} loads ${url.href}`,
         ).toBe(true);
       }
-      expect(page.body).not.toMatch(/<(script|iframe)\b/);
+      // Only Cairn's own modules: the press and age scripts.
+      expect(withoutCairnScripts(page.body)).not.toMatch(/<(script|iframe)\b/);
       expect(page.body).toContain("openstreetmap.org");
     }
   });
@@ -365,8 +368,8 @@ describe("the server's page", () => {
     e2e.discord.addMember(g.guildId, member);
     const client = await signIn(member, g);
     const text = textOf((await client.get(`/g/${g.guildId}`)).body);
-    expect(text).toContain(
-      "Schedule The next location vote opens Wednesday 09:00.",
+    expect(text).toMatch(
+      /Schedule The next location vote opens Wed, \d{1,2} [A-Z][a-z]{2} \d{4} · 09:00\./,
     );
     expect(text).toContain(
       "The bot opens and closes the votes on Wednesdays at 09:00 (America/Los_Angeles)",

@@ -165,12 +165,12 @@ describe("CurrentStep", () => {
         />,
       ),
     );
-    expect(admin).toContain(
-      "start it in Discord with /hike admin, then Start date vote.",
-    );
+    // The Admin card under it has Start date vote.
+    expect(admin).toContain("The date vote is next.");
+    expect(admin).not.toContain("/hike admin");
   });
 
-  it("shows an empty state with no round, with the admin hint for an admin", async () => {
+  it("shows an empty state with no round, the same for an admin, whose Admin card follows", async () => {
     const view = baseView();
     const member = await spokenText(
       render(<CurrentStep view={view} forms={FORMS} />),
@@ -185,8 +185,8 @@ describe("CurrentStep", () => {
         />,
       ),
     );
-    expect(admin).toContain(
-      "start one in Discord with /hike admin, then Start location vote.",
+    expect(admin).toBe(
+      "No hike is being planned The next hike starts with a location vote.",
     );
   });
 

@@ -2,9 +2,9 @@
  * The server's page, second section: the card of the step the round is at.
  * An open vote shows its options as a form to vote with (`VoteForm`), the
  * viewer's own votes ticked, and a link to the poll's message in Discord;
- * a decided location waiting for its date vote says so. With no round and no planned hike, an
- * empty state says what happens next, and tells an admin where to start a
- * vote. With no round and a planned hike, the planned hike's section is the
+ * a decided location waiting for its date vote says so, and when the open
+ * vote closes. With no round and no planned hike, an empty state says what
+ * happens next; an admin starts the vote from the Admin card below it. With no round and a planned hike, the planned hike's section is the
  * page's news and this one shows nothing.
  */
 import type { WebRoundSection } from "../../../features/round-section";
@@ -39,7 +39,7 @@ function NoRound({ view }: { view: WebView }) {
   return (
     <EmptyState title="No hike is being planned">
       {view.viewer.isAdmin
-        ? "The next hike starts with a location vote. You are an admin: start one in Discord with /hike admin, then Start location vote."
+        ? "The next hike starts with a location vote."
         : "The next hike starts with a location vote. When an admin starts one, it shows here and in Discord."}
     </EmptyState>
   );
@@ -64,7 +64,7 @@ function LocationDecided({
         {round.location?.details && <p>{round.location.details}</p>}
         <p class="u-muted">
           {isAdmin
-            ? "The date vote is next. You are an admin: start it in Discord with /hike admin, then Start date vote."
+            ? "The date vote is next."
             : "The date vote is next. When an admin starts it, it shows here and in Discord."}
         </p>
       </div>

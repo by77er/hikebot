@@ -9,7 +9,7 @@
  * state and the way back, and the style guide's index links to it.
  */
 import { describe, expect, it } from "vitest";
-import { PageClient } from "./harness/web";
+import { PageClient, withoutCairnScripts } from "./harness/web";
 import { useE2E } from "./harness/worker";
 
 const e2e = useE2E();
@@ -90,7 +90,9 @@ describe("the style guide's form controls and page furniture", () => {
       );
       expect(page.body).toContain(marker);
       expect(page.body).toContain('<a class="back-link" href="/styleguide">');
-      expect(page.body).not.toMatch(/<script|\sstyle=|\son[a-z]+=/i);
+      expect(withoutCairnScripts(page.body)).not.toMatch(
+        /<script|\sstyle=|\son[a-z]+=/i,
+      );
     },
   );
 

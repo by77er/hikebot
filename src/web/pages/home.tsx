@@ -31,7 +31,6 @@ export function HomePage({ inviteUrl }: { inviteUrl: string }) {
       <div class="stack stack--section">
         <div class="stack stack--loose">
           <div class="page-heading">
-            <p class="page-heading__eyebrow">A Discord bot for hiking groups</p>
             <h1>Plan the next hike together</h1>
             <p class="page-heading__lead">
               hikebot is a Discord bot that runs a hiking group's votes on where
