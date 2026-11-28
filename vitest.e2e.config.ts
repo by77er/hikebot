@@ -8,6 +8,8 @@ export default defineConfig({
     name: "e2e",
     environment: "node",
     include: ["test/e2e/**/*.test.ts"],
+    // Chromium is unpacked once here, not by two browser tests at once.
+    globalSetup: ["./test/e2e/harness/chromium.ts"],
     testTimeout: 30_000,
     hookTimeout: 60_000,
     env: {

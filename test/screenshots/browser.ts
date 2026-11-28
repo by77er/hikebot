@@ -43,15 +43,32 @@ const MAP_FONTS = fileURLToPath(
   new URL("../../src/maps/fonts/", import.meta.url),
 );
 
-export async function launchBrowser(
-  options: { webgl?: boolean } = {},
-): Promise<Browser> {
+/**
+ * Unpacks Chromium and its libraries into `CHROMIUM_DIR`, unless they are
+ * there already, and returns the browser's path. The package treats the
+ * binary as ready as soon as its file exists, so two processes unpacking at
+ * once can start it half-written (`spawn ETXTBSY`): a run that starts
+ * browsers in several processes, such as the end-to-end suite's browser
+ * tests, calls this once before them (`test/e2e/harness/chromium.ts`).
+ */
+export async function unpackChromium(): Promise<string> {
   if (
     existsSync(join(CHROMIUM_DIR, "chromium")) &&
     !existsSync(join(CHROMIUM_DIR, "al2023", "lib"))
   ) {
     rmSync(CHROMIUM_DIR, { recursive: true, force: true });
   }
+  mkdirSync(CHROMIUM_DIR, { recursive: true });
+  process.env.TMPDIR = CHROMIUM_DIR;
+  process.env.AWS_LAMBDA_JS_RUNTIME = "nodejs22.x";
+  const { default: chromium } = await import("@sparticuz/chromium");
+  return chromium.executablePath();
+}
+
+export async function launchBrowser(
+  options: { webgl?: boolean } = {},
+): Promise<Browser> {
+  const executablePath = await unpackChromium();
   const fontconfig = join(
     CHROMIUM_DIR,
     options.webgl ? "fontconfig-map" : "fontconfig",
@@ -97,7 +114,7 @@ export async function launchBrowser(
       "--hide-scrollbars",
       "--lang=en-US",
     ],
-    executablePath: await chromium.executablePath(),
+    executablePath,
     headless: "shell",
     defaultViewport: null,
   });
